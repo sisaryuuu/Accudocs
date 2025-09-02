@@ -30,6 +30,7 @@ return new class extends Migration
                 ->nullable()
                 ->constrained('responcenters')
                 ->restrictOnDelete();
+    
             // request details
             $table->string('particulars');
             $table->decimal('amount', 15, 2);

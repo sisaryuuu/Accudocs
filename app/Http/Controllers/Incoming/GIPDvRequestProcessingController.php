@@ -38,9 +38,9 @@ class GIPDvRequestProcessingController extends Controller
 
     public function fetch($id)
 {
-    $dvRequest = DvRequest::with(['focalPerson', 'program','responcenter'])
+    $dvRequest = DvRequest::with(['focalPerson', 'program','respocenter','accountingUnit'])
         ->findOrFail($id);
-
+    
     return response()->json([
         'id'           => $dvRequest->id,
         'dv_number'    => $dvRequest->dv_number ?? '—',
@@ -48,8 +48,9 @@ class GIPDvRequestProcessingController extends Controller
         'status'       => $dvRequest->status,
         'amount'       => number_format($dvRequest->amount, 2),
         'submitted_by' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+        'received_from' => trim(($dvRequest->accountingUnit?->fname ?? 'N/A') . ' ' . ($dvRequest->accountingUnit?->lname ?? '')),
         'program'      => $dvRequest->program->prcode ?? 'N/A',
-        'responcenter' => $dvRequest->responcenter->rccode ?? 'N/A',
+        'respocenter' => $dvRequest->respocenter->rccode ?? 'N/A',
         'date'         => $dvRequest->created_at->format('M d, Y h:i A'),
     ]);
 }

@@ -79,7 +79,7 @@
                                     {{ $request->focalperson->TIN_number ?? 'N/A' }}
                                 </td>
                                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                    {{ $request->respocenter->rccode ?? 'N/A' }}
+                                   {{ $request->respocenter->rccode ?? 'N/A' }} -{{ $request->respocenter->description ?? 'N/A' }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">

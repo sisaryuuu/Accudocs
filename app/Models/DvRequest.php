@@ -14,6 +14,7 @@ class DvRequest extends Model
     protected $fillable = [
         'dv_number',
         'focalperson_id',
+        'accounting_unit_id',
         'program_id',
         'respocenter_id',
         'particulars',
@@ -45,9 +46,13 @@ class DvRequest extends Model
     |--------------------------------------------------------------------------
     */
     public function logs()
-{
-    return $this->hasMany(DvRequestLog::class, 'dv_request_id');
-}
+    {
+        return $this->hasMany(DvRequestLog::class, 'dv_request_id');
+    }
+    public function accountingUnit()
+    {
+        return $this->belongsTo(AccountingUnit::class, 'accounting_unit_id');
+    }
 
     public function focalperson()
     {

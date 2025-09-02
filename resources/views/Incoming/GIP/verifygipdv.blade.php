@@ -30,7 +30,7 @@
                                 <div>
                     <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
                     <p class="mt-1 text-sm text-gray-900">
-                      {{ $dvRequest->focalPerson->rccode}} {{$dvRequest->focalPerson->description}}
+                      {{ $dvRequest->respocenter->rccode}} {{$dvRequest->respocenter->description}}
                     </p>
                 </div>
                 </div>
@@ -58,12 +58,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Received By</label>
-                        <input type="text" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                        <input type="text" value="{{ $dvRequest->focalPerson->fname ?? '' }} {{ $dvRequest->focalPerson->lname ?? '' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Received From</label>
-                        <input type="text" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
-                    </div>
+                     <label class="block text-sm font-medium text-gray-700">Received From</label>
+                    <p class="mt-1 text-sm text-gray-900">
+                      {{ $dvRequest->accountingUnit->fname}} {{$dvRequest->accountingUnit->lname}}
+                    </p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
