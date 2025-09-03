@@ -79,7 +79,7 @@
                                                 @if($log->action === 'submitted')
                                                     {{ trim($log->dvRequest->fname . ' ' . $log->dvRequest->mi . ' ' . $log->dvRequest->lname) }}
                                                 @else
-                                                    {{ $log->accountingUnit?->fname }} {{ $log->accountingUnit?->lname }}
+                                                 {{ optional($log->dvRequest->accountingUnit)->fname }} {{ optional($log->dvRequest->accountingUnit)->lname }}
                                                 @endif
                                             </div>
                                             <div class="text-xs text-gray-500">
@@ -95,23 +95,8 @@
 
                                 <!-- Action -->
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium
-                                        @if($log->action == 'submitted') bg-blue-100 text-blue-800
-                                        @elseif($log->action == 'received') bg-indigo-100 text-indigo-800
-                                        @elseif($log->action == 'verified') bg-yellow-100 text-yellow-800
-                                        @elseif($log->action == 'approved') bg-green-100 text-green-800
-                                        @elseif($log->action == 'finalized') bg-purple-100 text-purple-800
-                                        @else bg-gray-100 text-gray-800
-                                        @endif">
-                                        <span class="w-2 h-2 mr-2 rounded-full
-                                            @if($log->action == 'submitted') bg-blue-400
-                                            @elseif($log->action == 'received') bg-indigo-400
-                                            @elseif($log->action == 'verified') bg-yellow-400
-                                            @elseif($log->action == 'approved') bg-green-400
-                                            @elseif($log->action == 'finalized') bg-purple-400
-                                            @else bg-gray-400
-                                            @endif"></span>
-                                        {{ ucfirst($log->action) }}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium">
+                                        {{ $log->action}}
                                     </span>
                                 </td>
 
@@ -120,7 +105,7 @@
                                     <div class="text-sm text-gray-900">
                                         @if($log->remarks)
                                             <div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">
-                                                <p class="text-gray-700">{{ $log->remarks }}</p>
+                                                <p class="text-gray-700"> {{ucfirst(str_replace('_', ' ', $log->remarks))}}</p>
                                             </div>
                                         @else
                                             <span class="text-gray-400 italic">No remarks</span>

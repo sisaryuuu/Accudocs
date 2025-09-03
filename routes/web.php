@@ -74,6 +74,8 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
         ->name('RegionalOffices.IMSD.index');
 
+    Route::get('/fetch-all', [DvRequestProcessingController::class, 'fetchAll'])
+        ->name('RegionalOffices.IMSD.fetchAll');
     // Show / process a single DV request
     Route::get('/dvrequests/{id}', [DvRequestProcessingController::class, 'show'])
         ->name('RegionalOffices.IMSD.verifydv');
@@ -83,17 +85,23 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
         ->name('IMSD.dvrequests.verify');
 });
 
+
 Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->group(function () {
 
     // Index page — list all DV requests for Incoming GIP
-    Route::get('/index', [GIPDvRequestProcessingController::class, 'index'])
+     Route::get('/index', [GIPDvRequestProcessingController::class, 'index'])
         ->name('Incoming.GIP.index');
+        // routes/web.php
+    Route::get('/dvrequests/verify', [GIPDvRequestProcessingController::class, 'redirectToFirstPending'])
+    ->name('Incoming.GIP.verifygipdv');
 
     // Show / process a single DV request 
     Route::get('/dvrequests/{id}', [GIPDvRequestProcessingController::class, 'show'])
-        ->name('Incoming.GIP.verifygipdv');
+        ->name('Incoming.GIP.dvrequests.withid');
+        
+    Route::get('/fetch-all', [GIPDvRequestProcessingController::class, 'fetchAll'])
+        ->name('Incoming.GIP.fetchAll');
 
-    // Verify / approve a DV request
     Route::post('/dvrequests/{id}/verify', [GIPDvRequestProcessingController::class, 'verify'])
         ->name('Incoming.GIP.dvrequests.verify');
     

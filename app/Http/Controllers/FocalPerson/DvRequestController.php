@@ -135,7 +135,7 @@ public function updateStatus(Request $request, DvRequest $dvRequest)
     $nextRole = $steps[$nextStepIndex] ?? 'Completed';
 
     $dvRequest->logs()->create([
-        'focalperson_id' => auth()->id(),
+        'accountingunit_id' => Auth::guard('web')->id(),
         'role' => $nextRole,
         'status' => $nextRole === 'Completed' ? 'completed' : 'in-progress',
         'remarks' => $request->remarks,
@@ -166,7 +166,7 @@ public function updateStatus(Request $request, DvRequest $dvRequest)
     public function logs(DvRequest $dvRequest)
     {
         // Ensure the focal person can only view logs of their own requests
-        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+        if ($dvRequest->accountingunit_id !== Auth::guard('web')->id()) {
             abort(403, 'Unauthorized access to this request.');
         }
 
@@ -178,81 +178,14 @@ public function updateStatus(Request $request, DvRequest $dvRequest)
         return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs'));
     }
 
-    /**
-     * Incoming Officer marks request as received.
-     */
-    public function receive(DvRequest $dvRequest)
-    {
-        $dvRequest->update([
-            'status'      => 'received',
-            'received_by' => Auth::guard('focal')->id(),
-            'received_at' => now(),
-        ]);
+ 
 
-        $this->logAction($dvRequest->id, 'received', 'Document received by Incoming Officer');
-
-        return back()->with('success', 'Request marked as received.');
-    }
-
-    /**
-     * Budget Officer verifies request.
-     */
-    public function verify(DvRequest $dvRequest)
-    {
-        $dvRequest->update([
-            'status'      => 'verified',
-            'verified_by' => Auth::guard('focal')->id(),
-            'verified_at' => now(),
-        ]);
-
-        $this->logAction($dvRequest->id, 'verified', 'Document verified by Budget Officer');
-
-        return back()->with('success', 'Request verified successfully.');
-    }
-
-    /**
-     * Approve request (e.g. Outgoing/Regional Director).
-     */
-    public function approve(DvRequest $dvRequest)
-    {
-        $dvRequest->update([
-            'status'      => 'approved',
-            'approved_by' => Auth::guard('focal')->id(),
-            'approved_at' => now(),
-        ]);
-
-        $this->logAction($dvRequest->id, 'approved', 'Document approved');
-
-        return back()->with('success', 'Request approved successfully.');
-    }
-
-    public function finalize(DvRequest $dvRequest, Request $request)
-    {
-        $request->validate([
-            'dv_number' => 'required|string|unique:dv_requests,dv_number',
-        ]);
-
-        $dvRequest->update([
-            'status'        => 'finalized',
-            'finalized_by'  => Auth::guard('focal')->id(),
-            'finalized_at'  => now(),
-            'dv_number'     => $request->dv_number,
-        ]);
-
-        $this->logAction($dvRequest->id, 'finalized', 'DV number assigned');
-
-        return back()->with('success', 'Request finalized successfully.');
-    }
-
-    /**
-     * Log DV actions to the database.
-     */
-    protected function logAction(int $dvRequestId, string $action, string $remarks): void
+    protected function logAction(int $dvRequestId, string $action, string $remarks):    void
     {
         DvRequestLog::create([
             'dv_request_id' => $dvRequestId,
             'user_id'       => Auth::guard('focal')->id(),
-            'action'        => $action,
+            'action'        => str_replace('_', ' ', $action),
             'remarks'       => $remarks,
         ]);
     }

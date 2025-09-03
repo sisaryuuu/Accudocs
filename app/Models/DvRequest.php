@@ -13,23 +13,14 @@ class DvRequest extends Model
 
     protected $fillable = [
         'dv_number',
+        'accountingunit_id',
+        'received_by_id',
         'focalperson_id',
-        'accounting_unit_id',
         'program_id',
         'respocenter_id',
         'particulars',
         'amount',
         'status',
-        'received_by',
-        'received_at',
-        'verified_by',
-        'verified_at',
-        'approved_by',
-        'approved_at',
-        'finalized_by',
-        'finalized_at',
-        'released_by',
-        'released_at',
     ];
 
     protected $casts = [
@@ -49,10 +40,6 @@ class DvRequest extends Model
     {
         return $this->hasMany(DvRequestLog::class, 'dv_request_id');
     }
-    public function accountingUnit()
-    {
-        return $this->belongsTo(AccountingUnit::class, 'accounting_unit_id');
-    }
 
     public function focalperson()
     {
@@ -67,30 +54,14 @@ class DvRequest extends Model
     {
         return $this->belongsTo(ResponCenter::class, 'respocenter_id');
     }
+    public function receivedBy() 
+    { 
+        return $this->belongsTo(AccountingUnit::class, 'received_by_id');
+    }
 
     // Workflow stage relationships
-    public function receivedBy()
+    public function accountingUnit()
     {
-        return $this->belongsTo(AccountingUnit::class, 'received_by');
-    }
-
-    public function verifiedBy()
-    {
-        return $this->belongsTo(AccountingUnit::class, 'verified_by');
-    }
-
-    public function approvedBy()
-    {
-        return $this->belongsTo(AccountingUnit::class, 'approved_by');
-    }
-
-    public function finalizedBy()
-    {
-        return $this->belongsTo(AccountingUnit::class, 'finalized_by');
-    }
-
-    public function releasedBy()
-    {
-        return $this->belongsTo(AccountingUnit::class, 'released_by');
+        return $this->belongsTo(AccountingUnit::class, 'accountingunit_id');
     }
 }

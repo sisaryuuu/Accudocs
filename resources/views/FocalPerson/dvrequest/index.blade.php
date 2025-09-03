@@ -57,8 +57,8 @@
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsibility Center</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Particulars</th>
-                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Particulars</th>
+                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Status</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
@@ -89,29 +89,18 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                                     ₱{{ number_format($request->amount, 2) }}
                                 </td>
-                                <td class="px-6 py-4 text-sm text-gray-600 max-w-xs">
-                                    <div class="truncate" title="{{ $request->particulars ?? '' }}">
+                               <td class="px-6 py-4 text-sm text-gray-600 max-w-xs text-center">
+                                    <div class="truncate px-3 py-1 font-medium"
+                                        title="{{ $request->particulars ?? '' }}">
                                         {{ Str::limit($request->particulars ?? '', 50) }}
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium
-                                        @if($request->status == 'submitted') bg-gray-100 text-gray-800
-                                        @elseif($request->status == 'received') bg-blue-100 text-blue-800
-                                        @elseif($request->status == 'verified') bg-yellow-100 text-yellow-800
-                                        @elseif($request->status == 'approved') bg-green-100 text-green-800
-                                        @elseif($request->status == 'finalized') bg-purple-100 text-purple-800
-                                        @endif">
-                                        <span class="w-2 h-2 mr-2 rounded-full
-                                            @if($request->status == 'submitted') bg-gray-400
-                                            @elseif($request->status == 'received') bg-blue-400
-                                            @elseif($request->status == 'verified') bg-yellow-400
-                                            @elseif($request->status == 'approved') bg-green-400
-                                            @elseif($request->status == 'finalized') bg-purple-400
-                                            @endif"></span>
-                                        {{ ucfirst($request->status) }}
-                                    </span>
-                                </td>
+                              <td class="px-6 py-4 whitespace-nowrap">
+                                <span id="status-{{ $request->id }}" data-status="{{ $request->status }}" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-center">
+                                    <span class="status-dot w-2 h-2 mr-2 rounded-full"></span>
+                                    {{ ucfirst(str_replace('_', ' ', $request->status)) }}
+                                </span>
+                            </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                     <div>{{ $request->created_at->format('M d, Y') }}</div>
                                     <div class="text-xs text-gray-400">{{ $request->created_at->format('h:i A') }}</div>
@@ -127,18 +116,7 @@
                         </svg>
                         Track
                     </a>
-
-                    <!-- View Logs -->
-                    <a href="{{ route('FocalPerson.dvrequest.logs', $request->id) }}" 
-                    class="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors duration-200">
-                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                        </svg>
-                        View Logs
-                    </a>
-
-                    <!-- Delete -->
+                    @if($request->status === 'submitted')
                     <form action="{{ route('FocalPerson.dvrequest.destroy', $request->id) }}" method="POST" class="inline">
                         @csrf
                         @method('DELETE')
@@ -151,6 +129,7 @@
                             Delete
                         </button>
                     </form>
+                    @endif
                 </div>
             </td>
 

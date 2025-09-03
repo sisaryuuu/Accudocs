@@ -5,9 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="//unpkg.com/alpinejs" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <title>@yield('title', 'Dashboard')</title>
 </head>
 <body class="bg-gray-100 font-sans">
+<script>
+    @if (session('success'))
+        Swal.fire({
+            icon: 'success',
+            title: 'Success',
+            text: "{{ session('success') }}",
+            timer: 2000,
+            showConfirmButton: false
+        });
+    @endif
+
+    @if (session('error'))
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: "{{ session('error') }}",
+        });
+    @endif
+
+    @if (session('warning'))
+        Swal.fire({
+            icon: 'warning',
+            title: 'Warning',
+            text: "{{ session('warning') }}",
+        });
+    @endif
+
+    document.addEventListener("DOMContentLoaded", function () {
+    // Handle delete buttons
+    document.querySelectorAll('.delete-btn').forEach(button => {
+        button.addEventListener('click', function (e) {
+            e.preventDefault();
+            let form = this.closest('form');
+
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "This action cannot be undone!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, delete it!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    });
+});
+</script>
 
 <!-- Top Navbar -->
 <nav class="bg-white shadow-md fixed w-full z-10">
@@ -30,6 +83,22 @@
                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('FocalPerson.dvrequest.submitdvors') ? 'bg-gray-200 font-semibold' : '' }}">
                     Submit Document
                 </a>
+            </div>
+            @endrole
+            @role('Incoming-GIP')
+             <div class="flex space-x-6">
+                <a href="{{ route('Incoming.GIP.index') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Incoming.GIP.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Received Documents
+                </a>
+
+                                    <!-- Verify Documents -->
+            <a href="{{ route('Incoming.GIP.verifygipdv') }}" 
+            class="block py-2 px-4 rounded hover:bg-gray-200
+                    {{ request()->routeIs('Incoming.GIP.verifygipdv.withid') ? 'bg-gray-200 font-semibold' : '' }}">
+                Verify Documents
+            </a>
+
             </div>
             @endrole
             <!-- Right Section -->

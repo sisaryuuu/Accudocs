@@ -20,10 +20,7 @@ return new class extends Migration
                 ->onDelete('cascade');
 
             // who performed the action
-            $table->foreignId('accountingunit_id')
-                ->nullable()
-                ->constrained('accountingunits')
-                ->onDelete('set null');
+             $table->foreignId('accountingunit_id')->nullable()->constrained()->onDelete('cascade');
 
             // optional: if outside of the system (e.g., Regional Director, Cashier via QR scan)
             $table->string('external_actor')->nullable();
@@ -46,5 +43,6 @@ return new class extends Migration
     public function down(): void
     {
          Schema::dropIfExists('dv_request_logs');
+         dropConstrainedForeignId('accountingunit_id');
     }
 };

@@ -18,11 +18,29 @@ class DvRequestProcessingController extends Controller
 
         return view('RegionalOffices.IMSD.index', compact('dvRequests'));
     }
+    // Return JSON for polling
+    public function fetchAll()
+    {
+   $dvRequests = DvRequest::with(['focalPerson', 'program', 'respocenter'])
+            ->whereIn('status', ['submitted','IMSD_in_process'])
+            ->latest()
+            ->get();
+            $result = $dvRequests->map(fn($request) => [
+            'id'           => $request->id,
+            'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+            'program'      => $request->program->prcode ?? 'N/A',
+            'respocenter'  => $request->respocenter->rccode ?? 'N/A',
+            'amount'       => number_format($request->amount, 2),
+            'status'       => $request->status,
+            'date'         => $request->created_at->format('M d, Y h:i A'),
+        ]);
 
+        return response()->json($result);
+    }
     // Show / process method
     public function show($id)
     {
-        $dvRequest = DvRequest::findOrFail($id);
+        $dvRequest = DvRequest::findOrFail($id);    
 
         if ($dvRequest->status == 'submitted') {
             $dvRequest->status = 'IMSD_in_process';
@@ -30,8 +48,14 @@ class DvRequestProcessingController extends Controller
 
             $this->logAction($dvRequest->id, 'IMSD_in_process', 'Request received by IMSD for verification');
         }
+        $recentDvRequests = DvRequest::with('focalPerson')
+                                ->whereIn('status', ['submitted', 'IMSD_in_process'])
+                                ->whereNotNull('focalperson_id') 
+                                 ->orderBy('created_at', 'desc')
+                                 ->take(5)
+                                 ->get();
 
-        return view('RegionalOffices.IMSD.verifydv', compact('dvRequest'));
+        return view('RegionalOffices.IMSD.verifydv', compact('dvRequest','recentDvRequests'));
     }
 
     // Verify method

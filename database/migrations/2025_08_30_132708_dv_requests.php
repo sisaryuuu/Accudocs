@@ -14,7 +14,10 @@ return new class extends Migration
 
 
 
-             $table->foreignId('accounting_unit_id')->nullable()->constrained('accountingunits')->onDelete('cascade');
+              $table->foreignId('accountingunit_id')
+                    ->nullable()
+                    ->constrained('accountingunits')
+                    ->restrictOnDelete();
             
             // relations
             $table->foreignId('focalperson_id')
@@ -65,8 +68,8 @@ return new class extends Migration
         $table->dropColumn('focalperson_id');
                 $table->dropForeign(['program_id']);
         $table->dropColumn('program_id');
-         $table->dropForeign(['accounting_unit_id']);
-        $table->dropColumn('accounting_unit_id');
+         $table->dropForeign(['accountingunit_id']);
+        $table->dropColumn('accountingunit_id');
 
     });
     }
