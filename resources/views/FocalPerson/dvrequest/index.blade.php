@@ -108,7 +108,7 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div class="flex items-center space-x-2">
                     <!-- Track Button -->
-                    <a href="{{ route('FocalPerson.dvrequest.show', $request->id) }}" 
+                    <a href="{{ route('FocalPerson.dvrequest.logs', $request->id) }}" 
                     class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
                         <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 

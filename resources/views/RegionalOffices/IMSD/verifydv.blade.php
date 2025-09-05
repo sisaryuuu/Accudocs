@@ -38,6 +38,32 @@
                         <input type="text" value="₱{{ number_format($dvRequest->amount, 2) }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                     </div>
                     <div>
+                          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Received By</label>
+                        <input type="text" value="{{ $dvRequest->accountingunit_id->fname ?? '' }} {{ $dvRequest->accountingunit_id->lname ?? '' }}"
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Received From</label>
+                        <input type="text"  value="{{ $dvRequest->focalPerson->fname ?? 'DILI MAKIT.AN' }} {{ $dvRequest->focalPerson->lname ?? 'WALA' }}"  
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Date Received</label>
+                    <input type="date" 
+                        value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d') : '' }}"
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Time</label>
+                    <input type="time"   
+                        value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('H:i') : '' }}"
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                </div>
+            </div>
                         <label class="block text-sm font-medium text-gray-700">Remarks / Lacking</label>
                         <textarea id="remarks" name="remarks" rows="3" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" placeholder="Enter remarks or notes..."></textarea>
                     </div>

@@ -69,17 +69,34 @@
                                 <!-- Actor -->
                                 <td class="px-6 py-4">
                                     <div class="flex items-center">
-                                        <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
-                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                                            </svg>
+                                      <div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">
+                            @if($log->focalPerson)
+                                  <img src="{{ $log->focalPerson->profile_image 
+                                            ? asset('storage/profiles/' . $log->focalPerson->profile_image) 
+                                            : asset('storage/profiles/default.png') }}" 
+                                alt="Focal Person" 
+                                class="w-10 h-10 object-cover">
+                            @elseif($log->accountingUnit)
+                                <img src="{{ asset('storage/profiles/' . $log->accountingUnit->profile_image) }}" 
+                                    alt="Accounting Unit" 
+                                    class="w-10 h-10 object-cover">
+                                @else
+                                    {{-- Fallback avatar --}}
+                                    <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center rounded-full">
+                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                        </svg>
+                                    </div>
+                                @endif
+                            </div>
                                         </div>
                                         <div class="ml-3">
                                             <div class="text-sm font-medium text-gray-900">
                                                 @if($log->action === 'submitted')
-                                                    {{ trim($log->dvRequest->fname . ' ' . $log->dvRequest->mi . ' ' . $log->dvRequest->lname) }}
+                                                    {{ trim($log->dvRequest->focalPerson->fname . ' ' . $log->dvRequest->focalPerson->mi . ' ' . $log->dvRequest->focalPerson->lname) }}
                                                 @else
-                                                 {{ optional($log->dvRequest->accountingUnit)->fname }} {{ optional($log->dvRequest->accountingUnit)->lname }}
+                                                 {{ $log->dvRequest->accountingUnit->fname }} {{ $log->dvRequest->accountingUnit->lname }}
                                                 @endif
                                             </div>
                                             <div class="text-xs text-gray-500">

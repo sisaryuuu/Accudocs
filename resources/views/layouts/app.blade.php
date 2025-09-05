@@ -35,6 +35,16 @@
             text: "{{ session('warning') }}",
         });
     @endif
+     @if (session('info'))
+        Swal.fire({
+            icon: 'info',
+            title: 'info',
+            text: "{{ session('info') }}",
+            timer: 2000,
+            showConfirmButton: true
+        });
+    @endif
+
 
     document.addEventListener("DOMContentLoaded", function () {
     // Handle delete buttons
@@ -85,20 +95,31 @@
                 </a>
             </div>
             @endrole
+            @role('IMSD')
+            <div class="flex space-x-3">
+                <a href="{{ route('RegionalOffices.IMSD.index') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('RegionalOffices.IMSD.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Received Documents
+                </a>
+            @endrole
             @role('Incoming-GIP')
-             <div class="flex space-x-6">
+             <div class="flex space-x-3">
                 <a href="{{ route('Incoming.GIP.index') }}" 
                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Incoming.GIP.index') ? 'bg-gray-200 font-semibold' : '' }}">
                     Received Documents
                 </a>
 
-                                    <!-- Verify Documents -->
-            <a href="{{ route('Incoming.GIP.verifygipdv') }}" 
-            class="block py-2 px-4 rounded hover:bg-gray-200
-                    {{ request()->routeIs('Incoming.GIP.verifygipdv.withid') ? 'bg-gray-200 font-semibold' : '' }}">
-                Verify Documents
-            </a>
-
+                                        <!-- Verify Documents -->
+                <a href="{{ route('Incoming.GIP.verifygipdv') }}" 
+                class="block py-2 px-4 rounded hover:bg-gray-200
+                        {{ request()->routeIs('Incoming.GIP.verifygipdv.withid') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Verify Documents
+                </a>
+                <a href="{{ route('dvrequests.history') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.history') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Request History
+                </a>
+        
             </div>
             @endrole
             <!-- Right Section -->
@@ -122,7 +143,17 @@
 
                     <div x-show="open" @click.away="open = false" x-transition
                          class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2">
-                        <a href="#" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Profile</a>
+                                @if(Auth::guard('web')->check())
+                                <a href="#" 
+                                class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                Profile
+                                </a>
+                            @elseif(Auth::guard('focal')->check())
+                                <a href="{{ route('FocalPerson.profile.show') }}" 
+                                class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                Profile
+                                </a>
+                            @endif
                         <a href="#" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Settings</a>
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf

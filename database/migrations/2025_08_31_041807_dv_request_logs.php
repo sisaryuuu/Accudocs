@@ -42,7 +42,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-         Schema::dropIfExists('dv_request_logs');
-         dropConstrainedForeignId('accountingunit_id');
+         Schema::table('dv_request_logs', function (Blueprint $table) {
+        $table->dropForeign(['accountingunit_id']);
+        $table->dropColumn('accountingunit_id');
+    });
     }
 };

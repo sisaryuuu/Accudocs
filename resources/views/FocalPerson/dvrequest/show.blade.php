@@ -78,19 +78,28 @@
                             @foreach($logs as $log)
                                 <tr class="hover:bg-gray-50 transition-colors duration-150">
                                     <td class="px-6 py-4 text-center">{{ $loop->iteration }}</td>
-                                    <td class="px-6 py-4">
-                                        {{ $log->user?->name ?? 'N/A' }}
-                                        <div class="text-xs text-gray-500">{{ $log->user?->role ?? '—' }}</div>
+                                    <td class="px-6 py-4 flex items-center gap-3">
+                                        @if($log->focalPerson)
+                                            <img src="{{ asset('storage/profiles/' . ($log->focalPerson->profile_image ?? 'default.png')) }}"
+                                                alt="Profile" class="w-8 h-8 rounded-full object-cover border">
+                                            <div>
+                                                <div class="font-semibold">{{ $log->focalPerson->full_name }}</div>
+                                                <div class="text-xs text-gray-500">Focal Person</div>
+                                            </div>
+                                        @elseif($log->accountingUnit)
+                                            <img src="{{ asset('storage/profiles/' . ($log->accountingUnit->profile_image ?? 'default.png')) }}"
+                                                alt="Profile" class="w-8 h-8 rounded-full object-cover border">
+                                            <div>
+                                                <div class="font-semibold">{{ $log->accountingUnit->name }}</div>
+                                                <div class="text-xs text-gray-500">Accounting Unit</div>
+                                            </div>
+                                        @else
+                                            <span class="text-gray-500">N/A</span>
+                                        @endif
                                     </td>
-                                    <td class="px-6 py-4">
-                                        {{ ucfirst($log->action) }}
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        {{ $log->remarks ?? 'None' }}
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        {{ $log->created_at->format('M d, Y h:i A') }}
-                                    </td>
+                                                                        <td class="px-6 py-4">{{ ucfirst($log->action) }}</td>
+                                    <td class="px-6 py-4">{{ $log->remarks ?? 'None' }}</td>
+                                    <td class="px-6 py-4">{{ $log->created_at->format('M d, Y h:i A') }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

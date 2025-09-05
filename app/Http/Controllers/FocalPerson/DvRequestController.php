@@ -112,7 +112,9 @@ class DvRequestController extends Controller
 
 public function updateStatus(Request $request, DvRequest $dvRequest)
 {
+    // Define the workflow steps in order
     $steps = [
+        'Submitted',        // first step
         'Regional_Office',
         'Incoming',
         'Budget_Officer',
@@ -120,17 +122,36 @@ public function updateStatus(Request $request, DvRequest $dvRequest)
         'Completed',
     ];
 
+    // Get the last log for this request
     $lastLog = $dvRequest->logs()->latest()->first();
-    $currentStepIndex = $lastLog
-        ? array_search($lastLog->role, $steps)
-        : 0;
 
+    // If no logs exist, create the initial "Submitted" step
+    if (!$lastLog) {
+        $dvRequest->logs()->create([
+            'accountingunit_id' => Auth::guard('web')->id(),
+            'role' => 'Focal_Person',
+            'status' => 'in-progress',
+            'remarks' => 'Request submitted',
+        ]);
+
+            // Move to the next step immediately
+            $currentStepIndex = 1; // skip "Submitted" for role check
+        } else {
+            $currentStepIndex = array_search($lastLog->role, $steps);
+        }
+
+    // Determine the allowed role for this step
     $allowedRole = $steps[$currentStepIndex];
 
     if (!auth()->user()->hasRole($allowedRole)) {
         abort(403, 'You cannot process this step.');
     }
-
+    // Role-based check only for steps after Submitted
+    if ($steps[$currentStepIndex] !== 'Submitted' && 
+        !auth()->user()->hasRole($steps[$currentStepIndex])) {
+        abort(403, 'You cannot process this step.');
+    }
+    // Move to the next step
     $nextStepIndex = $currentStepIndex + 1;
     $nextRole = $steps[$nextStepIndex] ?? 'Completed';
 
@@ -144,6 +165,7 @@ public function updateStatus(Request $request, DvRequest $dvRequest)
     return redirect()->route('FocalPerson.dvrequest.show', $dvRequest)
                      ->with('success', 'Moved to next step.');
 }
+
     
     public function destroy(DvRequest $dvRequest)
 {
@@ -164,29 +186,44 @@ public function updateStatus(Request $request, DvRequest $dvRequest)
      * View logs of a DV Request.
      */
     public function logs(DvRequest $dvRequest)
-    {
-        // Ensure the focal person can only view logs of their own requests
-        if ($dvRequest->accountingunit_id !== Auth::guard('web')->id()) {
+{
+    if (Auth::guard('focal')->check()) {
+        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
             abort(403, 'Unauthorized access to this request.');
         }
-
-        $logs = DvRequestLog::where('dv_request_id', $dvRequest->id)
-            ->with('dvRequest','accountingUnit')
-            ->latest()
-            ->get();
-
-        return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs'));
     }
+
+    if (Auth::guard('web')->check()) {
+        // Accounting unit → you can add more granular checks here
+    }
+
+    $logs = $dvRequest->logs()->with(['focalPerson', 'accountingUnit'])->latest()->get();
+
+    return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs'));
+}
+
 
  
 
-    protected function logAction(int $dvRequestId, string $action, string $remarks):    void
-    {
+    protected function logAction(int $dvRequestId, string $action, string $remarks): void
+{
+    if (Auth::guard('focal')->check()) {
+        // Focal Person is the actor
         DvRequestLog::create([
-            'dv_request_id' => $dvRequestId,
-            'user_id'       => Auth::guard('focal')->id(),
-            'action'        => str_replace('_', ' ', $action),
-            'remarks'       => $remarks,
+            'dv_request_id'   => $dvRequestId,
+            'focalperson_id'  => Auth::guard('focal')->id(),
+            'action'          => str_replace('_', ' ', $action),
+            'remarks'         => $remarks,
+        ]);
+    } elseif (Auth::guard('web')->check()) {
+        // Accounting Unit is the actor
+        DvRequestLog::create([
+            'dv_request_id'     => $dvRequestId,
+            'accountingunit_id' => Auth::guard('web')->id(),
+            'action'            => str_replace('_', ' ', $action),
+            'remarks'           => $remarks,
         ]);
     }
+}
+
 }

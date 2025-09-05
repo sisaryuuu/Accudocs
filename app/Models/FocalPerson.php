@@ -16,6 +16,9 @@ class FocalPerson extends Authenticatable
     protected $table = 'focalpersons';
     protected $guard_name = 'focal';
 
+    protected $attributes = [
+    'profile_image' => 'default.png',];
+
     protected $fillable = [
         'fname',
         'mi',

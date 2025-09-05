@@ -8,10 +8,12 @@ use App\Models\Program;
 use App\Models\ResponCenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 
 class FocalPersonRegisterController extends Controller
 {
+    /**
+     * Show the registration form for focal persons.
+     */
     public function showRegistrationForm()
     {
         $programs = Program::all();
@@ -20,9 +22,13 @@ class FocalPersonRegisterController extends Controller
         return view('auth.focalpersonregister', compact('programs', 'responCenters'));
     }
 
+    /**
+     * Handle focal person registration.
+     */
     public function register(Request $request)
     {
-        $request->validate([
+        // ✅ Validate input
+        $validated = $request->validate([
             'fname'          => 'required|string|max:100',
             'mi'             => 'nullable|string|max:10',
             'lname'          => 'required|string|max:100',
@@ -32,30 +38,32 @@ class FocalPersonRegisterController extends Controller
             'password'       => 'required|string|min:8|confirmed',
             'contactnumber'  => 'required|string|max:11|unique:focalpersons',
             'program_id'     => 'nullable|exists:programs,id',
-            'responcenter_id'=> 'nullable|exists:responcenters,id',
+            'respocenter_id' => 'nullable|exists:responcenters,id',
         ]);
 
-        // ✅ Create focal person
+        // ✅ Create focal person (model mutator handles password hashing)
         $focalPerson = FocalPerson::create([
-            'fname'          => $request->fname,
-            'mi'             => $request->mi,
-            'lname'          => $request->lname,
-            'TIN_number'     => $request->TIN_number,
-            'Address'        => $request->Address,
-            'email'          => $request->email,
-            'contactnumber'  => $request->contactnumber,
-            'password'       => Hash::make($request->password),
-            'program_id'     => $request->program_id,
-            'responcenter_id'=> $request->responcenter_id,
+            'fname'          => $validated['fname'],
+            'mi'             => $validated['mi'] ?? null,
+            'lname'          => $validated['lname'],
+            'TIN_number'     => $validated['TIN_number'],
+            'Address'        => $validated['Address'] ?? null,
+            'email'          => $validated['email'],
+            'password'       => $validated['password'], // hashed in model
+            'contactnumber'  => $validated['contactnumber'],
+            'program_id'     => $validated['program_id'] ?? null,
+            'respocenter_id' => $validated['respocenter_id'] ?? null,
+            'profile_image'  => 'default.png', // ✅ enforce default
         ]);
 
-        // ✅ Assign Focal Person role (if using Spatie Roles)
+        // ✅ Assign Focal Person role (make sure it exists in roles table)
         $focalPerson->assignRole('Focal_Person');
 
         // ✅ Log the focal person in using their guard
         Auth::guard('focal')->login($focalPerson);
 
-        return redirect()->route('FocalPerson.index')
+        // ✅ Redirect to focal person dashboard
+        return redirect()->route('FocalPerson.dvrequest.index')
             ->with('success', 'Focal Person registered successfully!');
     }
 }

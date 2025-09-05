@@ -4,6 +4,7 @@ use App\Http\Controllers\FocalPerson\DvRequestController;
 use App\Http\Controllers\IMSD\DvRequestProcessingController;
 use App\Http\Controllers\Incoming\GIPDvRequestProcessingController;
 use App\Http\Controllers\Auth\FocalPersonController;
+use App\Http\Controllers\FocalPerson\FocalProfileController;
 use App\Http\Controllers\Auth\FocalPersonRegisterController;
 use App\Http\Controllers\Admin\AccountingUnitController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -65,6 +66,11 @@ Route::middleware(['auth','role:Admin'])->group(function () {
             Route::get('/{dvRequest}/logs', [DvRequestController::class, 'logs'])->name('logs'); // Logs
             Route::delete('/{dvRequest}', [DvRequestController::class, 'destroy'])->name('destroy');
             });
+        Route::prefix('FocalPerson/profile')->name('FocalPerson.profile.')->group(function () {
+        Route::get('/', [FocalProfileController::class, 'show'])->name('show');
+        Route::get('/edit', [FocalProfileController::class, 'edit'])->name('edit');
+        Route::post('/update', [FocalProfileController::class, 'update'])->name('update');
+    });
 });
 
 
@@ -72,6 +78,7 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
 
     // Index page — list all DV requests for IMSD
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
+    
         ->name('RegionalOffices.IMSD.index');
 
     Route::get('/fetch-all', [DvRequestProcessingController::class, 'fetchAll'])
@@ -90,21 +97,32 @@ Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->gr
 
     // Index page — list all DV requests for Incoming GIP
      Route::get('/index', [GIPDvRequestProcessingController::class, 'index'])
+        ->middleware('permission:gip.view')
         ->name('Incoming.GIP.index');
         // routes/web.php
     Route::get('/dvrequests/verify', [GIPDvRequestProcessingController::class, 'redirectToFirstPending'])
+    ->middleware('permission:gip.approve')
     ->name('Incoming.GIP.verifygipdv');
 
     // Show / process a single DV request 
     Route::get('/dvrequests/{id}', [GIPDvRequestProcessingController::class, 'show'])
+        ->middleware('permission:gip.view')
         ->name('Incoming.GIP.dvrequests.withid');
+
+           
+    Route::get('/history', [GIPDvRequestProcessingController::class, 'history'])
+    ->name('dvrequests.history');
+
         
     Route::get('/fetch-all', [GIPDvRequestProcessingController::class, 'fetchAll'])
+        ->middleware('permission:gip.view')
         ->name('Incoming.GIP.fetchAll');
 
     Route::post('/dvrequests/{id}/verify', [GIPDvRequestProcessingController::class, 'verify'])
+        ->middleware('permission:gip.approve')
         ->name('Incoming.GIP.dvrequests.verify');
     
       Route::get('/dvrequests/{id}/fetch', [GIPDvRequestProcessingController::class, 'fetch'])
+            ->middleware('permission:gip.edit')
             ->name('Incoming.GIP.dvrequests.fetch');
 });

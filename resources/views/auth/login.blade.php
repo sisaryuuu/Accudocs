@@ -40,7 +40,7 @@
                     <span class="ml-2 text-sm text-gray-700">Remember Me</span>
                 </label>
 
-                <a href="#" class="text-sm text-blue-500 hover:underline">Forgot Password?</a>
+                <a href="{{route('focalperson.register.form')}}" class="text-sm text-blue-500 hover:underline">No Account?</a>
             </div>
 
             <button type="submit" 

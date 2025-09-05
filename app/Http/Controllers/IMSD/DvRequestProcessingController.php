@@ -21,13 +21,14 @@ class DvRequestProcessingController extends Controller
     // Return JSON for polling
     public function fetchAll()
     {
-   $dvRequests = DvRequest::with(['focalPerson', 'program', 'respocenter'])
+   $dvRequests = DvRequest::with(['focalPerson', 'program', 'respocenter','accountingUnit'])
             ->whereIn('status', ['submitted','IMSD_in_process'])
             ->latest()
             ->get();
             $result = $dvRequests->map(fn($request) => [
             'id'           => $request->id,
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+            'submitted_to' => auth()->id(),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => $request->respocenter->rccode ?? 'N/A',
             'amount'       => number_format($request->amount, 2),
@@ -38,25 +39,39 @@ class DvRequestProcessingController extends Controller
         return response()->json($result);
     }
     // Show / process method
-    public function show($id)
-    {
-        $dvRequest = DvRequest::findOrFail($id);    
+public function show($id)
+{
+    // Load DV request with relationships and restrict to GIP only
+    $dvRequest = DvRequest::with(['accountingUnit', 'program', 'focalPerson'])
+        ->whereHas('program', fn($q) =>
+            $q->whereIn('prcode', ['GIP', 'TUPAD'])) // ✅ Only GIP
+        ->findOrFail($id);
 
-        if ($dvRequest->status == 'submitted') {
-            $dvRequest->status = 'IMSD_in_process';
-            $dvRequest->save();
+    // If it's newly submitted, mark as received
+    if ($dvRequest->status === 'submitted') {
+        $dvRequest->status = 'IMSD_in_process';
+        $dvRequest->accountingunit_id = auth()->id();          // who received (IMSD staff)
+        $dvRequest->received_by = auth()->id();                // redundant but explicit
+        $dvRequest->received_at = now();                       // timestamp
+        $dvRequest->save();
 
-            $this->logAction($dvRequest->id, 'IMSD_in_process', 'Request received by IMSD for verification');
-        }
-        $recentDvRequests = DvRequest::with('focalPerson')
-                                ->whereIn('status', ['submitted', 'IMSD_in_process'])
-                                ->whereNotNull('focalperson_id') 
-                                 ->orderBy('created_at', 'desc')
-                                 ->take(5)
-                                 ->get();
-
-        return view('RegionalOffices.IMSD.verifydv', compact('dvRequest','recentDvRequests'));
+        $this->logAction(
+            $dvRequest->id,
+            'IMSD_in_process',
+            'Request received by IMSD for verification'
+        );
     }
+
+    // Get the 5 most recent DV requests still in process/submitted
+    $recentDvRequests = DvRequest::with('focalPerson')
+        ->whereIn('status', ['submitted', 'IMSD_in_process'])
+        ->whereNotNull('focalperson_id')
+        ->latest()
+        ->take(5)
+        ->get();
+
+    return view('RegionalOffices.IMSD.verifydv', compact('dvRequest', 'recentDvRequests'));
+}
 
     // Verify method
     public function verify(Request $request, $id)
@@ -67,7 +82,7 @@ class DvRequestProcessingController extends Controller
 
         $dvRequest = DvRequest::findOrFail($id);
         $dvRequest->status = 'IMSD_verified';
-        $dvRequest->verified_by = auth()->user()->id;
+        $dvRequest->received_by = auth()->user()->id;
         $dvRequest->save();
 
         $this->logAction($dvRequest->id, 'IMSD_verified', $request->remarks ?? 'Request verified by IMSD');
