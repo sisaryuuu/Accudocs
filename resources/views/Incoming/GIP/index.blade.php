@@ -6,11 +6,18 @@
 <div class="min-h-screen bg-gray-50 py-8">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Header Section -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
             <div>
                 <h1 class="text-3xl font-bold text-gray-900">Received DV Requests</h1>
                 <p class="mt-2 text-sm text-gray-600">Manage and verify submitted GIP disbursement voucher requests</p>
             </div>
+        </div>
+
+        <!-- Search Input -->
+        <div class="mb-4">
+            <input type="text" id="searchInput" 
+                   placeholder="🔍 Search DV Requests (Control No, Program, Respocenter, Submitted By)..."
+                   class="w-full md:w-1/2 px-4 py-2 border rounded-lg shadow-sm focus:ring focus:ring-blue-200 focus:outline-none">
         </div>
 
         <!-- Main Content Card -->
@@ -25,15 +32,16 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const tableContainer = document.getElementById('dv-table-container');
+    const searchInput = document.getElementById('searchInput');
+    let allRequests = []; // store full list for search
 
-    // Status colors mapping
     const statusColors = {
         'IMSD_verified': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
         'Incoming-GIP_in_process': ['bg-blue-100 text-blue-800','bg-blue-400','In Process'],
         'Incoming-GIP_verified': ['bg-green-100 text-green-800','bg-green-400','Verified']
     };
 
-    // Function to render table rows
+    // Render table
     function renderTable(dvRequests) {
         if (dvRequests.length === 0) {
             tableContainer.innerHTML = `
@@ -44,8 +52,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                     </div>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests received</h3>
-                    <p class="text-gray-500">No documents have been submitted to Incoming-GIP yet.</p>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                    <p class="text-gray-500">Try adjusting your search filter.</p>
                 </div>
             `;
             return;
@@ -78,12 +86,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 <tr class="hover:bg-gray-50 transition-colors duration-150">
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#${request.id}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.respocenter}</span>
-                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${request.program}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${request.respocenter}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">₱${request.amount}</td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
@@ -93,12 +97,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${request.date}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div class="flex items-center space-x-2">
-                            <a href="/Incoming/GIP/dvrequests/${request.id}" 
-                               class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
-                               View / Process
-                            </a>
-                        </div>
+                        <a href="/Incoming/GIP/dvrequests/${request.id}" 
+                           class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md">
+                           View / Process
+                        </a>
                     </td>
                 </tr>
             `;
@@ -112,21 +114,34 @@ document.addEventListener('DOMContentLoaded', function() {
         tableContainer.innerHTML = html;
     }
 
-    // Fetch DV Requests from server
-      async function fetchDvRequests() {
+    // Fetch requests
+    async function fetchDvRequests() {
         try {
-            const res = await fetch("{{ route('Incoming.GIP.fetchAll') }}"); // <- absolute URL
+            const res = await fetch("{{ route('Incoming.GIP.fetchAll') }}");
             const data = await res.json();
-            console.log(data);
-            renderTable(data); // your function to render table
+            allRequests = data; // keep a copy
+            renderTable(allRequests);
         } catch (err) {
             console.error('Failed to fetch DV requests', err);
         }
     }
 
-     // Poll every 5 seconds
+    // Filter requests by search
+    function filterRequests() {
+        const query = searchInput.value.toLowerCase();
+        const filtered = allRequests.filter(r =>
+            r.id.toString().includes(query) ||
+            r.submitted_by.toLowerCase().includes(query) ||
+            r.program.toLowerCase().includes(query) ||
+            r.respocenter.toLowerCase().includes(query)
+        );
+        renderTable(filtered);
+    }
 
-    // Initial fetch
+    // Event: search input
+    searchInput.addEventListener('input', filterRequests);
+
+    // Initial fetch + polling
     fetchDvRequests();
     setInterval(fetchDvRequests, 5000);
 });

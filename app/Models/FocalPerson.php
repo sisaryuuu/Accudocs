@@ -1,23 +1,24 @@
 <?php
 
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use App\Traits\HasProfileImage;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
 class FocalPerson extends Authenticatable
 {
-    use HasFactory, HasRoles, HasProfileImage;
+    use HasFactory, HasRoles, HasProfileImage, Notifiable;
 
     protected $table = 'focalpersons';
-    protected $guard_name = 'focal';
+    protected $guard_name = 'focal'; // Correct guard for Spatie + Notifications
 
     protected $attributes = [
-    'profile_image' => 'default.png',];
+        'profile_image' => 'default.png',
+    ];
 
     protected $fillable = [
         'fname',
@@ -31,8 +32,22 @@ class FocalPerson extends Authenticatable
         'program_id',
         'respocenter_id',
         'profile_image',
-        
     ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Relationships
+    |--------------------------------------------------------------------------
+    */
     public function program()
     {
         return $this->belongsTo(Program::class);
@@ -42,12 +57,25 @@ class FocalPerson extends Authenticatable
     {
         return $this->belongsTo(ResponCenter::class, 'respocenter_id');
     }
-     protected function setPasswordAttribute($value)
+
+    /*
+    |--------------------------------------------------------------------------
+    | Accessors & Mutators
+    |--------------------------------------------------------------------------
+    */
+    public function getFullNameAttribute()
     {
-        $this->attributes['password'] = Hash::make($value);
+        return trim("{$this->fname} {$this->mi} {$this->lname}");
     }
-        public function getFullNameAttribute()
+
+    protected function setPasswordAttribute($value)
     {
-        return "{$this->fname} {$this->mi} {$this->lname}";
+        if (!empty($value)) {
+            // Avoid double-hashing if the password is already hashed
+            $this->attributes['password'] =
+                (strlen($value) === 60 && preg_match('/^\$2y\$/', $value))
+                ? $value
+                : Hash::make($value);
+        }
     }
 }

@@ -29,7 +29,7 @@
                                 {{ $request->focalPerson->fname ?? '' }} {{ $request->focalPerson->lname ?? '' }}
                             </td>
                             <td class="px-4 py-3">{{ $request->program->prcode ?? 'N/A' }}</td>
-                            <td class="px-4 py-3">{{ $request->respocenter->rccode ?? 'N/A' }}</td>
+                            <td class="px-4 py-3">{{ $request->respocenter->description ?? 'N/A' }} - {{ $request->respocenter->rccode ?? 'N/A' }}</td>
                             <td class="px-4 py-3">₱{{ number_format($request->amount, 2) }}</td>
                             <td class="px-4 py-3">
                                 {{ $request->accountingUnit->fname ?? '' }} {{ $request->accountingUnit->lname ?? '' }}

@@ -58,172 +58,177 @@ class DvRequestController extends Controller
             'particulars' => 'required|string|max:255',
         ]);
         
-        $dv = DvRequest::create([
-           'focalperson_id' => Auth::guard('focal')->id(),
-            'program_id'     => $request->program_id,
-            'amount'         => $request->amount,
-            'particulars'    => $request->particulars,
-            'fname'          => $request->fname,
-            'mi'             => $request->mi,
-            'lname'          => $request->lname,
-            'tin_number'     => $request->tin,
-            'respocenter_id' => $request->respocenter_id,
-            'address'        => $request->address,
-            'status'         => 'submitted',
-        ]);
-        $this->logAction($dv->id  , 'submitted', 'Request submitted by Focal Person');
+           $dvRequest = DvRequest::create([
+        'focalperson_id' => Auth::guard('focal')->id(),
+        'program_id'     => $request->program_id,
+        'amount'         => $request->amount,
+        'particulars'    => $request->particulars,
+        'fname'          => $request->fname,
+        'mi'             => $request->mi,
+        'lname'          => $request->lname,
+        'tin_number'     => $request->tin,
+        'respocenter_id' => $request->respocenter_id,
+        'address'        => $request->address,
+        'status'         => 'submitted',
+    ]);
+        $this->logAction($dvRequest->id, 'submitted', 'submitted', 'Request submitted by Focal Person');;
 
-        return redirect()->route('FocalPerson.dvrequest.index')
-            ->with('success', 'DV Request submitted successfully!');
+
     }
 
     /**
      * Display a single DV Request.
      */
-   public function show(DvRequest $dvRequest)
-{
-    if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
-        abort(403, 'Unauthorized access.');
-    }
-
-    // Eager load related program and logs (with focalPerson)
-    $dvRequest->load(['program', 'logs.focalPerson']);
-
-    $steps = [
-        'Regional_Office',
-        'Incoming',
-        'Budget_Officer',
-        'Outgoing',
-        'Completed',
-    ];
-
-    // Determine current step from last log
-    $lastLog = $dvRequest->logs->last();
-    $currentStep = $lastLog 
-        ? array_search($lastLog->role, $steps)
-        : 0;
-
-    // Pass $logs explicitly to the view
-    $logs = $dvRequest->logs;
-
-    return view('FocalPerson.dvrequest.show', compact('dvRequest', 'steps', 'currentStep', 'logs'));
-}
-
-
-public function updateStatus(Request $request, DvRequest $dvRequest)
-{
-    // Define the workflow steps in order
-    $steps = [
-        'Submitted',        // first step
-        'Regional_Office',
-        'Incoming',
-        'Budget_Officer',
-        'Outgoing',
-        'Completed',
-    ];
-
-    // Get the last log for this request
-    $lastLog = $dvRequest->logs()->latest()->first();
-
-    // If no logs exist, create the initial "Submitted" step
-    if (!$lastLog) {
-        $dvRequest->logs()->create([
-            'accountingunit_id' => Auth::guard('web')->id(),
-            'role' => 'Focal_Person',
-            'status' => 'in-progress',
-            'remarks' => 'Request submitted',
-        ]);
-
-            // Move to the next step immediately
-            $currentStepIndex = 1; // skip "Submitted" for role check
-        } else {
-            $currentStepIndex = array_search($lastLog->role, $steps);
+    public function show(DvRequest $dvRequest)
+    {
+        // Security: ensure the DV belongs to this focal person
+        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+            abort(403, 'Unauthorized access.');
         }
 
-    // Determine the allowed role for this step
-    $allowedRole = $steps[$currentStepIndex];
+        // Eager load related data
+        $dvRequest->load(['program', 'logs.focalPerson', 'logs.accountingUnit']);
 
-    if (!auth()->user()->hasRole($allowedRole)) {
-        abort(403, 'You cannot process this step.');
-    }
-    // Role-based check only for steps after Submitted
-    if ($steps[$currentStepIndex] !== 'Submitted' && 
-        !auth()->user()->hasRole($steps[$currentStepIndex])) {
-        abort(403, 'You cannot process this step.');
-    }
-    // Move to the next step
-    $nextStepIndex = $currentStepIndex + 1;
-    $nextRole = $steps[$nextStepIndex] ?? 'Completed';
+        // Pass logs explicitly to the view
+        $logs = $dvRequest->logs;
 
-    $dvRequest->logs()->create([
-        'accountingunit_id' => Auth::guard('web')->id(),
-        'role' => $nextRole,
-        'status' => $nextRole === 'Completed' ? 'completed' : 'in-progress',
-        'remarks' => $request->remarks,
+        // Get the latest step for the progress stepper
+        $lastLog = $dvRequest->logs()->latest()->first();
+        return response()->json([
+        'lastStep' => $lastLog ? $lastLog->role : 'Submitted'
+        ]);
+
+        return view('FocalPerson.dvrequest.show', compact('dvRequest', 'logs', 'lastStep'));
+    }
+        public function search(Request $request)
+    {
+        if (!Auth::guard('focal')->check()) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $focalId = Auth::guard('focal')->id();
+        $query   = $request->get('query');
+
+        $dvRequests = DvRequest::with(['program', 'respocenter'])
+            ->where('focalperson_id', $focalId)
+            ->where(function ($q) use ($query) {
+                $q->where('control_no', 'like', "%{$query}%")   // ✅ added control_no
+                ->orWhere('particulars', 'like', "%{$query}%")
+                ->orWhere('amount', 'like', "%{$query}%")
+                ->orWhere('status', 'like', "%{$query}%")
+                ->orWhereHas('program', function ($p) use ($query) {
+                    $p->where('prcode', 'like', "%{$query}%");
+                })
+                ->orWhereHas('respocenter', function ($r) use ($query) {
+                    $r->where('rccode', 'like', "%{$query}%");
+                });
+            })
+            ->latest()
+            ->get();
+
+        return response()->json($dvRequests);
+}
+
+        public function destroy(DvRequest $dvRequest)
+    {
+        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+            abort(403, 'Unauthorized action.');
+                }
+
+                // Log the deletion BEFORE deleting
+            $this->logAction($dvRequest->id, 'deleted', 'deleted', 'DV Request deleted by Focal Person');
+
+                // Now delete the DV request
+                $dvRequest->delete();
+
+                return redirect()->route('FocalPerson.dvrequest.index')
+                                ->with('success', 'DV Request deleted successfully.');
+            }
+        /**
+         * View logs of a DV Request.
+         */
+            public function logs(DvRequest $dvRequest)
+    {
+        if (Auth::guard('focal')->check()) {
+            if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+                abort(403, 'Unauthorized access to this request.');
+            }
+        }
+
+        if (Auth::guard('web')->check()) {
+            // Accounting unit → you can add more granular checks here
+        }
+
+        // Load logs with relationships and debug info
+        $logs = $dvRequest->logs()
+            ->with(['focalPerson', 'accountingUnit'])
+            ->latest()
+            ->get();
+
+        // Debug: Check what's in the logs
+        foreach ($logs as $log) {
+            \Log::info('Log ID: ' . $log->id, [
+                'focalperson_id' => $log->focalperson_id,
+                'accountingunit_id' => $log->accountingunit_id,
+                'role' => $log->role,
+                'action' => $log->action,
+                'has_focal_person' => $log->focalPerson ? 'YES' : 'NO',
+                'has_accounting_unit' => $log->accountingUnit ? 'YES' : 'NO',
+            ]);
+        }
+
+        return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs'));
+    }
+
+protected function logAction(int $dvRequestId, string $status, string $action, string $remarks): void
+{
+   
+
+    if (Auth::guard('focal')->check()) { // Focal Person
+         DvRequestLog::create([
+        'dv_request_id'    => $dvRequestId,
+        'focalperson_id'   => Auth::guard('focal')->id(),
+        'status'           => $status,
+        'action'           => $action,
+        'remarks'          => $remarks, 
+    ]);
+    } elseif (Auth::guard('web')->check()) { // Accounting Unit
+        DvRequestLog::create([
+            'dv_request_id'    => $dvRequestId,
+            'accountingunit_id'=> Auth::guard('web')->id(),
+            'status'           => $status,
+            'action'           => $action,
+            'remarks'          => $remarks,
+        ]);
+    }else {
+        DvRequestLog::create([
+            'dv_request_id' => $dvRequestId,
+            'action' => $action, 
+            'status' => $status,
+            'remarks' => $remarks, 
+        ]);
+            
+    }
+}
+    public function latestStep(DvRequest $dvRequest)
+{
+    $lastLog = $dvRequest->logs()->latest()->first();
+    $action  = $lastLog?->action ?? 'Submitted';
+
+    $normalized = match (true) {
+        str_contains($action, 'Submitted')   => 'Submitted',
+        str_contains($action, 'IMSD')        => 'IMSD',
+        str_contains($action, 'Incoming')    => 'Incoming',
+        str_contains($action, 'Budget')      => 'Budget Officer',
+        str_contains($action, 'Outgoing')    => 'Outgoing',
+        str_contains($action, 'Completed')   => 'Completed',
+        default                              => 'Submitted',
+    };
+
+    return response()->json([
+        'lastStep' => $normalized,
     ]);
 
-    return redirect()->route('FocalPerson.dvrequest.show', $dvRequest)
-                     ->with('success', 'Moved to next step.');
-}
-
-    
-    public function destroy(DvRequest $dvRequest)
-{
-    if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
-        abort(403, 'Unauthorized action.');
-            }
-
-            // Log the deletion BEFORE deleting
-            $this->logAction($dvRequest->id, 'deleted', 'DV Request deleted by Focal Person');
-
-            // Now delete the DV request
-            $dvRequest->delete();
-
-            return redirect()->route('FocalPerson.dvrequest.index')
-                            ->with('success', 'DV Request deleted successfully.');
-        }
-    /**
-     * View logs of a DV Request.
-     */
-    public function logs(DvRequest $dvRequest)
-{
-    if (Auth::guard('focal')->check()) {
-        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
-            abort(403, 'Unauthorized access to this request.');
-        }
-    }
-
-    if (Auth::guard('web')->check()) {
-        // Accounting unit → you can add more granular checks here
-    }
-
-    $logs = $dvRequest->logs()->with(['focalPerson', 'accountingUnit'])->latest()->get();
-
-    return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs'));
-}
-
-
- 
-
-    protected function logAction(int $dvRequestId, string $action, string $remarks): void
-{
-    if (Auth::guard('focal')->check()) {
-        // Focal Person is the actor
-        DvRequestLog::create([
-            'dv_request_id'   => $dvRequestId,
-            'focalperson_id'  => Auth::guard('focal')->id(),
-            'action'          => str_replace('_', ' ', $action),
-            'remarks'         => $remarks,
-        ]);
-    } elseif (Auth::guard('web')->check()) {
-        // Accounting Unit is the actor
-        DvRequestLog::create([
-            'dv_request_id'     => $dvRequestId,
-            'accountingunit_id' => Auth::guard('web')->id(),
-            'action'            => str_replace('_', ' ', $action),
-            'remarks'           => $remarks,
-        ]);
-    }
 }
 
 }

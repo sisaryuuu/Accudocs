@@ -23,26 +23,6 @@
             </div>
         </div>
 
-        <!-- Progress Stepper -->
-        <div class="mb-8">
-            <div class="flex items-center justify-between">
-                @foreach ($steps as $index => $step)
-                    <div class="flex-1">
-                        <div class="relative mb-2">
-                            <div class="w-10 h-10 mx-auto rounded-full text-lg flex items-center justify-center
-                                {{ $currentStep > $index ? 'bg-green-500 text-white' : ($currentStep == $index ? 'bg-blue-500 text-white' : 'bg-gray-300 text-gray-700') }}">
-                                {{ $index + 1 }}
-                            </div>
-                        </div>
-                        <div class="text-xs text-center mt-2 font-medium">{{ $step }}</div>
-                    </div>
-                    @if ($index < count($steps) - 1)
-                        <div class="flex-auto border-t-2 {{ $currentStep > $index ? 'border-green-500' : 'border-gray-300' }}"></div>
-                    @endif
-                @endforeach
-            </div>
-        </div>
-
         <!-- Main Content Card: Logs -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             @if($logs->isEmpty())
@@ -56,11 +36,9 @@
                     <p class="text-gray-500 mb-6">There are no activity logs for this request yet.</p>
                 </div>
             @else
-                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-lg font-semibold text-gray-900">Activity Timeline</h3>
-                        <span class="text-sm text-gray-500">{{ $logs->count() }} {{ Str::plural('entry', $logs->count()) }}</span>
-                    </div>
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-gray-900">Activity Timeline</h3>
+                    <span class="text-sm text-gray-500">{{ $logs->count() }} {{ Str::plural('entry', $logs->count()) }}</span>
                 </div>
 
                 <div class="overflow-x-auto">
@@ -97,7 +75,7 @@
                                             <span class="text-gray-500">N/A</span>
                                         @endif
                                     </td>
-                                                                        <td class="px-6 py-4">{{ ucfirst($log->action) }}</td>
+                                    <td class="px-6 py-4">{{ ucfirst($log->action ?? 'Updated') }}</td>
                                     <td class="px-6 py-4">{{ $log->remarks ?? 'None' }}</td>
                                     <td class="px-6 py-4">{{ $log->created_at->format('M d, Y h:i A') }}</td>
                                 </tr>

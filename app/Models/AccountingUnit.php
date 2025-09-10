@@ -7,14 +7,17 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Hash;
 use App\Traits\HasProfileImage;
 use Spatie\Permission\Traits\HasRoles;
-use Illuminate\Notifications\Notifiable;
 
 class AccountingUnit extends Authenticatable
 {
-    use HasFactory, HasRoles, Notifiable, HasProfileImage;
+    use HasFactory, HasRoles, HasProfileImage;
 
     protected $table = 'accountingunits';
-    protected $guard_name = 'web';
+    protected $guard_name = 'web'; // adjust if you have a custom "accountingunit" guard
+
+    protected $attributes = [
+        'profile_image' => 'default.png',
+    ];
 
     protected $fillable = [
         'fname',
@@ -34,21 +37,35 @@ class AccountingUnit extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
-    
+
+    /*
+    |--------------------------------------------------------------------------
+    | Relationships
+    |--------------------------------------------------------------------------
+    */
     public function program()
     {
         return $this->belongsTo(Program::class);
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Accessors & Mutators
+    |--------------------------------------------------------------------------
+    */
     public function getFullNameAttribute()
     {
-        return "{$this->fname} {$this->mi} {$this->lname}";
+        return trim("{$this->fname} {$this->mi} {$this->lname}");
     }
 
     protected function setPasswordAttribute($value)
     {
         if (!empty($value)) {
-            $this->attributes['password'] = Hash::make($value);
+            // Avoid double-hashing
+            $this->attributes['password'] =
+                (strlen($value) === 60 && preg_match('/^\$2y\$/', $value))
+                ? $value
+                : Hash::make($value);
         }
     }
 }

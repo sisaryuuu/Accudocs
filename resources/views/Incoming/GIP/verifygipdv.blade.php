@@ -25,14 +25,14 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Program</label>
-                        <input type="text" value="{{ $dvRequest->program->prcode ?? 'N/A'}}" class=mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                        <input type="text" value="{{ $dvRequest->program->prcode ?? 'N/A'}}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
-                                <div>
-                    <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
-                    <p class="mt-1 text-sm text-gray-900">
-                      {{ $dvRequest->respocenter->rccode}} {{$dvRequest->respocenter->description}}
-                    </p>
-                </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
+                        <p class="mt-1 text-sm text-gray-900">
+                          {{ $dvRequest->respocenter->rccode}} {{$dvRequest->respocenter->description}}
+                        </p>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Particulars</label>
@@ -81,6 +81,24 @@
                 </div>
             </div>
 
+                    
+                <div class="bg-gray-50 border rounded-lg p-4">
+                <h2 class="text-md font-semibold text-green-800 mb-3"> Attachments Verified by IMSD</h2>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                    @foreach($dvRequest->gipAttachments as $attachment)
+                                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" disabled
+                            class="h-4 w-4 border-gray-300 rounded"
+                            style="accent-color: #16a34a;" {{-- Force Tailwind green-600 --}}
+                            @if($attachment->is_present) checked @endif>
+                        <span class="{{ $attachment->is_present ? 'text-green-600 font-semibold' : 'text-gray-400 line-through' }}">
+                            {{ $attachment->name }}
+                        </span>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Remarks / Lacking</label>
                     <textarea id="remarks" name="remarks" rows="3" 
@@ -91,10 +109,21 @@
                 <div class="flex justify-end">
                     <button type="submit" 
                             class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Verify
+                        Approve
                     </button>
                 </div>
             </form>
+
+            <form action="{{ route('Incoming.GIP.dvrequests.reject', $dvRequest->id) }}" method="POST">
+                @csrf
+                 <div class="flex justify-end">
+                    <button type="submit" 
+                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                        Reject
+                    </button>
+                </div>
+                </form>
+                </a>
                 <a href="{{ route('Incoming.GIP.index') }}">
                  <div class="flex justify-end">
                     <button type="submit" 
@@ -103,6 +132,7 @@
                     </button>
                 </div>
                 </a>
+
                
         </div>
     <!-- Sidebar -->

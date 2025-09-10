@@ -6,59 +6,97 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
+use App\Models\GIPAttachment;
 
 class GIPDvRequestProcessingController extends Controller
 {
-    public function index()
+      public function index(Request $request)
     {
-        $dvRequests = DvRequest::whereHas('program', fn($q) => 
-                                $q->where('prcode', 'GIP')) // ✅ Only GIP
-                               ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process'])
-                               ->orderBy('created_at', 'desc')
-                               ->get();
+        $query = DvRequest::whereHas('program', fn($q) =>
+                        $q->where('prcode', 'GIP'))
+                    ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process']);
+
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
+                  ->orWhereHas('focalPerson', fn($fp) =>
+                      $fp->where('fname', 'like', "%{$search}%")
+                         ->orWhere('lname', 'like', "%{$search}%")
+                  )
+                  ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%"))
+                  ->orWhere('amount', 'like', "%{$search}%")
+                  ->orWhere('status', 'like', "%{$search}%");
+            });
+        }
+
+        $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
 
         return view('Incoming.GIP.index', compact('dvRequests'));
     }
     
     public function show($id)
+{
+    $dvRequest = DvRequest::with(['accountingUnit','program','gipAttachments','logs'])
+                        ->whereHas('program', fn($q) => 
+                            $q->where('prcode', 'GIP')) 
+                        ->findOrFail($id);
+
+    if ($dvRequest->status == 'IMSD_verified') {
+        $dvRequest->update([
+            'status'            => 'Incoming-GIP_in_process',
+            'accountingunit_id' => auth()->id(),
+            'received_by'       => auth()->id(),
+            'received_at'       => now(),
+        ]);
+
+        $this->logAction(
+            $dvRequest->id, 
+            'Incoming',                     // role
+            'Incoming-GIP_in_process',      // ✅ status should match request status
+            'Request received by Incoming for GIP processing' // remarks
+        );
+}
+    $lastLog = $dvRequest->logs()->latest()->first();
+    $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
+
+    $recentDvRequests = DvRequest::whereHas('program', fn($q) => 
+                                    $q->where('prcode', 'GIP')) 
+                                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process'])
+                                ->whereNotNull('focalperson_id')
+                                ->latest()
+                                ->take(5)
+                                ->get();
+
+    return view('Incoming.GIP.verifygipdv', compact('dvRequest', 'recentDvRequests', 'lastStep'));
+}
+
+
+     public function fetchAll(Request $request)
     {
-        $dvRequest = DvRequest::with(['accountingUnit','program'])
-                            ->whereHas('program', fn($q) => 
-                                $q->where('prcode', 'GIP')) // ✅ Only GIP
-                            ->findOrFail($id);
+        $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
+            ->whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
+            ->whereIn('status', ['IMSD_verified','Incoming-GIP_in_process']);
 
-        if ($dvRequest->status == 'IMSD_verified') {
-            $dvRequest->status = 'Incoming-GIP_in_process';
-            $dvRequest->accountingunit_id = auth()->id(); // assign current user as processor
-            $dvRequest->received_by = auth()->id(); // ✅ mark who received
-            $dvRequest->received_at = now();        // ✅ mark timestamp
-            $dvRequest->save();
+        // 🔍 Apply search filter for AJAX
+        if ($request->filled('search')) {
+            $search = $request->input('search');
 
-            $this->logAction(
-                $dvRequest->id, 
-                'Incoming-GIP_in_process', 
-                'Request received by Incoming for GIP processing'
-            );
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
+                  ->orWhereHas('focalPerson', fn($fp) =>
+                      $fp->where('fname', 'like', "%{$search}%")
+                         ->orWhere('lname', 'like', "%{$search}%")
+                  )
+                  ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%"))
+                  ->orWhere('amount', 'like', "%{$search}%")
+                  ->orWhere('status', 'like', "%{$search}%");
+            });
         }
 
-        $recentDvRequests = DvRequest::whereHas('program', fn($q) => 
-                                        $q->where('prcode', 'GIP')) // ✅ Only GIP
-                                    ->orderBy('created_at', 'desc')
-                                    ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process'])
-                                    ->whereNotNull('focalperson_id')
-                                    ->take(5)
-                                    ->get();
-
-        return view('Incoming.GIP.verifygipdv', compact('dvRequest', 'recentDvRequests'));
-    }
-
-
-    public function fetchAll() {
-        $dvRequests = DvRequest::with(['focalPerson', 'program', 'respocenter'])
-            ->whereHas('program', fn($q) => $q->where('prcode', 'GIP')) // ✅ Only GIP
-            ->whereIn('status', ['IMSD_verified','Incoming-GIP_in_process'])
-            ->latest()
-            ->get();
+        $dvRequests = $query->latest()->get();
 
         $result = $dvRequests->map(fn($request) => [
             'id'           => $request->id,
@@ -76,7 +114,7 @@ class GIPDvRequestProcessingController extends Controller
     public function fetch($id)
     {
         $dvRequest = DvRequest::with(['focalPerson', 'program','respocenter','accountingUnit'])
-            ->whereHas('program', fn($q) => $q->where('prcode', 'GIP')) // ✅ Only GIP
+            ->whereHas('program', fn($q) => $q->where('prcode', 'GIP')) 
             ->findOrFail($id);
         
         return response()->json([
@@ -99,21 +137,56 @@ class GIPDvRequestProcessingController extends Controller
             'remarks' => 'nullable|string|max:1000',
         ]);
 
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP')) // ✅ Only GIP
+        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP')) 
                               ->findOrFail($id);
 
         $dvRequest->status = 'Incoming-GIP_verified';
         $dvRequest->save();
-
-        $this->logAction($dvRequest->id, 'Incoming-GIP_verified', $request->remarks ?? 'Request verified by Incoming-GIP');
+          
+        $checkedAttachments = $request->input('attachments', []);
+        foreach ($dvRequest->gipAttachments as $attachment) {
+        $attachment->is_present = isset($checkedAttachments[$attachment->name]);
+        $attachment->save();
+    }
+     $this->logAction(
+            $dvRequest->id,
+            'Incoming',
+            'Approved',
+            $request->remarks ?? 'Request verified by Incoming-GIP'
+        );
 
         return redirect()->route('Incoming.GIP.dvrequests.withid', $dvRequest->id)
                          ->with('success', 'DV Request has been verified successfully.');
     }
+        public function reject(Request $request, $id)
+    {
+        $request->validate([
+            'remarks' => 'nullable|string|max:1000',
+        ]);
+
+        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
+                            ->findOrFail($id);
+
+        // Update status to rejected
+        $dvRequest->status = 'Incoming-GIP_rejected';
+        $dvRequest->save();
+
+        // Log the rejection
+        $this->logAction(
+            $dvRequest->id,
+            'Incoming',
+            'Rejected',
+            $request->remarks ?? 'Request rejected by Incoming-GIP'
+        );
+
+        return redirect()->route('Incoming.GIP.index')
+                        ->with('error', 'DV Request has been rejected.');
+    }
+
     
     public function redirectToFirstPending()
     {
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP')) // ✅ Only GIP
+        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP')) 
                               ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process'])
                               ->orderBy('created_at', 'asc')
                               ->first();
@@ -129,19 +202,21 @@ public function history()
 {
     $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'accountingUnit'])
         ->whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
-        ->where('status', 'Incoming-GIP_verified') // ✅ only processed/verified
+        ->where('status', 'Incoming-GIP_verified') 
         ->orderBy('updated_at', 'desc')
         ->get();
 
     return view('Incoming.GIP.loghistory', compact('dvRequests'));
 }
-    protected function logAction($dvRequestId, $action, $remarks = null)
+  protected function logAction($dvRequestId, $action,$status, $remarks = null)
     {
         DvRequestLog::create([
             'dv_request_id' => $dvRequestId,
             'action'        => $action,
+            'status'        => $status,
             'remarks'       => $remarks,
             'user_id'       => auth()->id(),
         ]);
     }
+
 }

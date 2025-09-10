@@ -63,9 +63,14 @@ Route::middleware(['auth','role:Admin'])->group(function () {
             Route::get('/submitdvors', [DvRequestController::class, 'create'])->name('submitdvors'); // Submission form
             Route::post('/', [DvRequestController::class, 'store'])->name('store');       // Store request
             Route::get('/{dvRequest}', [DvRequestController::class, 'show'])->name('show'); // <-- add this
+            Route::get('/FocalPerson/dvrequest/search', [DvRequestController::class, 'search'])
+            ->name('FocalPerson.dvrequest.search');
             Route::get('/{dvRequest}/logs', [DvRequestController::class, 'logs'])->name('logs'); // Logs
             Route::delete('/{dvRequest}', [DvRequestController::class, 'destroy'])->name('destroy');
+            Route::get('/{dvRequest}/latest-step', [DvRequestController::class, 'latestStep'])
+            ->name('latestStep');
             });
+    
         Route::prefix('FocalPerson/profile')->name('FocalPerson.profile.')->group(function () {
         Route::get('/', [FocalProfileController::class, 'show'])->name('show');
         Route::get('/edit', [FocalProfileController::class, 'edit'])->name('edit');
@@ -78,11 +83,12 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
 
     // Index page — list all DV requests for IMSD
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
-    
         ->name('RegionalOffices.IMSD.index');
 
+    // Return JSON for polling
     Route::get('/fetch-all', [DvRequestProcessingController::class, 'fetchAll'])
         ->name('RegionalOffices.IMSD.fetchAll');
+
     // Show / process a single DV request
     Route::get('/dvrequests/{id}', [DvRequestProcessingController::class, 'show'])
         ->name('RegionalOffices.IMSD.verifydv');
@@ -90,6 +96,20 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
     // Verify / approve a DV request
     Route::post('/dvrequests/{id}/verify', [DvRequestProcessingController::class, 'verify'])
         ->name('IMSD.dvrequests.verify');
+
+    Route::get('/history', [DvRequestProcessingController::class, 'history'])
+        ->name('history');
+
+    // 2. Redirect to the first pending DV (no ID needed)
+    Route::get('/redirect-to-first', [DvRequestProcessingController::class, 'redirectToFirstPending'])
+    ->name('RegionalOffices.IMSD.redirectFirst');
+
+    Route::get('/dvrequests/{id}/attachments/edit', [DvRequestProcessingController::class, 'editAttachments'])
+        ->name('dvRequest.editAttachments');
+
+    // Update checklist (checkboxes)
+    Route::put('/dvrequests/{id}/attachments', [DvRequestProcessingController::class, 'updateAttachments'])
+        ->name('dvRequest.updateAttachments');
 });
 
 
@@ -111,7 +131,8 @@ Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->gr
 
            
     Route::get('/history', [GIPDvRequestProcessingController::class, 'history'])
-    ->name('dvrequests.history');
+        ->middleware('permission:gip.view')
+        ->name('dvrequests.history');
 
         
     Route::get('/fetch-all', [GIPDvRequestProcessingController::class, 'fetchAll'])
@@ -121,7 +142,11 @@ Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->gr
     Route::post('/dvrequests/{id}/verify', [GIPDvRequestProcessingController::class, 'verify'])
         ->middleware('permission:gip.approve')
         ->name('Incoming.GIP.dvrequests.verify');
-    
+
+    Route::post('/dvrequests/{id}/reject', [GIPDvRequestProcessingController::class, 'reject'])
+        ->name('Incoming.GIP.dvrequests.reject');
+
+
       Route::get('/dvrequests/{id}/fetch', [GIPDvRequestProcessingController::class, 'fetch'])
             ->middleware('permission:gip.edit')
             ->name('Incoming.GIP.dvrequests.fetch');

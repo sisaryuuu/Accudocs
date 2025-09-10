@@ -12,6 +12,16 @@
             </div>
         </div>
 
+        <!-- 🔍 Search bar -->
+        <div class="mb-4">
+            <input 
+                type="text" 
+                id="search-input" 
+                placeholder="Search DV Requests..." 
+                class="w-full sm:w-1/3 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+        </div>
+
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div id="dv-table-container" class="text-center py-16 text-gray-500">
                 Loading submitted requests...
@@ -23,6 +33,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const tableContainer = document.getElementById('dv-table-container');
+    const searchInput = document.getElementById('search-input');
+    let searchTerm = "";
 
     const statusColors = {
         'submitted': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
@@ -32,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderTable(dvRequests) {
         if (!dvRequests.length) {
-            tableContainer.innerHTML = `<div class="text-center py-16">No DV requests received.</div>`;
+            tableContainer.innerHTML = `<div class="text-center py-16">No DV requests found.</div>`;
             return;
         }
 
@@ -71,9 +83,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function fetchDvRequests() {
         try {
-            const res = await fetch("{{ route('RegionalOffices.IMSD.fetchAll') }}");
+            const res = await fetch("{{ route('RegionalOffices.IMSD.fetchAll') }}?search=" + encodeURIComponent(searchTerm));
             const data = await res.json();
-            console.log(data);
             renderTable(data);
         } catch (err) {
             console.error('Failed to fetch DV requests', err);
@@ -81,8 +92,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Listen to typing in search
+    searchInput.addEventListener('input', function() {
+        searchTerm = this.value;
+        fetchDvRequests();
+    });
+
+    // Initial load + polling
     fetchDvRequests();
-    setInterval(fetchDvRequests, 5000); // poll every 5s
+    setInterval(fetchDvRequests, 5000);
 });
 </script>
 @endsection

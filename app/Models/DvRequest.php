@@ -40,6 +40,10 @@ class DvRequest extends Model
     {
         return $this->hasMany(DvRequestLog::class, 'dv_request_id');
     }
+    public function gipAttachments()
+    {
+        return $this->hasMany(GIPAttachment::class, 'dv_request_id');
+    }
 
     public function focalperson()
     {

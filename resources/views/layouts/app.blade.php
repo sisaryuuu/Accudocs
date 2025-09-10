@@ -95,20 +95,32 @@
                 </a>
             </div>
             @endrole
-            @role('IMSD')
-            <div class="flex space-x-3">
-                <a href="{{ route('RegionalOffices.IMSD.index') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('RegionalOffices.IMSD.index') ? 'bg-gray-200 font-semibold' : '' }}">
-                    Received Documents
-                </a>
-            @endrole
+                @role('IMSD')
+        <div class="flex justify-center space-x-6 w-full">
+            <a href="{{ route('RegionalOffices.IMSD.index') }}" 
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('RegionalOffices.IMSD.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                Received Documents
+            </a>
+                <!-- First Pending DV -->
+           <!-- First Pending DV -->
+            <a href="{{ route('RegionalOffices.IMSD.redirectFirst') }}"
+            class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                Verify Disbursement Documents
+            </a>
+
+            <a href="{{ route('history') }}" 
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('history') ? 'bg-gray-200 font-semibold' : '' }}">
+                IMSD Log History
+            </a>
+        </div>
+        @endrole
+
             @role('Incoming-GIP')
              <div class="flex space-x-3">
                 <a href="{{ route('Incoming.GIP.index') }}" 
                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Incoming.GIP.index') ? 'bg-gray-200 font-semibold' : '' }}">
                     Received Documents
                 </a>
-
                                         <!-- Verify Documents -->
                 <a href="{{ route('Incoming.GIP.verifygipdv') }}" 
                 class="block py-2 px-4 rounded hover:bg-gray-200
@@ -138,9 +150,8 @@
                         class="h-12 w-12 rounded-full border object-cover">
                         <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                        </svg>
-                    </button>
-
+                        </svg>                    </button>
+                    
                     <div x-show="open" @click.away="open = false" x-transition
                          class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2">
                                 @if(Auth::guard('web')->check())
