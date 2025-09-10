@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AccountingUnitController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\FocalPerson\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -75,6 +76,12 @@ Route::middleware(['auth','role:Admin'])->group(function () {
         Route::get('/', [FocalProfileController::class, 'show'])->name('show');
         Route::get('/edit', [FocalProfileController::class, 'edit'])->name('edit');
         Route::post('/update', [FocalProfileController::class, 'update'])->name('update');
+    });
+    
+    Route::prefix('FocalPerson/notifications')->name('FocalPerson.notifications.')->group(function () {
+        Route::get('/fetch', [NotificationController::class, 'fetch'])->name('fetch');
+        Route::post('/read/{id}', [NotificationController::class, 'markAsRead'])->name('markAsRead');
+        Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
     });
 });
 

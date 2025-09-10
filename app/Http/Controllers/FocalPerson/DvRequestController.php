@@ -4,16 +4,28 @@ namespace App\Http\Controllers\FocalPerson;
 
 use App\Http\Controllers\Controller;
 use App\Models\DvRequest;
+use App\Notifications\DvRequestUpdated;
 use App\Models\DvRequestLog;
 use App\Models\Program;
+use App\Services\PusherService;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class DvRequestController extends Controller
 {
+    protected PusherService $pusher;
+
+    public function __construct(PusherService $pusher)
+    {
+        $this->pusher = $pusher;
+    }
+
     /**
-     * Display all DV Requests for this focal person.
+     * Display a listing of the DV Requests for the authenticated Focal Person.
      */
+
+    
   public function index()
 {
     // Ensure focal person is authenticated
@@ -50,31 +62,35 @@ class DvRequestController extends Controller
      * Store a newly created DV Request.
      */
     public function store(Request $request)
-    {
-        $request->validate([
-            'program_id'  => 'required|exists:programs,id',
-            'respocenter_id' =>'required|exists:responcenters,id',
-            'amount'      => 'required|numeric|min:0',
-            'particulars' => 'required|string|max:255',
-        ]);
-        
-           $dvRequest = DvRequest::create([
-        'focalperson_id' => Auth::guard('focal')->id(),
-        'program_id'     => $request->program_id,
-        'amount'         => $request->amount,
-        'particulars'    => $request->particulars,
-        'fname'          => $request->fname,
-        'mi'             => $request->mi,
-        'lname'          => $request->lname,
-        'tin_number'     => $request->tin,
-        'respocenter_id' => $request->respocenter_id,
-        'address'        => $request->address,
-        'status'         => 'submitted',
+{
+    $request->validate([
+        'program_id'  => 'required|exists:programs,id',
+        'respocenter_id' =>'required|exists:responcenters,id',
+        'amount'      => 'required|numeric|min:0',
+        'particulars' => 'required|string|max:255',
     ]);
-        $this->logAction($dvRequest->id, 'submitted', 'submitted', 'Request submitted by Focal Person');;
 
+    $dv = DvRequest::create([
+       'focalperson_id' => Auth::guard('focal')->id(),
+       'program_id'     => $request->program_id,
+       'amount'         => $request->amount,
+       'particulars'    => $request->particulars,
+       'fname'          => $request->fname,
+       'mi'             => $request->mi,
+       'lname'          => $request->lname,
+       'tin_number'     => $request->tin,
+       'respocenter_id' => $request->respocenter_id,
+       'address'        => $request->address,
+       'status'         => 'submitted',
+    ]);
 
-    }
+    // Pass the full $dv object
+    $this->logAction($dv, 'SUBMITTED', 'submitted', 'Request submitted by Focal Person');
+
+    return redirect()->route('FocalPerson.dvrequest.index')
+        ->with('success', 'DV Request submitted successfully!');
+}
+
 
     /**
      * Display a single DV Request.
@@ -135,18 +151,13 @@ class DvRequestController extends Controller
             abort(403, 'Unauthorized action.');
                 }
 
-                // Log the deletion BEFORE deleting
-            $this->logAction($dvRequest->id, 'deleted', 'deleted', 'DV Request deleted by Focal Person');
-
                 // Now delete the DV request
                 $dvRequest->delete();
 
                 return redirect()->route('FocalPerson.dvrequest.index')
                                 ->with('success', 'DV Request deleted successfully.');
             }
-        /**
-         * View logs of a DV Request.
-         */
+        
             public function logs(DvRequest $dvRequest)
     {
         if (Auth::guard('focal')->check()) {
@@ -156,16 +167,16 @@ class DvRequestController extends Controller
         }
 
         if (Auth::guard('web')->check()) {
-            // Accounting unit → you can add more granular checks here
+          
         }
 
-        // Load logs with relationships and debug info
+        
         $logs = $dvRequest->logs()
             ->with(['focalPerson', 'accountingUnit'])
             ->latest()
             ->get();
 
-        // Debug: Check what's in the logs
+      
         foreach ($logs as $log) {
             \Log::info('Log ID: ' . $log->id, [
                 'focalperson_id' => $log->focalperson_id,
@@ -179,37 +190,37 @@ class DvRequestController extends Controller
 
         return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs'));
     }
-
-protected function logAction(int $dvRequestId, string $status, string $action, string $remarks): void
+   protected function logAction(DvRequest $dvRequest, string $status, string $action, string $remarks): void
 {
-   
-
-    if (Auth::guard('focal')->check()) { // Focal Person
-         DvRequestLog::create([
-        'dv_request_id'    => $dvRequestId,
-        'focalperson_id'   => Auth::guard('focal')->id(),
-        'status'           => $status,
-        'action'           => $action,
-        'remarks'          => $remarks, 
+    $focalId = Auth::guard('focal')->id();
+    $log = DvRequestLog::create([
+        'dv_request_id' => $dvRequest->id,
+        'focalperson_id' => $focalId ?? null,
+        'accountingunit_id' => Auth::guard('web')->id() ?? null,
+        'status' => $status,
+        'action' => $action,
+        'remarks' => $remarks,
     ]);
-    } elseif (Auth::guard('web')->check()) { // Accounting Unit
-        DvRequestLog::create([
-            'dv_request_id'    => $dvRequestId,
-            'accountingunit_id'=> Auth::guard('web')->id(),
-            'status'           => $status,
-            'action'           => $action,
-            'remarks'          => $remarks,
-        ]);
-    }else {
-        DvRequestLog::create([
-            'dv_request_id' => $dvRequestId,
-            'action' => $action, 
-            'status' => $status,
-            'remarks' => $remarks, 
-        ]);
-            
-    }
+
+    $notification = Notification::create([
+        'focalperson_id' => $focalId,
+        'dv_request_id' => $dvRequest->id,
+        'status' => $status,
+        'action' => $action,
+        'remarks' => $remarks,
+    ]);
+
+    $this->pusher->trigger('dv-requests'. $focalId,'status-updated', [
+        'id' => $notification->id,
+        'dv_request_id' => $dvRequest->id,
+        'status'        => $status,
+        'action'        => $action,
+        'remarks'       => $remarks,
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
 }
+
+
     public function latestStep(DvRequest $dvRequest)
 {
     $lastLog = $dvRequest->logs()->latest()->first();
