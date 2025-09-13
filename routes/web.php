@@ -1,8 +1,10 @@
 <?php
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\FocalPerson\DvRequestController;
+use App\Http\Controllers\BudgetOfficer\ObligateDVORSController;
 use App\Http\Controllers\IMSD\DvRequestProcessingController;
 use App\Http\Controllers\Incoming\GIPDvRequestProcessingController;
+use App\Http\Controllers\Incoming\TupadDvRequestProcessingController;
 use App\Http\Controllers\Auth\FocalPersonController;
 use App\Http\Controllers\FocalPerson\FocalProfileController;
 use App\Http\Controllers\Auth\FocalPersonRegisterController;
@@ -71,13 +73,11 @@ Route::middleware(['auth','role:Admin'])->group(function () {
             Route::get('/{dvRequest}/latest-step', [DvRequestController::class, 'latestStep'])
             ->name('latestStep');
             });
-    
         Route::prefix('FocalPerson/profile')->name('FocalPerson.profile.')->group(function () {
         Route::get('/', [FocalProfileController::class, 'show'])->name('show');
         Route::get('/edit', [FocalProfileController::class, 'edit'])->name('edit');
         Route::post('/update', [FocalProfileController::class, 'update'])->name('update');
     });
-    
     Route::prefix('FocalPerson/notifications')->name('FocalPerson.notifications.')->group(function () {
         Route::get('/fetch', [NotificationController::class, 'fetch'])->name('fetch');
         Route::post('/read/{id}', [NotificationController::class, 'markAsRead'])->name('markAsRead');
@@ -91,30 +91,20 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
     // Index page — list all DV requests for IMSD
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
         ->name('RegionalOffices.IMSD.index');
-
-    // Return JSON for polling
+          Route::get('/dvrequests/fetchimsdRecent', [DvRequestProcessingController::class, 'fetchimsdRecent'])
+        ->name('RegionalOffices.IMSD.fetchimsdRecent');
     Route::get('/fetch-all', [DvRequestProcessingController::class, 'fetchAll'])
         ->name('RegionalOffices.IMSD.fetchAll');
-
-    // Show / process a single DV request
     Route::get('/dvrequests/{id}', [DvRequestProcessingController::class, 'show'])
         ->name('RegionalOffices.IMSD.verifydv');
-
-    // Verify / approve a DV request
     Route::post('/dvrequests/{id}/verify', [DvRequestProcessingController::class, 'verify'])
         ->name('IMSD.dvrequests.verify');
-
     Route::get('/history', [DvRequestProcessingController::class, 'history'])
         ->name('history');
-
-    // 2. Redirect to the first pending DV (no ID needed)
     Route::get('/redirect-to-first', [DvRequestProcessingController::class, 'redirectToFirstPending'])
     ->name('RegionalOffices.IMSD.redirectFirst');
-
     Route::get('/dvrequests/{id}/attachments/edit', [DvRequestProcessingController::class, 'editAttachments'])
         ->name('dvRequest.editAttachments');
-
-    // Update checklist (checkboxes)
     Route::put('/dvrequests/{id}/attachments', [DvRequestProcessingController::class, 'updateAttachments'])
         ->name('dvRequest.updateAttachments');
 });
@@ -130,31 +120,68 @@ Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->gr
     Route::get('/dvrequests/verify', [GIPDvRequestProcessingController::class, 'redirectToFirstPending'])
     ->middleware('permission:gip.approve')
     ->name('Incoming.GIP.verifygipdv');
-
-    // Show / process a single DV request 
+    Route::get('/dvrequests/{id}/fetch', [GIPDvRequestProcessingController::class, 'fetch'])
+            ->middleware('permission:gip.edit')
+            ->name('Incoming.GIP.dvrequests.fetch');
+    Route::get('/dvrequests/fetchgipRecent', [GIPDvRequestProcessingController::class, 'fetchgipRecent'])
+    ->middleware('permission:gip.view')
+    ->name('Incoming.GIP.dvrequests.fetchgipRecent');
     Route::get('/dvrequests/{id}', [GIPDvRequestProcessingController::class, 'show'])
         ->middleware('permission:gip.view')
         ->name('Incoming.GIP.dvrequests.withid');
-
-           
     Route::get('/history', [GIPDvRequestProcessingController::class, 'history'])
         ->middleware('permission:gip.view')
         ->name('dvrequests.history');
-
-        
     Route::get('/fetch-all', [GIPDvRequestProcessingController::class, 'fetchAll'])
         ->middleware('permission:gip.view')
         ->name('Incoming.GIP.fetchAll');
-
     Route::post('/dvrequests/{id}/verify', [GIPDvRequestProcessingController::class, 'verify'])
         ->middleware('permission:gip.approve')
         ->name('Incoming.GIP.dvrequests.verify');
-
     Route::post('/dvrequests/{id}/reject', [GIPDvRequestProcessingController::class, 'reject'])
         ->name('Incoming.GIP.dvrequests.reject');
-
-
-      Route::get('/dvrequests/{id}/fetch', [GIPDvRequestProcessingController::class, 'fetch'])
-            ->middleware('permission:gip.edit')
-            ->name('Incoming.GIP.dvrequests.fetch');
+    
 });
+
+Route::middleware(['auth:web', 'role:Incoming-TUPAD'])->prefix('Incoming/TUPAD')->group(function () {
+     Route::get('/index', [TupadDvRequestProcessingController::class, 'index'])
+        ->middleware('permission:tupad.view')
+        ->name('Incoming.TUPAD.index');
+    Route::get('/dvrequests/verify', [TupadDvRequestProcessingController::class, 'redirectToFirstPending'])
+    ->middleware('permission:tupad.approve')
+    ->name('Incoming.TUPAD.verifytupaddv');
+      Route::get('/dvrequests/fetchtupadRecent', [TupadDvRequestProcessingController::class, 'fetchtupadRecent'])
+    ->middleware('permission:tupad.view')
+    ->name('Incoming.TUPAD.dvrequests.fetchtupadRecent');
+    Route::get('/dvrequests/{id}', [TupadDvRequestProcessingController::class, 'show'])
+        ->middleware('permission:tupad.view')
+        ->name('Incoming.TUPAD.dvrequests.withid');
+    Route::get('/history', [TupadDvRequestProcessingController::class, 'history'])
+        ->middleware('permission:tupad.view')
+        ->name('dvrequests.history');
+    Route::get('/fetch-all', [TupadDvRequestProcessingController::class, 'fetchAll'])
+        ->middleware('permission:tupad.view')
+        ->name('Incoming.TUPAD.fetchAll');
+    Route::post('/dvrequests/{id}/verify', [TupadDvRequestProcessingController::class, 'verify'])
+        ->middleware('permission:tupad.approve')
+        ->name('Incoming.TUPAD.dvrequests.verify');
+    Route::post('/dvrequests/{id}/reject', [TupadDvRequestProcessingController::class, 'reject'])
+        ->name('Incoming.TUPAD.dvrequests.reject');
+      Route::get('/dvrequests/{id}/fetch', [TupadDvRequestProcessingController::class, 'fetch'])
+            ->middleware('permission:tupad.view')
+            ->name('Incoming.TUPAD.dvrequests.fetch');
+  
+});
+
+Route::middleware(['auth:web', 'role:Budget_Officer'])->prefix('/BudgetOfficer')->name('BudgetOfficer.')->group(function () {
+        
+        Route::get('/dvrequests', [ObligateDVORSController::class, 'index'])->name('dvrequests.index');
+        Route::get('/dvrequests/fetch', [ObligateDVORSController::class, 'fetchDvRequests'])
+            ->name('dvrequests.fetch');
+        Route::get('/dvrequests/recent', [ObligateDVORSController::class, 'fetchRecent'])
+            ->name('dvrequests.recent');  
+        Route::get('/dvrequests/{id}', [ObligateDVORSController::class, 'show'])
+            ->name('dvrequests.show');
+        Route::post('/dvrequests/{id}/store', [ObligateDVORSController::class, 'store'])
+            ->name('dvrequests.store');
+    });

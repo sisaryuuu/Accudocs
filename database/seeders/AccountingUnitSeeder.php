@@ -19,6 +19,8 @@ class AccountingUnitSeeder extends Seeder
         $adminRole = Role::firstOrCreate(['name' => 'Admin']);
         $imsdRole = Role::firstOrCreate(['name' => 'IMSD']);
         $incomingGipRole = Role::firstOrCreate(['name' => 'Incoming-GIP']);
+        $incomingTupadRole = Role::firstOrCreate(['name' => 'Incoming-TUPAD']);
+        $budgetOfficerRole = Role::firstOrCreate(['name' => 'Budget_Officer']);
 
         // Create Admin account
         $admin = AccountingUnit::firstOrCreate(
@@ -64,5 +66,33 @@ class AccountingUnitSeeder extends Seeder
             ]
         );
         $incomingGip->assignRole($incomingGipRole);
+
+        $incomingTupad = AccountingUnit::firstOrCreate(
+            ['email' => 'incoming.tupad@email.com'],
+            [
+                'fname' => 'Incoming',
+                'mi' => 'T',
+                'lname' => 'Tupad',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $incomingTupad->assignRole($incomingTupadRole);
+
+        $budgetOfficer = AccountingUnit::firstOrCreate(
+            ['email' => 'budget.officer@email.com'],
+            [
+                'fname' => 'Budget',
+                'mi' => 'O',
+                'lname' => 'Officer',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $budgetOfficer->assignRole($budgetOfficerRole);
     }
 }

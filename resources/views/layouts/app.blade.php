@@ -134,6 +134,26 @@
         
             </div>
             @endrole
+            @role('Incoming-TUPAD')
+             <div class="flex space-x-3">
+                <a href="{{ route('Incoming.TUPAD.index') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Incoming.TUPAD.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Received Documents
+                </a>
+                                        <!-- Verify Documents -->
+                <a href="{{ route('Incoming.TUPAD.verifytupaddv') }}" 
+                class="block py-2 px-4 rounded hover:bg-gray-200
+                        {{ request()->routeIs('Incoming.TUPAD.verifytupaddv.withid') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Verify Documents
+                </a>
+                <a href="{{ route('dvrequests.history') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.history') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Request History
+                </a>
+        
+            </div>
+            @endrole
+
             <!-- Right Section -->
             <div class="flex items-center space-x-4">
                 @php    

@@ -19,20 +19,18 @@ return new class extends Migration
                 ->constrained('dv_requests')
                 ->onDelete('cascade');
 
-            // who performed the action
              $table->foreignId('accountingunit_id')->nullable()->constrained()->onDelete('cascade');
 
-            // optional: if outside of the system (e.g., Regional Director, Cashier via QR scan)
             $table->string('external_actor')->nullable();
 
             // step in the workflow
             $table->string('action'); 
-            // e.g. "submitted", "received", "verified", "approved", "finalized", "released"
+            
 
             // optional notes (remarks, reasons, etc.)
             $table->text('remarks')->nullable();
 
-            // auto timestamp for when action happened
+           
             $table->timestamps();
         });
     }

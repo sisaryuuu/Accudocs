@@ -77,7 +77,7 @@
                         <tr>
                             <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">#</th>
                             <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actor</th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                          
                             <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                             <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
                         </tr>
@@ -134,13 +134,6 @@
                                     </div>
                     </td>
 
-
-                            <!-- Action -->
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium">
-                                    {{ ucfirst(str_replace('_',' ',$log->action)) }}
-                                </span>
-                            </td>
 
                             <!-- Remarks -->
                             <td class="px-6 py-4">
