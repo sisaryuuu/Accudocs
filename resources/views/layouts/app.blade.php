@@ -73,43 +73,46 @@
 </script>
 
 <!-- Top Navbar -->
-<nav class="bg-white shadow-md fixed w-full z-10">
+<nav class="bg-white border-b border-purple-200 shadow-sm fixed w-full z-10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center h-16">
 
             <!-- Left Section -->
-            <div class="flex items-center">
-                <span class="text-xl font-bold text-gray-800">My App</span>
-            </div>
+            <div class="flex items-center space-x-2">
+                    <img src="https://dummyimage.com/32x32/7e22ce/ffffff.png&text=S" 
+                         alt="Logo" class="h-8 w-8 rounded-full">
+                    <span class="font-bold text-xl text-gray-700">AccuDocs</span>
+                </div>
 
             <!-- Center Section (Focal Person Links) -->
             @role('Focal_Person')
-            <div class="flex space-x-6">
+            <div class="hidden md:flex space-x-8">
                 <a href="{{ route('FocalPerson.dvrequest.index') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('FocalPerson.dvrequest.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                   class="text-sm font-medium pb-1' : 'text-gray-600 hover:text-purple-600 {{ request()->routeIs('FocalPerson.dvrequest.index') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                     My Documents
                 </a>
                 <a href="{{ route('FocalPerson.dvrequest.submitdvors') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('FocalPerson.dvrequest.submitdvors') ? 'bg-gray-200 font-semibold' : '' }}">
+                   class="text-sm font-medium pb-1 {{ request()->routeIs('FocalPerson.dvrequest.submitdvors') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                     Submit Document
                 </a>
             </div>
             @endrole
                 @role('IMSD')
-        <div class="flex justify-center space-x-6 w-full">
+        <div class="hidden md:flex space-x-8">
             <a href="{{ route('RegionalOffices.IMSD.index') }}" 
-            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('RegionalOffices.IMSD.index') ? 'bg-gray-200 font-semibold' : '' }}">
+            class="text-sm font-medium pb-1 {{ request()->routeIs('RegionalOffices.IMSD.index') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                 Received Documents
             </a>
                 <!-- First Pending DV -->
            <!-- First Pending DV -->
-            <a href="{{ route('RegionalOffices.IMSD.redirectFirst') }}"
-            class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+           <a href="{{ route('RegionalOffices.IMSD.redirectFirst') }}" 
+            class="text-sm font-medium pb-1 {{ request()->routeIs('RegionalOffices.IMSD.verifydv') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                 Verify Disbursement Documents
             </a>
+            
 
             <a href="{{ route('history') }}" 
-            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('history') ? 'bg-gray-200 font-semibold' : '' }}">
+            class="text-sm font-medium pb-1 {{ request()->routeIs('history') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                 IMSD Log History
             </a>
         </div>
@@ -118,17 +121,17 @@
             @role('Incoming-GIP')
              <div class="flex space-x-3">
                 <a href="{{ route('Incoming.GIP.index') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Incoming.GIP.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                   class="text-sm font-medium pb-1 {{ request()->routeIs('Incoming.GIP.index') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                     Received Documents
                 </a>
                                         <!-- Verify Documents -->
                 <a href="{{ route('Incoming.GIP.verifygipdv') }}" 
-                class="block py-2 px-4 rounded hover:bg-gray-200
-                        {{ request()->routeIs('Incoming.GIP.verifygipdv.withid') ? 'bg-gray-200 font-semibold' : '' }}">
+                class="text-sm font-medium pb-1
+                        {{ request()->routeIs('Incoming.GIP.verifygipdv.withid') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                     Verify Documents
                 </a>
                 <a href="{{ route('dvrequests.history') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.history') ? 'bg-gray-200 font-semibold' : '' }}">
+                   class="text-sm font-medium pb-1 {{ request()->routeIs('dvrequests.history') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                     Request History
                 </a>
         
@@ -196,7 +199,7 @@
 
         <nav class="px-4 space-y-1">
             <a href="{{ route('Admin.dashboard') }}" 
-               class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Admin.dashboard') ? 'bg-gray-200 font-semibold' : '' }}">
+               class="text-sm font-medium pb-1 {{ request()->routeIs('Admin.dashboard') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                 Dashboard
             </a>
 
@@ -209,7 +212,7 @@
             </button>
             <div x-show="userMgmtOpen" x-transition class="pl-6 mt-1 space-y-1">
                 <a href="{{ route('admin.accountingunits.index') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('admin.accountingunits.*') ? 'bg-gray-200 font-semibold' : '' }}">
+                   class="text-sm font-medium pb-1 {{ request()->routeIs('admin.accountingunits.*') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                     Accounting Units
                 </a>
                 @role('Admin')
@@ -223,11 +226,11 @@
                     </button>
                     <div x-show="roleMgmtOpen" x-transition class="pl-6 mt-1 space-y-1">
                         <a href="{{ route('admin.roles.index') }}" 
-                           class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('admin.roles.*') ? 'bg-gray-200 font-semibold' : '' }}">
+                           class="text-sm font-medium pb-1 {{ request()->routeIs('admin.roles.*') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                            Manage Roles
                         </a>
                         <a href="{{ route('admin.permissions.index') }}" 
-                           class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('admin.permissions.*') ? 'bg-gray-200 font-semibold' : '' }}">
+                           class="text-sm font-medium pb-1 {{ request()->routeIs('admin.permissions.*') ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600' }}">
                             Manage Permissions
                         </a>
                     </div>
