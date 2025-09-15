@@ -130,16 +130,20 @@ class DvRequestProcessingController extends Controller
         $lastLog = $dvRequest->logs()->latest()->first();
         $lastStep = $lastLog ? $lastLog->action : 'Submitted';  
 
+        return view('RegionalOffices.IMSD.verifydv', compact(
+            'dvRequest', 'checklistItems', 'lastStep'
+        ));
+    }
+    public function fetchimsdRecent()
+    {
         $recentDvRequests = DvRequest::with('focalPerson')
-            ->whereIn('status', ['Submitted', 'IMSD_in_process'])
+        ->whereIn('status', ['Submitted', 'IMSD_in_process'])
             ->whereNotNull('focalperson_id')
             ->latest()
             ->take(8)
             ->get();
 
-        return view('RegionalOffices.IMSD.verifydv', compact(
-            'dvRequest', 'recentDvRequests', 'checklistItems', 'lastStep'
-        ));
+        return response()->json($recentDvRequests);
     }
 
 

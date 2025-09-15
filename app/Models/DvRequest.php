@@ -23,19 +23,6 @@ class DvRequest extends Model
         'status',
     ];
 
-    protected $casts = [
-        'received_at'   => 'datetime',
-        'verified_at'   => 'datetime',
-        'approved_at'   => 'datetime',
-        'finalized_at'  => 'datetime',
-        'released_at'   => 'datetime',
-    ];
-
-    /*
-    |--------------------------------------------------------------------------
-    | Relationships
-    |--------------------------------------------------------------------------
-    */
     public function logs()
     {
         return $this->hasMany(DvRequestLog::class, 'dv_request_id');
@@ -49,6 +36,12 @@ class DvRequest extends Model
     {
         return $this->belongsTo(FocalPerson::class, 'focalperson_id');
     }
+
+    public function orsRequest()
+    {
+        return $this->hasOne(OrsRequest::class)->latestOfMany();
+    }
+
 
     public function program()
     {

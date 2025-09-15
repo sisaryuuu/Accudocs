@@ -10,10 +10,8 @@ return new class extends Migration
     {
         Schema::create('dv_requests', function (Blueprint $table) {
             $table->id();
-            $table->string('dv_number')->nullable(); // assigned at finalization
-
-
-
+            $table->string('dv_number')->nullable(); 
+            
               $table->foreignId('accountingunit_id')
                     ->nullable()
                     ->constrained('accountingunits')
@@ -38,23 +36,6 @@ return new class extends Migration
             $table->string('particulars');
             $table->decimal('amount', 15, 2);
             $table->string('status')->default('submitted');
-
-            // workflow
-            $table->foreignId('received_by')->nullable()->constrained('accountingunits');
-            $table->timestamp('received_at')->nullable();
-
-            $table->foreignId('verified_by')->nullable()->constrained('accountingunits');
-            $table->timestamp('verified_at')->nullable();
-
-            $table->foreignId('approved_by')->nullable()->constrained('accountingunits');
-            $table->timestamp('approved_at')->nullable();
-
-            $table->foreignId('finalized_by')->nullable()->constrained('accountingunits');
-            $table->timestamp('finalized_at')->nullable();
-
-            $table->foreignId('released_by')->nullable()->constrained('accountingunits');
-            $table->timestamp('released_at')->nullable();
-
             $table->timestamps();
         });
     }

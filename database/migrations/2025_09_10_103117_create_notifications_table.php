@@ -14,8 +14,8 @@ return new class extends Migration
             Schema::create('notifications', function (Blueprint $table) {
             $table->id();
             $table->foreignId('focalperson_id')
-      ->constrained('focalpersons') // specify the correct table name
-      ->onDelete('cascade');
+            ->constrained('focalpersons') // specify the correct table name
+            ->onDelete('cascade');
             $table->string('status');
             $table->string('action');
             $table->text('remarks')->nullable();

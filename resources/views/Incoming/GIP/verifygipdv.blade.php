@@ -136,28 +136,47 @@
                
         </div>
     <!-- Sidebar -->
-    <div class="lg:col-span-1">
-        <div class="bg-white shadow-md rounded-xl p-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">📑 Recent Submissions</h2>
-        <ul class="space-y-3">
-            @forelse($recentDvRequests as $recent)
-                <li>
-                    <a href="{{ route('Incoming.GIP.dvrequests.withid', $recent->id) }}" 
-                    class="block p-3 bg-gray-50 hover:bg-blue-50 rounded-lg border border-gray-200 transition">
-                        <p class="text-sm font-medium text-gray-900">
-                            Control #{{ $recent->id }} • {{ $recent->particulars}}
-                        </p>
-                         <p class="text-sm font-medium text-gray-900">
-                            {{ $recent->focalPerson->fname ?? 'Unknown' }} {{ $recent->focalPerson->lname ?? 'Unknown' }} • 
-                            {{ $recent->created_at->format('M d, Y') }}
-                        </p>
-                    </a>
-                </li>
-            @empty
-                <li class="text-sm text-gray-500">No recent submissions.</li>
-            @endforelse
-        </ul>
-    </div>
-    </div>
+        <div class="lg:col-span-1">
+            <div class="bg-white shadow-md rounded-xl p-6">
+                                <ul id="recent-requests" class="space-y-3">
+                        <li class="text-sm text-gray-500">Loading...</li>
+                    </ul>
+            </div>
+        </div>
 </div>
 @endsection
+<script>
+async function loadRecentRequests() {
+    try {
+        const res = await fetch("{{ route('Incoming.GIP.dvrequests.fetchgipRecent') }}");
+        const data = await res.json();
+        console.log(data); // 👀 debug output
+
+        let html = '';
+        if (data.length === 0) {
+            html = `<li class="text-sm text-gray-500">No recent requests.</li>`;
+        } else {
+            data.forEach(r => {
+                html += `
+                    <li>
+                        <a href="/Incoming/GIP/dvrequests/${r.id}" 
+                           class="block p-3 bg-gray-50 hover:bg-blue-50 rounded-lg border border-gray-200 transition">
+                            <p class="text-sm font-medium text-gray-900">
+                                Control #${r.id} • ${r.particulars ?? ''}
+                            </p>
+                            <p class="text-sm text-gray-600">
+                                ${(r.focal_person?.fname ?? 'Unknown')} ${(r.focal_person?.lname ?? '')} • 
+                                ${new Date(r.created_at).toLocaleDateString()}
+                            </p>
+                        </a>
+                    </li>`;
+            });
+        }
+        document.getElementById('recent-requests').innerHTML = html;
+    } catch (e) {
+        console.error("Failed to load recent requests", e);
+    }
+}
+setInterval(loadRecentRequests, 5000);
+loadRecentRequests();
+</script>

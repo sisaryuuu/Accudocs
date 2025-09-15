@@ -72,6 +72,19 @@ class GIPDvRequestProcessingController extends Controller
 
     return view('Incoming.GIP.verifygipdv', compact('dvRequest', 'recentDvRequests', 'lastStep'));
 }
+ public function fetchgipRecent()
+    {
+        $recentDvRequests = DvRequest::with('focalPerson')
+                                ->whereHas('program', fn($q) => $q->where('prcode', 'GIP')) 
+                                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process'])
+                                ->whereNotNull('focalperson_id')
+                                ->latest()
+                                ->take(5)
+                                ->get();
+
+
+        return response()->json($recentDvRequests);
+    }
 
 
      public function fetchAll(Request $request)
@@ -102,7 +115,7 @@ class GIPDvRequestProcessingController extends Controller
             'id'           => $request->id,
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
-            'respocenter'  => $request->respocenter->rccode ?? 'N/A',
+            'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
             'amount'       => number_format($request->amount, 2),
             'status'       => $request->status,
             'date'         => $request->created_at->format('M d, Y h:i A'),
