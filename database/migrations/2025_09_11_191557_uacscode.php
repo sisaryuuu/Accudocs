@@ -13,9 +13,11 @@ return new class extends Migration
     {
         Schema::create('uacscodes', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('parent_id')->nullable()->constrained('uacscodes')->nullOnDelete();
             $table->string('uacscode');
             $table->string('description');
             $table->timestamps();
+            
         });
     }
 
@@ -25,5 +27,6 @@ return new class extends Migration
     public function down(): void
     {
        Schema::dropIfExists('uacscodes');
+       
     }
 };

@@ -37,7 +37,6 @@ class FocalPersonRegisterController extends Controller
             'email'          => 'required|string|email|max:255|unique:focalpersons',
             'password'       => 'required|string|min:8|confirmed',
             'contactnumber'  => 'required|string|max:11|unique:focalpersons',
-            'program_id'     => 'nullable|exists:programs,id',
             'respocenter_id' => 'nullable|exists:responcenters,id',
         ]);
 
@@ -51,7 +50,6 @@ class FocalPersonRegisterController extends Controller
             'email'          => $validated['email'],
             'password'       => $validated['password'], // hashed in model
             'contactnumber'  => $validated['contactnumber'],
-            'program_id'     => $validated['program_id'] ?? null,
             'respocenter_id' => $validated['respocenter_id'] ?? null,
             'profile_image'  => 'default.png', // ✅ enforce default
         ]);

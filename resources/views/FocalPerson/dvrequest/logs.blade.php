@@ -4,27 +4,39 @@
 
 @section('content')
 @php
-    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing', 'Completed'];
+    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing','Accountant III','Regional Director','Cashier', 'Completed'];
     $lastStep = $logs->last()?->action ?? 'Submitted';
+
 @endphp
 
 
-<div class="mb-8">
+    <div class="mb-8">
     <!-- Progress Stepper -->
     <div x-data="stepper()" class="flex items-center justify-between w-full">
         <template x-for="(step, index) in steps" :key="index">
             <div class="flex-1 text-center relative">
                 <!-- Circle -->
-                <div :class="index <= steps.indexOf(lastStep) ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'"
-                     class="w-10 h-10 mx-auto rounded-full flex items-center justify-center">
+                <div 
+                    class="w-10 h-10 mx-auto rounded-full flex items-center justify-center transition-all duration-500 ease-in-out"
+                    :class="index <= steps.indexOf(currentStep) 
+                        ? 'bg-blue-600 text-white scale-110 shadow-lg' 
+                        : 'bg-gray-300 text-gray-600 scale-100'"
+                >
                     <span x-text="index + 1"></span>
                 </div>
                 <!-- Step label -->
-                <p class="mt-2 text-sm" x-text="step.replace('_', ' ')"></p>
+                <p class="mt-2 text-sm transition-colors duration-500"
+                :class="index <= steps.indexOf(currentStep) ? 'text-blue-700 font-medium' : 'text-gray-500'">
+                <span x-text="translateStep(step)"></span>
+                </p>
                 <!-- Connecting line -->
                 <div x-show="index < steps.length - 1"
-                     :class="index < steps.indexOf(lastStep) ? 'bg-blue-600' : 'bg-gray-300'"
-                     class="absolute top-4 right-0 w-full h-1 transform translate-x-1/2 -z-10"></div>
+                     class="absolute top-4 right-0 w-full h-1 transform translate-x-1/2 -z-10 bg-gray-300 overflow-hidden">
+                    <!-- Blue animated fill -->
+                    <div class="h-1 bg-blue-600 origin-left transition-transform duration-700 ease-in-out"
+                         :style="`transform: scaleX(${index < steps.indexOf(currentStep) ? 1 : 0});`">
+                    </div>
+                </div>
             </div>
         </template>
     </div>
@@ -117,11 +129,15 @@
                             </div>
                            <div class="ml-3">
                                             <div class="text-sm font-medium text-gray-900">
-                                             @if($log->action == 'submitted')
-                                                   {{ trim($log->dvRequest->focalPerson->fname . ' ' . $log->dvRequest->focalPerson->mi . ' ' . $log->dvRequest->focalPerson->lname) }}
-                                                @else
-                                                   {{ optional($log->dvRequest->accountingUnit)->fname }} {{ optional($log->dvRequest->accountingUnit)->lname }}
-                                                @endif
+                                            @if($log->focalperson)
+                                                {{ trim($log->focalperson->fname . ' ' . $log->focalperson->mi . ' ' . $log->focalperson->lname) }}
+                                            @elseif($log->accountingUnit)
+                                                {{ $log->accountingUnit->fname }} {{ $log->accountingUnit->lname }}
+                                            @elseif($log->external_actor)
+                                                {{ $log->external_actor }}
+                                            @else
+                                                System
+                                            @endif
                                             </div>
                                             <div class="text-xs text-gray-500">
                                                 @if($log->action === 'submitted')
@@ -179,6 +195,53 @@
                 .then(res => res.json())
                 .then(data => this.lastStep = data.lastStep);
                 }, 5000);
+            }
+        }
+    }
+     function stepper() {
+        return {
+            steps: @json($steps),
+            currentStep: 'Submitted',
+            lastStep: '{{ $lastStep }}',
+            nextStep: 'Submitted',
+              translateStep(step) {
+            // Convert any IMSD-* variant to Regional Office
+            if (step.startsWith('IMSD')) {
+                return 'Regional Office';
+            }
+            return step;
+        },
+            init() {
+                this.currentStep = this.lastStep;
+                this.nextStep = this.lastStep;
+
+                setInterval(() => {
+                    fetch('{{ route('FocalPerson.dvrequest.latestStep', $dvRequest) }}')
+                        .then(res => res.json())
+                        .then(data => {
+                            this.lastStep = data.lastStep;
+
+                            let targetIndex = this.steps.indexOf(this.lastStep);
+                            let currentIndex = this.steps.indexOf(this.currentStep);
+
+                            if (targetIndex > currentIndex) {
+                                // Start step-by-step animation
+                                this.advanceStep(currentIndex, targetIndex);
+                            }
+                        });
+                }, 1750);
+            },
+            advanceStep(currentIndex, targetIndex) {
+                if (currentIndex < targetIndex) {
+                    // Fill line up to the *next* step first
+                    this.nextStep = this.steps[currentIndex + 1];
+
+                    setTimeout(() => {
+                        // Then highlight the circle
+                        this.currentStep = this.steps[currentIndex + 1];
+                        this.advanceStep(currentIndex + 1, targetIndex);
+                    }, 250); // delay per step
+                }
             }
         }
     }

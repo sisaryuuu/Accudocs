@@ -38,21 +38,11 @@ class AccountingUnit extends Authenticatable
         'email_verified_at' => 'datetime',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | Relationships
-    |--------------------------------------------------------------------------
-    */
     public function program()
     {
         return $this->belongsTo(Program::class);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Accessors & Mutators
-    |--------------------------------------------------------------------------
-    */
     public function getFullNameAttribute()
     {
         return trim("{$this->fname} {$this->mi} {$this->lname}");
@@ -61,7 +51,7 @@ class AccountingUnit extends Authenticatable
     protected function setPasswordAttribute($value)
     {
         if (!empty($value)) {
-            // Avoid double-hashing
+
             $this->attributes['password'] =
                 (strlen($value) === 60 && preg_match('/^\$2y\$/', $value))
                 ? $value

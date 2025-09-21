@@ -21,11 +21,6 @@ class DvRequestController extends Controller
         $this->pusher = $pusher;
     }
 
-    /**
-     * Display a listing of the DV Requests for the authenticated Focal Person.
-     */
-
-    
   public function index()
 {
     // Ensure focal person is authenticated
@@ -48,9 +43,14 @@ class DvRequestController extends Controller
     return view('FocalPerson.dvrequest.index', compact('dvRequests'));
 }
 
-    /**
-     * Show the form for creating a new DV Request.
-     */
+   public function refresh()
+    {
+        $dvRequests = DvRequest::select('id', 'status', 'dv_number', 'updated_at')
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        return response()->json($dvRequests);
+    } 
     public function create()
     {
         $focalPerson = Auth::guard('focal')->user(); // authenticated focal person
@@ -92,23 +92,15 @@ class DvRequestController extends Controller
 }
 
 
-    /**
-     * Display a single DV Request.
-     */
     public function show(DvRequest $dvRequest)
     {
-        // Security: ensure the DV belongs to this focal person
+       
         if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
             abort(403, 'Unauthorized access.');
         }
-
-        // Eager load related data
         $dvRequest->load(['program', 'logs.focalPerson', 'logs.accountingUnit']);
 
-        // Pass logs explicitly to the view
         $logs = $dvRequest->logs;
-
-        // Get the latest step for the progress stepper
         $lastLog = $dvRequest->logs()->latest()->first();
         return response()->json([
         'lastStep' => $lastLog ? $lastLog->role : 'Submitted'
@@ -144,6 +136,49 @@ class DvRequestController extends Controller
 
         return response()->json($dvRequests);
 }
+        public function edit(DvRequest $dvRequest)
+    {
+        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+            abort(403, 'Unauthorized access.');
+        }
+
+        if ($dvRequest->status !== 'ORS_for_revision') {
+            return redirect()->route('FocalPerson.dvrequest.index')
+                ->with('error', 'This DV request cannot be edited unless it is in ORS_for_revision status.');
+        }
+
+        $programs = Program::all();
+        return view('FocalPerson.dvrequest.edit', compact('dvRequest', 'programs'));
+    }
+
+    public function update(Request $request, DvRequest $dvRequest)
+    {
+        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+            abort(403, 'Unauthorized access.');
+        }
+
+        if ($dvRequest->status !== 'ORS_for_revision') {
+            return redirect()->route('FocalPerson.dvrequest.index')
+                ->with('error', 'This DV request cannot be updated unless it is in ORS_for_revision status.');
+        }
+
+        $request->validate([
+            'program_id'  => 'required|exists:programs,id',
+            'respocenter_id' => 'required|exists:responcenters,id',
+            'amount'      => 'required|numeric|min:0',
+            'particulars' => 'required|string|max:255',
+        ]);
+
+        $dvRequest->update($request->only([
+            'program_id', 'respocenter_id', 'amount', 'particulars',
+            'fname', 'mi', 'lname', 'tin_number', 'address'
+        ]));
+
+        $this->logAction($dvRequest, 'ORS_revision_updated', 'Updated', 'DV Request updated by Focal Person');
+
+        return redirect()->route('FocalPerson.dvrequest.index')
+            ->with('success', 'DV Request updated successfully.');
+    }
 
         public function destroy(DvRequest $dvRequest)
     {
@@ -158,7 +193,7 @@ class DvRequestController extends Controller
                                 ->with('success', 'DV Request deleted successfully.');
             }
         
-            public function logs(DvRequest $dvRequest)
+    public function logs(DvRequest $dvRequest)
     {
         if (Auth::guard('focal')->check()) {
             if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
@@ -193,13 +228,18 @@ class DvRequestController extends Controller
    protected function logAction(DvRequest $dvRequest, string $status, string $action, string $remarks): void
 {
     $focalId = Auth::guard('focal')->id();
+    $accountingUnitId = null;
+
+    if (Auth::guard('web')->check()) {
+        $accountingUnitId = Auth::id(); // because Auth::user() is AccountingUnit
+    }
     $log = DvRequestLog::create([
-        'dv_request_id' => $dvRequest->id,
-        'focalperson_id' => $focalId ?? null,
-        'accountingunit_id' => Auth::guard('web')->id() ?? null,
-        'status' => $status,
-        'action' => $action,
-        'remarks' => $remarks,
+        'dv_request_id'     => $dvRequest->id,
+        'focalperson_id'    => $focalId,
+        'accountingunit_id' => $accountingUnitId,
+        'status'            => $status,
+        'action'            => $action,
+        'remarks'           => $remarks,
     ]);
 
     $notification = Notification::create([
@@ -210,9 +250,10 @@ class DvRequestController extends Controller
         'remarks' => $remarks,
     ]);
 
-    $this->pusher->trigger('dv-requests'. $focalId,'status-updated', [
+    $this->pusher->trigger('dv-requests-'. $focalId,'status-updated', [
         'id' => $notification->id,
         'dv_request_id' => $dvRequest->id,
+        'dv_number'     => $dvRequest->dv_number,
         'status'        => $status,
         'action'        => $action,
         'remarks'       => $remarks,

@@ -28,7 +28,6 @@ class FocalPersonSeeder extends Seeder
                 'profile_image' => 'default.png',
                 'contactnumber' => '09123456789',
                 'password' => ('john123'), // Add hashed password
-                'program_id' => Program::first()->id ?? null,
                 'respocenter_id' => 1
             ],
             [
@@ -41,7 +40,6 @@ class FocalPersonSeeder extends Seeder
                 'profile_image' => 'default.png',
                 'contactnumber' => '09123456788',
                 'password' =>('maria123'), // Add hashed password
-                'program_id' => Program::skip(1)->first()->id ?? null,
                 'respocenter_id' => 2
             ],
             [
@@ -54,7 +52,6 @@ class FocalPersonSeeder extends Seeder
                 'profile_image' => 'default.png',
                 'contactnumber' => '09123456787',
                  'password' =>('robert123'), // Add hashed password
-                'program_id' => Program::skip(2)->first()->id ?? null,
                 'respocenter_id' => 3
             ]
         ];

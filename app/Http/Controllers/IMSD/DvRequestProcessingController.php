@@ -5,21 +5,20 @@ namespace App\Http\Controllers\IMSD;
 use App\Http\Controllers\Controller;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
+use App\Services\PusherService;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class DvRequestProcessingController extends Controller
+
 {
-    // Define the workflow steps as a class property
-    protected $workflowSteps = [
-        'Submitted',
-        'Regional_Office',
-        'Incoming',
-        'IMSD',             
-        'Budget_Officer',
-        'Outgoing',
-        'Completed',
-    ];
+    protected PusherService $pusher;
+
+    public function __construct(PusherService $pusher)
+    {
+        $this->pusher = $pusher;
+    }
 
         // Index method: list all DV requests pending IMSD processing
         public function index(Request $request)
@@ -112,6 +111,25 @@ class DvRequestProcessingController extends Controller
                 'IMSD_in_process',    // status
                 'Request received by IMSD for verification' // remarks
             );
+               $focalId = $dvRequest->focalperson_id;
+                $status = 'IMSD_in_process';
+                $action = 'Received';
+                $remarks = $request->remarks ?? 'Request received by IMSD for verification';
+
+                $notification = Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => $status,
+                    'action'         => $action,
+                    'remarks'        => $remarks,
+                ]);
+
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'remarks'       => $remarks,
+            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
         }
 
 
@@ -156,17 +174,20 @@ class DvRequestProcessingController extends Controller
 
         $dvRequest = DvRequest::with('gipAttachments')->findOrFail($id);
 
-        // Update attachments
-        $checklistItems = [
-            'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
-            'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
-            'Birth Certificate', 'Internship Agreement', 'Evaluation Form-GIP',
-        ];
+       // Run only if program is GIP
+        if ($dvRequest->program->prcode === 'GIP') {
+            // Update attachments
+            $checklistItems = [
+                'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
+                'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
+                'Birth Certificate', 'Internship Agreement', 'Evaluation Form-GIP',
+            ];
 
-        foreach ($checklistItems as $item) {
-            $isPresent = isset($request->attachments[$item]);
-            $attachment = $dvRequest->gipAttachments()->firstOrCreate(['name' => $item]);
-            $attachment->update(['is_present' => $isPresent]);
+            foreach ($checklistItems as $item) {
+                $isPresent = isset($request->attachments[$item]);
+                $attachment = $dvRequest->gipAttachments()->firstOrCreate(['name' => $item]);
+                $attachment->update(['is_present' => $isPresent]);
+            }
         }
 
         // Mark DV request as verified
@@ -174,15 +195,33 @@ class DvRequestProcessingController extends Controller
             'status' => 'IMSD_verified',
             'received_by' => auth()->id(),
         ]);
+             $focalId = $dvRequest->focalperson_id;
+        $status = 'IMSD_verified';
+        $action = 'Approved'; // or something meaningful for your workflow
+        $remarks = $request->remarks ?? 'Request verified by IMSD';
 
-        // Log IMSD step for progress stepper
+        $notification = Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => $status,
+            'action'         => $action,
+            'remarks'        => $remarks,
+        ]);
+
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'remarks'       => $remarks,
+            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+      
             $this->logAction(
                 $dvRequest->id,
                 'IMSD',
                 'Approved',
                 $request->remarks ?? 'Request verified by IMSD'
             );
-
+       
         return redirect()->route('RegionalOffices.IMSD.index')
             ->with('success', 'DV Request has been verified successfully.');
     }
@@ -215,17 +254,26 @@ class DvRequestProcessingController extends Controller
 
         return view('RegionalOffices.IMSD.loghistory', compact('dvRequests'));
     }
-    protected function logAction($dvRequestId, $action,$status, $remarks = null)
+    protected function logAction($dvRequestId, $action, $status, $remarks = null)
     {
-        DvRequestLog::create([
+        $logData = [
             'dv_request_id' => $dvRequestId,
             'action'        => $action,
             'status'        => $status,
             'remarks'       => $remarks,
-            'user_id'       => auth()->id(),
-        ]);
-    }
+        ];
 
+        // Detect which guard is active
+        if (auth()->guard('focal')->check()) {
+            $logData['focalperson_id'] = auth()->id();
+        } elseif (auth()->guard('web')->check()) {
+            $logData['accountingunit_id'] = auth()->id();
+        } else {
+            $logData['external_actor'] = 'System';
+        }
+
+        DvRequestLog::create($logData);
+    }
 
 
 }

@@ -22,10 +22,7 @@ return new class extends Migration
             $table->string('profile_image')->default('default.png');
             $table->string('password');
             $table->string('contactnumber',11)->unique();
-            $table->unsignedBigInteger('program_id')->nullable();
             $table->unsignedBigInteger('respocenter_id')->nullable();
-
-            $table->foreign('program_id')->references('id')->on('programs')->onDelete('cascade');
             $table->foreign('respocenter_id')->references('id')->on('responcenters')->onDelete('cascade');
 
             $table->timestamps();

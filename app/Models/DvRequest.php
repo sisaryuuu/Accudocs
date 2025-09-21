@@ -39,7 +39,7 @@ class DvRequest extends Model
 
     public function orsRequest()
     {
-        return $this->hasOne(OrsRequest::class)->latestOfMany();
+        return $this->hasOne(OrsRequest::class, 'dv_request_id');
     }
 
 

@@ -6,11 +6,20 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
+use App\Models\Notification;
+use App\Services\PusherService;
 
 
 
 class TupadDvRequestProcessingController extends Controller
 {
+     protected PusherService $pusher;
+
+    public function __construct(PusherService $pusher)
+    {
+        $this->pusher = $pusher;
+    }   
+
  public function index(Request $request)
     {
         $query = DvRequest::whereHas('program', fn($q) =>
@@ -53,6 +62,27 @@ class TupadDvRequestProcessingController extends Controller
             'received_at'       => now(),
         ]);
 
+        $focalId = $dvRequest->focalperson_id;
+        $status = 'Incoming-TUPAD_in_process';
+        $action = 'Received';
+        $remarks = $request->remarks ?? 'Request received by Incoming for TUPAD processing';
+
+                $notification = Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => $status,
+                    'action'          => $action,
+                    'remarks'        => $remarks,
+                ]);
+
+        if ($dvRequest->focalperson_id) {
+            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => $status,
+                'remarks'       => $remarks,
+                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
         $this->logAction(
             $dvRequest->id, 
             'Incoming',                    
@@ -147,6 +177,29 @@ class TupadDvRequestProcessingController extends Controller
         $dvRequest->status = 'Incoming-TUPAD_verified';
         $dvRequest->save();
           
+
+         $focalId = $dvRequest->focalperson_id;
+                $status = 'Incoming-TUPAD_verified';
+                $action = 'Approved';
+                $remarks = $request->remarks ?? 'DV Request approved forwarded to Budget Officer.';
+
+                $notification = Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => $status,
+                    'action'         => $action,
+                    'remarks'        => $remarks,
+                ]);
+
+        if ($dvRequest->focalperson_id) {
+            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        =>  $status,
+                'remarks'       => 'Request approved by Incoming for TUPAD processing',
+                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
+
      $this->logAction(
             $dvRequest->id,
             'Incoming',
@@ -169,7 +222,27 @@ class TupadDvRequestProcessingController extends Controller
         // Update status to rejected
         $dvRequest->status = 'Incoming-TUPAD_rejected';
         $dvRequest->save();
+        $focalId = $dvRequest->focalperson_id;
+                $status = 'Incoming-TUPAD_rejected';
+                $action = 'Rejected';
+                $remarks = $request->remarks ?? 'Request rejected by Incoming-TUPAD';
 
+                $notification = Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => $status,
+                    'action'         => $action,
+                    'remarks'        => $remarks,
+                ]);
+
+        if ($dvRequest->focalperson_id) {
+            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        =>  $status,
+                'remarks'       =>  $remarks,
+                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
         // Log the rejection
         $this->logAction(
             $dvRequest->id,
@@ -207,15 +280,26 @@ public function history()
 
     return view('Incoming.TUPAD.loghistory', compact('dvRequests'));
 }
-  protected function logAction($dvRequestId, $action,$status, $remarks = null)
+   protected function logAction($dvRequestId, $action, $status, $remarks = null)
     {
-        DvRequestLog::create([
+        $logData = [
             'dv_request_id' => $dvRequestId,
             'action'        => $action,
             'status'        => $status,
             'remarks'       => $remarks,
-            'user_id'       => auth()->id(),
-        ]);
+        ];
+
+        // Detect which guard is active
+        if (auth()->guard('focal')->check()) {
+            $logData['focalperson_id'] = auth()->id();
+        } elseif (auth()->guard('web')->check()) {
+            $logData['accountingunit_id'] = auth()->id();
+        } else {
+            $logData['external_actor'] = 'System';
+        }
+
+        DvRequestLog::create($logData);
     }
+
 
 }

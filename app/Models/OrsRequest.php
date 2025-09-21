@@ -9,7 +9,7 @@ class OrsRequest extends Model
     protected $table = 'ors_requests';
     
     protected $fillable = [
-        'orsnumber',
+        'ors_number',
         'dv_request_id',
         'accountingunit_id',
         'focalperson_id',
@@ -17,7 +17,10 @@ class OrsRequest extends Model
         'adlcode_id',
         'allotmentclass_id',
         'mfopap_id',
-        'continuingorcurrent_id'
+        'continuingorcurrent_id',
+        'status',
+        'obligated_by',
+        'obligated_at',
     ];
 
 

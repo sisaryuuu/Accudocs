@@ -21,12 +21,4 @@ class Program extends Model
     {
         return $this->hasMany(AccountingUnit::class);
     }
-
-    /**
-     * Get the focal persons associated with the program.
-     */
-    public function focalPersons()
-    {
-        return $this->hasMany(FocalPerson::class);
-    }
 }

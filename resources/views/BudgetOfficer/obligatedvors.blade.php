@@ -56,61 +56,44 @@
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
                     </div>
                 </div>
-
-                <!-- ORS Classification Fields -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">UACS Code</label>
-                        <select name="uacscode_id" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
-                            <option value="">-- Select UACS Code --</option>
-                            @foreach($uacsCodes as $uacs)
-                                <option value="{{ $uacs->id }}">{{ $uacs->code }} - {{ $uacs->description }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                   <div>
-                        <label class="block text-sm font-medium text-gray-700">ADL Code</label>
-                        <input list="adl_codes" name="adl_code" id="adl_code"
-                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
-                            placeholder="Type or select ADL Code...">
-
-                        <datalist id="adl_codes">
-                            @foreach($adlCodes as $adl)
-                                <option value="{{ $adl->code }}">{{ $adl->description }}</option>
-                            @endforeach
-                        </datalist>
-                    </div>
+                <!-- UACS Code -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">UACS Code</label>
+                    <input type="text" name="uacscode_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
+                        placeholder="Type UACS code...">
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Allotment Class</label>
-                        <select name="allotmentclass_id" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
-                            <option value="">-- Select Allotment Class --</option>
-                            @foreach($allotment_classes as $allot)
-                                <option value="{{ $allot->id }}">{{ $allot->name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">MFO/PAP</label>
-                        <select name="mfopap_id" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
-                            <option value="">-- Select MFO/PAP --</option>
-                            @foreach($mfopaps as $mfo)
-                                <option value="{{ $mfo->id }}">{{ $mfo->code }} - {{ $mfo->description }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                <!-- ADL Code -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">ADL Code</label>
+                    <input type="text" name="adlcode_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
+                        placeholder="Type ADL code...">
                 </div>
 
+                <!-- Allotment Class -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Allotment Class</label>
+                    <input type="text" name="allotment_class_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
+                        placeholder="Type Allotment Class...">  
+                </div>
+
+                <!-- MFO/PAP -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">MFO/PAP</label>
+                    <input type="text" name="mfopap_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
+                        placeholder="Type MFO/PAP...">
+                </div>
+
+                <!-- Continuing/Current -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Continuing/Current</label>
-                    <select name="continuingorcurrent_id" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
-                        <option value="">-- Select Type --</option>
-                        @foreach($contcurrents as $cc)
-                            <option value="{{ $cc->id }}">{{ $cc->name }}</option>
-                        @endforeach
-                    </select>
+                    <input type="text" name="contcurrent_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
+                        placeholder="Type Continuing/Current...">
                 </div>
 
                 <!-- Received Info -->

@@ -6,10 +6,19 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
+use App\Models\Notification;
+use App\Services\PusherService;
 use App\Models\GIPAttachment;
 
 class GIPDvRequestProcessingController extends Controller
 {
+     protected PusherService $pusher;
+
+    public function __construct(PusherService $pusher)
+    {
+        $this->pusher = $pusher;
+    }
+
       public function index(Request $request)
     {
         $query = DvRequest::whereHas('program', fn($q) =>
@@ -51,12 +60,32 @@ class GIPDvRequestProcessingController extends Controller
             'received_by'       => auth()->id(),
             'received_at'       => now(),
         ]);
+            $focalId = $dvRequest->focalperson_id;
+                $status = 'Incoming-GIP_in_process';
+                $action = 'Received';
+                $remarks = $request->remarks ?? 'Request received by Incoming for GIP processing';
 
+                $notification = Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => $status,
+                    'action'         => $action,
+                    'remarks'        => $remarks,
+                ]);
+
+        if ($dvRequest->focalperson_id) {
+            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => $status,
+                'remarks'       =>  $remarks,
+                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
         $this->logAction(
             $dvRequest->id, 
-            'Incoming',                     // role
-            'Incoming-GIP_in_process',      // ✅ status should match request status
-            'Request received by Incoming for GIP processing' // remarks
+            'Incoming',                    
+            'Incoming-GIP_in_process',      
+            'Request received by Incoming for GIP processing'
         );
 }
     $lastLog = $dvRequest->logs()->latest()->first();
@@ -85,7 +114,6 @@ class GIPDvRequestProcessingController extends Controller
 
         return response()->json($recentDvRequests);
     }
-
 
      public function fetchAll(Request $request)
     {
@@ -167,7 +195,13 @@ class GIPDvRequestProcessingController extends Controller
             'Approved',
             $request->remarks ?? 'Request verified by Incoming-GIP'
         );
-
+            $focalId = $dvRequest->focalperson_id;
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'IMSD_verified',
+            'remarks'       => $request->remarks ?? 'Request verified by IMSD',
+            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
         return redirect()->route('Incoming.GIP.dvrequests.withid', $dvRequest->id)
                          ->with('success', 'DV Request has been verified successfully.');
     }
@@ -215,21 +249,32 @@ public function history()
 {
     $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'accountingUnit'])
         ->whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
-        ->where('status', 'Incoming-GIP_verified') 
+        ->whereIn('status', ['Incoming-GIP_verified','Incoming-GIP_rejected']) 
         ->orderBy('updated_at', 'desc')
         ->get();
 
     return view('Incoming.GIP.loghistory', compact('dvRequests'));
 }
-  protected function logAction($dvRequestId, $action,$status, $remarks = null)
+  protected function logAction($dvRequestId, $action, $status, $remarks = null)
     {
-        DvRequestLog::create([
+        $logData = [
             'dv_request_id' => $dvRequestId,
             'action'        => $action,
             'status'        => $status,
             'remarks'       => $remarks,
-            'user_id'       => auth()->id(),
-        ]);
+        ];
+
+        // Detect which guard is active
+        if (auth()->guard('focal')->check()) {
+            $logData['focalperson_id'] = auth()->id();
+        } elseif (auth()->guard('web')->check()) {
+            $logData['accountingunit_id'] = auth()->id();
+        } else {
+            $logData['external_actor'] = 'System';
+        }
+
+        DvRequestLog::create($logData);
     }
+
 
 }

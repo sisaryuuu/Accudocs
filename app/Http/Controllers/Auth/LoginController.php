@@ -24,7 +24,7 @@ class LoginController extends Controller
         'Incoming-GIP' => 'Incoming.GIP.index',
         'Incoming-TEV' => 'TEV.IncomingTEV.index',
         'Budget_Officer' => 'BudgetOfficer.dvrequests.index',
-        'Outgoing' => 'Outgoing.index',
+        'Outgoing' => 'Outgoing.dvrequests.index',
         'Accounting_III' => 'Admin.dashboard',
         'Focal_Person' => 'FocalPerson.dvrequest.index',
     ];

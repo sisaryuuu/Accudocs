@@ -67,6 +67,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Control No.</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ORS Number</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">UACS Code</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ADL Code</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">MFO/PAP</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted By</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Responsibility Center</th>
@@ -85,6 +88,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 <tr class="hover:bg-gray-50 transition-colors duration-150">
                     <td class="px-6 py-4 text-sm font-medium text-gray-900">#${req.id}</td>
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">${req.ors_number ?? '—'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${req.uacscode_id ?? '—'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${req.adlcode_id ?? '—'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${req.mfopap_id ?? '—'}</td>
                     <td class="px-6 py-4 text-sm text-gray-900">${req.submitted_by}</td>
                     <td class="px-6 py-4 text-sm text-gray-600">${req.program}</td>
                     <td class="px-6 py-4 text-sm text-gray-600">${req.respocenter}</td>

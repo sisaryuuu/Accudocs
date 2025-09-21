@@ -127,8 +127,8 @@
                         {{ request()->routeIs('Incoming.GIP.verifygipdv.withid') ? 'bg-gray-200 font-semibold' : '' }}">
                     Verify Documents
                 </a>
-                <a href="{{ route('dvrequests.history') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.history') ? 'bg-gray-200 font-semibold' : '' }}">
+                <a href="{{ route('dvrequests.giphistory') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.giphistory') ? 'bg-gray-200 font-semibold' : '' }}">
                     Request History
                 </a>
         
@@ -154,6 +154,43 @@
             </div>
             @endrole
 
+            @role('Budget_Officer')
+                 <div class="flex space-x-3">
+                <a href="{{ route('BudgetOfficer.dvrequests.index') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('BudgetOfficer.dvrequests.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Received Documents
+                </a>
+                                        <!-- Verify Documents -->
+                <a href="{{ route('BudgetOfficer.dvrequests.verifyors') }}" 
+                class="block py-2 px-4 rounded hover:bg-gray-200
+                        {{ request()->routeIs('BudgetOfficer.dvrequests.withid') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Verify Documents
+                </a>
+                <a href="{{ route('BudgetOfficer.dvrequests.loghistory') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('BudgetOfficer.dvrequests.loghistory') ? 'bg-gray-200 font-semibold' : '' }}">
+                    ORS Log History
+                </a>
+        
+            </div>
+            @endrole
+
+            @role('Outgoing')
+              <a href="{{ route('Outgoing.dvrequests.index') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Outgoing.dvrequests.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Pending DV Documents
+                </a>
+                              
+            <a href="{{ route('Outgoing.dvrequests.verify') }}"
+                class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Outgoing.dvrequests.verify') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Finalize DV Documents
+                </a>
+                <a href="{{ route('Outgoing.dvrequests.dvloghistory') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Outgoing.dvrequests.dvloghistory') ? 'bg-gray-200 font-semibold' : '' }}">
+                    DV Log History
+                </a>
+
+            @endrole
+
             <!-- Right Section -->
             <div class="flex items-center space-x-4">
                 @php    
@@ -175,7 +212,7 @@
                     <div x-show="open" @click.away="open = false" x-transition
                          class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2">
                                 @if(Auth::guard('web')->check())
-                                <a href="#" 
+                                <a href="{{ route('web.profile.show') }}" 
                                 class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                 Profile
                                 </a>

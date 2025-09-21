@@ -19,7 +19,13 @@ return new class extends Migration
                 ->constrained('dv_requests')
                 ->onDelete('cascade');
 
-             $table->foreignId('accountingunit_id')->nullable()->constrained()->onDelete('cascade');
+             $table->foreignId('accountingunit_id')->nullable()->constrained('accountingunits')->onDelete('cascade');
+
+                $table->foreignId('focalperson_id')
+          ->nullable()
+          ->constrained('focalpersons') // adjust to your actual table
+          ->onDelete('set null');
+
 
             $table->string('external_actor')->nullable();
 

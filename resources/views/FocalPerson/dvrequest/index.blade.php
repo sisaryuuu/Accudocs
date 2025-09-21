@@ -24,11 +24,13 @@
                         <span id="notification-badge" 
                             class="absolute top-0 right-0 inline-flex items-center justify-center px-1 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">0</span>
                     </button>
+<ul id="notification-list" 
+    class="hidden absolute right-0 mt-2 w-[500px] max-h-96 overflow-y-auto bg-white shadow-lg rounded-md z-50">
 
-                    <ul id="notification-list" 
-                        class="absolute right-0 mt-2 w-80 bg-white shadow-lg rounded max-h-96 overflow-y-auto hidden space-y-2 p-2 z-50">
-                        <!-- Notifications loaded via JS -->
-                    </ul>
+    <li class="p-2 bg-gray-100 rounded-md hover:bg-gray-200 cursor-pointer font-bold whitespace-normal break-words">
+      
+    </li>
+</ul>
                 </div>
 
                 <!-- New DV Request Button -->
@@ -80,7 +82,7 @@
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payee Name</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TIN/Employee No.</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsibility Center</th>
-                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request Purpose</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Particulars</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Status</th>
@@ -94,8 +96,16 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                     #{{ $request->control_no ?? $request->id }}
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                    {{ $request->dv_number ?? '—' }}
+                               <td id="dv-{{ $request->id }}" class="px-6 py-4 whitespace-nowrap text-sm">
+                                    @if($request->dv_number)
+                                        <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                                            {{ $request->dv_number }}
+                                        </span>
+                                    @else
+                                        <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
+                                            Pending
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="px-6 py-4 text-sm text-gray-900">
                                     <div class="font-medium">{{ $request->focalperson->fname }} {{ $request->focalperson->mi }} {{ $request->focalperson->lname }}</div>
@@ -120,10 +130,11 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <span id="status-{{ $request->id }}" data-status="{{ $request->status }}" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-center">
-                                        <span class="status-dot w-2 h-2 mr-2 rounded-full {{ $request->status === 'submitted' ? 'bg-yellow-500' : 'bg-green-500' }}"></span>
-                                        {{ ucfirst(str_replace('_', ' ', $request->status)) }}
-                                    </span>
+                                <span id="status-{{ $request->id }}" 
+                                    data-status="{{ $request->status }}" 
+                                    class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-center">
+                                    <span class="status-label">{{ ucfirst(str_replace('_', ' ', $request->status)) }}</span>
+                                </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                     <div>{{ $request->created_at->format('M d, Y') }}</div>
@@ -145,6 +156,12 @@
                                                 Delete
                                             </button>
                                         </form>
+                                        @endif
+                                     @if($request->status === 'ORS_for_revision')
+                                            <a href="{{ route('FocalPerson.dvrequest.edit', $request->id) }}"
+                                            class="inline-flex items-center px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 text-xs font-medium rounded-md transition-colors duration-200">
+                                                Edit
+                                            </a>
                                         @endif
                                     </div>
                                 </td>
@@ -184,40 +201,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     const list = document.getElementById('notification-list');
     const badge = document.getElementById('notification-badge');
     const notifButton = document.getElementById('notification-button');
-    
-    // 1️⃣ Initial fetch of notifications
+
+    // Toast setup
+    const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+    });
+
+    // 🔧 Reusable render function for notifications
+    function renderNotification(n) {
+        const url = "{{ url('FocalPerson/dvrequest') }}/" + n.dv_request_id + "/logs";
+        const timestamp = n.timestamp ? n.timestamp : new Date(n.created_at).toLocaleString();
+        return `
+            <a href="${url}" class="block w-full h-full">
+                [${timestamp}] #${n.dv_request_id} ${n.status.toUpperCase()} - ${n.remarks}
+            </a>
+        `;
+    }
+
+    // 🔹 Initial fetch notifications
     try {
         const res = await fetch('{{ route("FocalPerson.notifications.fetch") }}');
-        
-        if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        
         const notifications = await res.json();
-        console.log('Fetched notifications:', notifications);
-
         let unreadCount = 0;
-        
-        // Clear existing notifications
         list.innerHTML = '';
-        
-        notifications.reverse().forEach(n => {
+
+        notifications.forEach(n => {
             if (!n.read_at) unreadCount++;
             const li = document.createElement('li');
             li.className = `p-2 bg-gray-100 rounded-md hover:bg-gray-200 cursor-pointer ${!n.read_at ? 'font-bold' : ''}`;
             li.dataset.id = n.id;
-            li.innerHTML = `[${new Date(n.created_at).toLocaleString()}] ${n.status.toUpperCase()}: ${n.action} - ${n.remarks}`;
+            li.innerHTML = renderNotification(n);
             list.appendChild(li);
         });
 
         badge.textContent = unreadCount;
     } catch (err) {
         console.error('Failed to fetch notifications:', err);
-        // Show error message to user
         list.innerHTML = '<li class="p-2 text-red-500">Failed to load notifications</li>';
     }
 
-    // 2️⃣ Initialize Pusher for real-time updates
+    // 🔹 Pusher real-time updates
     Pusher.logToConsole = true;
     const pusher = new Pusher('{{ env("PUSHER_APP_KEY") }}', {
         cluster: '{{ env("PUSHER_APP_CLUSTER") }}',
@@ -227,35 +254,71 @@ document.addEventListener('DOMContentLoaded', async () => {
     const userId = '{{ Auth::guard("focal")->id() }}';
     const channel = pusher.subscribe('dv-requests-' + userId);
 
-    channel.bind('status-updated', function(data) {
-        console.log('Received real-time notification:', data);
-        
-        if (list && badge) {
-            // Update badge count
-            let count = parseInt(badge.textContent) || 0;
-            badge.textContent = count + 1;
+    // Helper function: update table & show toast if DV number is new
+   function updateDVStatus(dv) {
+    const statusEl = document.getElementById('status-' + dv.dv_request_id);
+    const dvEl = document.getElementById('dv-' + dv.dv_request_id);
 
-            // Add new notification to list
-            const li = document.createElement('li');
-            li.className = 'p-2 bg-gray-100 rounded-md hover:bg-gray-200 cursor-pointer font-bold';
-            li.dataset.id = data.dv_request_id || '';
-            li.innerHTML = `#${data.dv_request_id} ${data.status.toUpperCase()}: ${data.action} - ${data.remarks} [${data.timestamp}]`;
-            list.prepend(li);
+        // 🔹 Update status text
+        if (statusEl) {
+            const label = statusEl.querySelector('.status-label');
+            if (label) {
+                label.textContent = dv.status.charAt(0).toUpperCase() + dv.status.slice(1);
+            }
+            statusEl.dataset.status = dv.status.toLowerCase();
         }
 
-        // Update status in table if exists
-       
-            const statusEl = document.getElementById('status-' + data.dv_request_id);
-            if (statusEl) {
-            statusEl.innerHTML = `<span class="status-dot w-2 h-2 mr-2 rounded-full bg-green-500"></span>#${data.dv_request_id} ${data.status.toUpperCase()}`;
+        // 🔹 Update DV number cell
+        if (dvEl) {
+            const currentDV = dvEl.dataset.dvNumber || null;
+
+            if (dv.dv_number) {
+                // Assign DV number
+                dvEl.innerHTML = `
+                    <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                        ${dv.dv_number}
+                    </span>
+                `;
+                dvEl.dataset.dvNumber = dv.dv_number;
+            } else {
+                // Show Pending if still no DV number
+                dvEl.innerHTML = `
+                    <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
+                        Pending
+                    </span>
+                `;
+                dvEl.dataset.dvNumber = '';
             }
+        }
+    }
+    // Pusher binding
+    channel.unbind('status-updated');
+    channel.bind('status-updated', function(data) {
+        console.log('Received real-time notification:', data);
+
+        // Update notifications list
+        if (list && badge) {
+            let count = parseInt(badge.textContent) || 0;
+            badge.textContent = count + 1;
+            const li = document.createElement('li');
+            li.className = 'p-2 bg-gray-100 rounded-md hover:bg-gray-200 cursor-pointer font-bold';
+            li.dataset.id = data.id;
+            li.innerHTML = renderNotification(data);
+            list.prepend(li);
+        }
+        
+        Toast.fire({
+        icon: 'info',
+        title: 'DV Request Status Update',
+        text: `#${data.dv_request_id} ${data.status.toUpperCase()} - ${data.remarks || ''}`
+        });
+        updateDVStatus(data);
     });
 
-    // 3️⃣ Mark notifications as read when clicked individually
+    // 🔹 Mark notifications as read individually
     list.addEventListener('click', async (e) => {
         const li = e.target.closest('li');
         if (!li) return;
-
         const id = li.dataset.id;
         if (!id) return;
 
@@ -270,38 +333,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (response.ok) {
                 li.classList.remove('font-bold');
-                
-                if (badge) {
-                    let count = parseInt(badge.textContent) || 0;
-                    badge.textContent = Math.max(count - 1, 0);
-                }
+                let count = parseInt(badge.textContent) || 0;
+                badge.textContent = Math.max(count - 1, 0);
             }
         } catch (err) {
             console.error('Failed to mark notification as read:', err);
         }
     });
 
-    // 4️⃣ Toggle dropdown + mark all as read
+    // 🔹 Toggle notification dropdown + mark all as read
     if (notifButton) {
         notifButton.addEventListener('click', async () => {
             list.classList.toggle('hidden');
-            
-            // Mark all as read when opening
             if (!list.classList.contains('hidden')) {
                 try {
-                    const response = await fetch('{{ route("FocalPerson.notifications.markAllAsRead") }}', {
+                    await fetch('{{ route("FocalPerson.notifications.markAllAsRead") }}', {
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': '{{ csrf_token() }}',
                             'Content-Type': 'application/json'
                         }
                     });
-
-                    if (response.ok) {
-                        badge.textContent = '0';
-                        // Remove bold from all notifications
-                        list.querySelectorAll('li').forEach(li => li.classList.remove('font-bold'));
-                    }
+                    badge.textContent = '0';
+                    list.querySelectorAll('li').forEach(li => li.classList.remove('font-bold'));
                 } catch (err) {
                     console.error('Failed to mark all as read:', err);
                 }
@@ -315,7 +369,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             list.classList.add('hidden');
         }
     });
+
+    // 🔹 Auto-refresh DV requests every 60s
+    setInterval(async () => {
+        try {
+            const res = await fetch('{{ route("FocalPerson.dvrequest.refresh") }}');
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            const updated = await res.json();
+
+            updated.forEach(dv => updateDVStatus(dv));
+        } catch (err) {
+            console.error("Auto-refresh failed:", err);
+        }
+    }, 60000);
 });
 </script>
+
+
 
 @endsection

@@ -11,6 +11,7 @@ class DvRequestLog extends Model
 
     protected $fillable = [
         'dv_request_id',
+        'focalperson_id',
         'accountingunit_id',
         'external_actor',
         'action',

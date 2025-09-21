@@ -29,7 +29,6 @@ class FocalPerson extends Authenticatable
         'email',
         'password',
         'contactnumber',
-        'program_id',
         'respocenter_id',
         'profile_image',
     ];
@@ -48,10 +47,6 @@ class FocalPerson extends Authenticatable
     | Relationships
     |--------------------------------------------------------------------------
     */
-    public function program()
-    {
-        return $this->belongsTo(Program::class);
-    }
 
     public function respoCenter()
     {

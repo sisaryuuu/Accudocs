@@ -14,8 +14,9 @@ class NotificationController extends Controller
         $focalId = Auth::guard('focal')->id();
 
         $notifications = Notification::where('focalperson_id', $focalId)
-                                     ->latest()
-                                     ->get();
+        ->orderBy('created_at', 'desc')
+        ->take(20) // only fetch last 20
+        ->get();
 
         return response()->json($notifications);
     }

@@ -72,9 +72,10 @@
                 </div>
 
                 <!-- Checklist -->
-                        <div>
+                <div>
+                  @if($dvRequest->program->prcode === 'GIP') 
                 <label class="block text-sm font-medium text-gray-700 mb-2">Attachments Checklist</label>
-                
+                 
                 <div class="grid grid-cols-6 gap-4">
                     @foreach($checklistItems as $item)
                         @php
@@ -92,6 +93,7 @@
                         </div>
                     @endforeach
                 </div>
+                @endif
             </div>
 
 
@@ -122,7 +124,7 @@
 <script>
 async function loadRecentRequests() {
     try {
-        const res = await fetch("{{ route('RegionalOffices.IMSD.fetchimsdRecent') }}");
+        const res = await fetch("{{ route('RegionalOffices.IMSD.dvrequests.fetchimsdRecent') }}");
         const data = await res.json();
         console.log(data); // 👀 debug output
 
@@ -133,7 +135,7 @@ async function loadRecentRequests() {
             data.forEach(r => {
                 html += `
                     <li>
-                        <a href="/RegionalOffices/IMSD/${r.id}" 
+                        <a href="/RegionalOffices/IMSD/dvrequests/${r.id}" 
                            class="block p-3 bg-gray-50 hover:bg-blue-50 rounded-lg border border-gray-200 transition">
                             <p class="text-sm font-medium text-gray-900">
                                 Control #${r.id} • ${r.particulars ?? ''}

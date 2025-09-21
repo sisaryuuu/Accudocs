@@ -63,14 +63,19 @@
                            class="w-full mt-1 border rounded-lg px-3 py-2 bg-gray-100 text-gray-700">
                            <input type="hidden" name="respocenter_id" value="{{ $focalPerson->respocenter_id }}">
                 </div>
-                <div>
-                    <label for="program" class="block text-sm font-medium text-gray-700">Program</label>
-                    <input type="text" id="program" 
-                           value="{{ $focalPerson->program->prcode }} - {{ $focalPerson->program->description }}" 
-                           readonly
-                           class="w-full mt-1 border rounded-lg px-3 py-2 bg-gray-100 text-gray-700">
-                    <input type="hidden" name="program_id" value="{{ $focalPerson->program_id }}">
-                </div>
+            <div>
+            <label for="program" class="block text-sm font-medium text-gray-700">Purpose</label>
+            <select id="program" name="program_id" 
+                    class="w-full mt-1 border rounded-lg px-3 py-2 bg-white text-gray-700">
+                <option value="">Select Purpose of Request</option>
+                @foreach($programs as $program)
+                    <option value="{{ $program->id }}" 
+                        {{ $focalPerson->program_id == $program->id ? 'selected' : '' }}>
+                        {{ $program->prcode }} - {{ $program->description }}
+                    </option>
+                @endforeach
+            </select>
+            </div>
             </div>
 
             <!-- Middle Section -->
