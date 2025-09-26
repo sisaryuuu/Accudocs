@@ -7,6 +7,9 @@ use App\Models\DvRequest;
 use App\Notifications\DvRequestUpdated;
 use App\Models\DvRequestLog;
 use App\Models\Program;
+use App\Models\ModeOfPayment;
+use App\Models\PaymentDetail;
+use App\Models\DvRequestModeOfPayment;
 use App\Services\PusherService;
 use App\Models\Notification;
 use Illuminate\Http\Request;
@@ -32,7 +35,7 @@ class DvRequestController extends Controller
 
     try {
         // Fetch DV requests with related Focal Person and Program
-        $dvRequests = DvRequest::with(['focalperson', 'program','respocenter'])
+        $dvRequests = DvRequest::with(['focalperson', 'program','respocenter', 'modeOfPayments' ])
                         ->where('focalperson_id', $focalId)
                         ->latest()
                         ->get();
@@ -55,7 +58,8 @@ class DvRequestController extends Controller
     {
         $focalPerson = Auth::guard('focal')->user(); // authenticated focal person
         $programs = Program::all();
-        return view('FocalPerson.dvrequest.submitdvors', compact('programs','focalPerson'));
+        $mops = ModeOfPayment::all();
+        return view('FocalPerson.dvrequest.submitdvors', compact('programs','focalPerson','mops'));
     }
 
     /**
@@ -68,6 +72,10 @@ class DvRequestController extends Controller
         'respocenter_id' =>'required|exists:responcenters,id',
         'amount'      => 'required|numeric|min:0',
         'particulars' => 'required|string|max:255',
+        'mode_of_payment_id' => 'required|exists:mode_of_payments,id',
+        'payment_details.bank_name'   => 'nullable|string|max:255',
+        'payment_details.bank_accnum' => 'nullable|string|max:255',
+        'payment_details.bank_address'=> 'nullable|string|max:255',
     ]);
 
     $dv = DvRequest::create([
@@ -84,7 +92,20 @@ class DvRequestController extends Controller
        'status'         => 'submitted',
     ]);
 
-    // Pass the full $dv object
+   $dv->modeOfPayments()->attach($request->mode_of_payment_id);
+
+    // 2️⃣ Retrieve the pivot row
+    $dvRequestMop = DvRequestModeOfPayment::where('dv_request_id', $dv->id)
+        ->where('mode_of_payment_id', $request->mode_of_payment_id)
+        ->first();
+
+    // 3️⃣ Save payment details
+    $dvRequestMop->paymentDetail()->create([
+        'bank_name'   => $request->input("payment_details.bank_name"),
+        'bank_accnum' => $request->input("payment_details.bank_accnum"),
+        'bank_address'=> $request->input("payment_details.bank_address"),
+    ]);
+    
     $this->logAction($dv, 'SUBMITTED', 'submitted', 'Request submitted by Focal Person');
 
     return redirect()->route('FocalPerson.dvrequest.index')
@@ -186,53 +207,136 @@ class DvRequestController extends Controller
             abort(403, 'Unauthorized action.');
                 }
 
-                // Now delete the DV request
                 $dvRequest->delete();
 
                 return redirect()->route('FocalPerson.dvrequest.index')
                                 ->with('success', 'DV Request deleted successfully.');
             }
         
-    public function logs(DvRequest $dvRequest)
-    {
-        if (Auth::guard('focal')->check()) {
-            if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
-                abort(403, 'Unauthorized access to this request.');
-            }
-        }
 
-        if (Auth::guard('web')->check()) {
-          
-        }
+public function logs(DvRequest $dvRequest, Request $request)
+{
+    $logs = $dvRequest->logs()
+        ->with(['focalperson', 'accountingUnit'])
+        ->orderBy('created_at', 'desc')
+        ->get();
 
+    if ($request->ajax() || $request->get('ajax') == '1') {
+        $html = '';
         
-        $logs = $dvRequest->logs()
-            ->with(['focalPerson', 'accountingUnit'])
-            ->latest()
-            ->get();
-
-      
-        foreach ($logs as $log) {
-            \Log::info('Log ID: ' . $log->id, [
-                'focalperson_id' => $log->focalperson_id,
-                'accountingunit_id' => $log->accountingunit_id,
-                'role' => $log->role,
-                'action' => $log->action,
-                'has_focal_person' => $log->focalPerson ? 'YES' : 'NO',
-                'has_accounting_unit' => $log->accountingUnit ? 'YES' : 'NO',
-            ]);
+        foreach ($logs as $index => $log) {
+            $actorName = 'System';
+            $profileImage = asset('storage/profiles/default.png');
+            
+            // Determine actor name and profile image
+            if ($log->focalperson) {
+                $actorName = trim($log->focalperson->fname . ' ' . ($log->focalperson->mi ?? '') . ' ' . $log->focalperson->lname);
+                if ($log->focalperson->profile_image) {
+                    $profileImage = asset('storage/profiles/' . $log->focalperson->profile_image);
+                }
+            } elseif ($log->accountingUnit) {
+                $actorName = ($log->accountingUnit->fname ?? '') . ' ' . ($log->accountingUnit->lname ?? '');
+                if ($log->accountingUnit->profile_image) {
+                    $profileImage = asset('storage/profiles/' . $log->accountingUnit->profile_image);
+                }
+            } elseif ($log->external_actor) {
+                $actorName = $log->external_actor;
+            }
+            
+            // Build table row HTML
+            $html .= '<tr class="hover:bg-gray-50 transition-colors duration-150">';
+            
+            // Step number
+            $html .= '<td class="px-6 py-4 whitespace-nowrap">';
+            $html .= '<div class="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">';
+            $html .= ($index + 1);
+            $html .= '</div></td>';
+            
+            // Actor info
+            $html .= '<td class="px-6 py-4"><div class="flex items-center">';
+            $html .= '<div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">';
+            
+            if ($log->focalperson || $log->accountingUnit) {
+                $html .= '<img src="' . $profileImage . '" class="w-10 h-10 object-cover">';
+            } else {
+                $html .= '<div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center rounded-full">';
+                $html .= '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
+                $html .= '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>';
+                $html .= '</svg></div>';
+            }
+            
+            $html .= '</div><div class="ml-3">';
+            $html .= '<div class="text-sm font-medium text-gray-900">' . htmlspecialchars($actorName) . '</div>';
+            $html .= '<div class="text-xs text-gray-500">' . htmlspecialchars(ucfirst($log->action)) . '</div>';
+            $html .= '</div></div></td>';
+            
+            // Remarks
+            $html .= '<td class="px-6 py-4">';
+            if ($log->remarks && trim($log->remarks) !== '') {
+                $html .= '<div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">';
+                $html .= '<p class="text-gray-700">' . htmlspecialchars(ucfirst($log->remarks)) . '</p></div>';
+            } else {
+                $html .= '<span class="text-gray-400 italic">No remarks</span>';
+            }
+            $html .= '</td>';
+            
+            // Date & Time
+            $html .= '<td class="px-6 py-4 whitespace-nowrap">';
+            $html .= '<div class="text-sm text-gray-900 font-medium">' . $log->created_at->format('M d, Y') . '</div>';
+            $html .= '<div class="text-xs text-gray-500">' . $log->created_at->format('h:i A') . '</div>';
+            $html .= '<div class="text-xs text-gray-400 mt-1">' . $log->created_at->diffForHumans() . '</div>';
+            $html .= '</td></tr>';
         }
-
-        return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs'));
+        
+        return response()->json([
+            'html' => $html,
+            'count' => $logs->count(),
+            'lastUpdated' => $logs->first()?->created_at->diffForHumans() ?? 'Never'
+        ]);
     }
-   protected function logAction(DvRequest $dvRequest, string $status, string $action, string $remarks): void
+
+    // Regular view response for initial page load
+    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing','Accountant III','Regional Director','Cashier', 'Completed'];
+    
+    return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs', 'steps'));
+}
+protected function logAction(DvRequest $dvRequest, string $status, string $action, string $remarks): void
 {
     $focalId = Auth::guard('focal')->id();
     $accountingUnitId = null;
+    $actorName = 'System';
+    $actorRole = 'System';
+    $actorAvatar = asset('storage/profiles/default.png'); // fallback
 
+    // Check if accounting unit is logged in
     if (Auth::guard('web')->check()) {
-        $accountingUnitId = Auth::id(); // because Auth::user() is AccountingUnit
+        $accountingUnit = Auth::guard('web')->user();
+        $accountingUnitId = $accountingUnit->id;
+        
+        // Fix: Use proper field names for accounting unit
+        $actorName = trim(($accountingUnit->fname ?? '') . ' ' . ($accountingUnit->lname ?? '')) ?: 'Accounting Unit';
+        $actorRole = 'Accounting Unit';
+        
+        // Fix: Check for profile image
+        if (!empty($accountingUnit->profile_image)) {
+            $actorAvatar = asset('storage/profiles/' . $accountingUnit->profile_image);
+        }
+    } 
+    // Check if focal person is logged in
+    elseif ($focalId) {
+        $focal = Auth::guard('focal')->user();
+        
+        // Fix: Use proper field names for focal person
+        $actorName = trim(($focal->fname ?? '') . ' ' . ($focal->mi ?? '') . ' ' . ($focal->lname ?? '')) ?: 'Focal Person';
+        $actorRole = 'Focal Person';
+        
+        // Fix: Check for profile image
+        if (!empty($focal->profile_image)) {
+            $actorAvatar = asset('storage/profiles/' . $focal->profile_image);
+        }
     }
+
+    // Create the log entry
     $log = DvRequestLog::create([
         'dv_request_id'     => $dvRequest->id,
         'focalperson_id'    => $focalId,
@@ -242,6 +346,7 @@ class DvRequestController extends Controller
         'remarks'           => $remarks,
     ]);
 
+    // Create notification
     $notification = Notification::create([
         'focalperson_id' => $focalId,
         'dv_request_id' => $dvRequest->id,
@@ -250,16 +355,26 @@ class DvRequestController extends Controller
         'remarks' => $remarks,
     ]);
 
-    $this->pusher->trigger('dv-requests-'. $focalId,'status-updated', [
-        'id' => $notification->id,
+    // Fix: Use the focal person ID for the channel, not the request ID
+    $channelName = 'dv-requests-' . ($dvRequest->focalperson_id ?? $focalId);
+    
+    // Trigger Pusher event
+    $this->pusher->trigger($channelName, 'status-updated', [
+        'id'            => $notification->id,
         'dv_request_id' => $dvRequest->id,
         'dv_number'     => $dvRequest->dv_number,
         'status'        => $status,
         'action'        => $action,
         'remarks'       => $remarks,
+        'actor_name'    => $actorName,
+        'actor_role'    => $actorRole,
+        'actor_avatar'  => $actorAvatar,
         'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        'relative'      => now()->diffForHumans(),
     ]);
 }
+
+
 
 
     public function latestStep(DvRequest $dvRequest)

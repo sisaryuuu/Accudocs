@@ -83,6 +83,7 @@
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TIN/Employee No.</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsibility Center</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request Purpose</th>
+                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Mode of Payment</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Particulars</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Status</th>
@@ -121,6 +122,16 @@
                                         {{ $request->program->prcode ?? 'N/A' }}
                                     </span>
                                 </td>
+                               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                    @if($request->modeOfPayments && $request->modeOfPayments->count() > 0)
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-1">
+                                            {{ $request->modeOfPayments->pluck('mopname')->join(', ') }}
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">N/A</span>
+                                    @endif
+                                </td>
+
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                                     ₱{{ number_format($request->amount, 2) }}
                                 </td>
@@ -147,16 +158,16 @@
                                             Track
                                         </a>
                                         @if($request->status === 'submitted')
-                                        <form action="{{ route('FocalPerson.dvrequest.destroy', $request->id) }}" method="POST" class="inline">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" 
-                                                    class="inline-flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium rounded-md transition-colors duration-200"
-                                                    onclick="return confirm('Are you sure you want to delete this request?')">
-                                                Delete
-                                            </button>
-                                        </form>
-                                        @endif
+                                        <form id="delete-btn-{{ $request->id }}" action="{{ route('FocalPerson.dvrequest.destroy', $request->id) }}" method="POST">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" 
+                                                class="inline-flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium rounded-md transition-colors duration-200"
+                                                onclick="return confirm('Are you sure you want to delete this request?')">
+                                            Delete
+                                        </button>
+                                    </form>
+                                    @endif
                                      @if($request->status === 'ORS_for_revision')
                                             <a href="{{ route('FocalPerson.dvrequest.edit', $request->id) }}"
                                             class="inline-flex items-center px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 text-xs font-medium rounded-md transition-colors duration-200">
@@ -258,39 +269,47 @@ document.addEventListener('DOMContentLoaded', async () => {
    function updateDVStatus(dv) {
     const statusEl = document.getElementById('status-' + dv.dv_request_id);
     const dvEl = document.getElementById('dv-' + dv.dv_request_id);
+    const deleteBtn = document.getElementById('delete-btn-' + dv.dv_request_id);
 
-        // 🔹 Update status text
-        if (statusEl) {
-            const label = statusEl.querySelector('.status-label');
-            if (label) {
-                label.textContent = dv.status.charAt(0).toUpperCase() + dv.status.slice(1);
-            }
-            statusEl.dataset.status = dv.status.toLowerCase();
+    // 🔹 Update status text
+    if (statusEl) {
+        const label = statusEl.querySelector('.status-label');
+        if (label) {
+            label.textContent = dv.status.charAt(0).toUpperCase() + dv.status.slice(1).replace('_', ' ');
         }
+        statusEl.dataset.status = dv.status.toLowerCase();
+    }
 
-        // 🔹 Update DV number cell
-        if (dvEl) {
-            const currentDV = dvEl.dataset.dvNumber || null;
-
-            if (dv.dv_number) {
-                // Assign DV number
-                dvEl.innerHTML = `
-                    <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                        ${dv.dv_number}
-                    </span>
-                `;
-                dvEl.dataset.dvNumber = dv.dv_number;
-            } else {
-                // Show Pending if still no DV number
-                dvEl.innerHTML = `
-                    <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
-                        Pending
-                    </span>
-                `;
-                dvEl.dataset.dvNumber = '';
-            }
+    // 🔹 Update DV number cell
+    if (dvEl) {
+        if (dv.dv_number) {
+            // Assign DV number
+            dvEl.innerHTML = `
+                <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                    ${dv.dv_number}
+                </span>
+            `;
+            dvEl.dataset.dvNumber = dv.dv_number;
+        } else {
+            // Show Pending if still no DV number
+            dvEl.innerHTML = `
+                <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
+                    Pending
+                </span>
+            `;
+            dvEl.dataset.dvNumber = '';
         }
     }
+
+    // 🔹 Handle delete button visibility - show only if status is 'submitted'
+    if (deleteBtn) {
+        if (dv.status === 'submitted') {
+            deleteBtn.style.display = 'inline-block';
+        } else {
+            deleteBtn.style.display = 'none';
+        }
+    }
+}
     // Pusher binding
     channel.unbind('status-updated');
     channel.bind('status-updated', function(data) {

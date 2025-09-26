@@ -18,7 +18,8 @@ class DatabaseSeeder extends Seeder
             ProgramSeeder::class,         // Create programs
             ResponCenterSeeder::class,     // Create respo centers
             AccountingUnitSeeder::class,  // Create accounting units
-            FocalPersonSeeder::class      // Finally create focal persons
+            FocalPersonSeeder::class,   // Finally create focal persons
+            ModeOfPaymentSeeder::class,
         ]);
     }
 }

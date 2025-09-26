@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="//unpkg.com/alpinejs" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <title>@yield('title', 'Dashboard')</title>
 </head>
+<div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col space-y-2"></div>
 <body class="bg-gray-100 font-sans">
 <script>
     @if (session('success'))
@@ -179,16 +181,14 @@
                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Outgoing.dvrequests.index') ? 'bg-gray-200 font-semibold' : '' }}">
                     Pending DV Documents
                 </a>
-                              
-            <a href="{{ route('Outgoing.dvrequests.verify') }}"
-                class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Outgoing.dvrequests.verify') ? 'bg-gray-200 font-semibold' : '' }}">
+            <a href="{{ route('Outgoing.dvrequests.verifydv') }}"
+                class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Outgoing.dvrequests.withid') ? 'bg-gray-200 font-semibold' : '' }}">
                     Finalize DV Documents
                 </a>
                 <a href="{{ route('Outgoing.dvrequests.dvloghistory') }}" 
                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Outgoing.dvrequests.dvloghistory') ? 'bg-gray-200 font-semibold' : '' }}">
                     DV Log History
                 </a>
-
             @endrole
 
             <!-- Right Section -->
@@ -238,8 +238,11 @@
 <!-- Spacer to prevent overlap -->
 <div class="h-16"></div> 
 
+
+
 <!-- Page Layout -->
 <div class="flex">
+
     @hasanyrole('Admin|Accounting_III')
     <!-- Sidebar -->
     @php
@@ -300,6 +303,7 @@
         @yield('content')
     </main>
 </div>
+
 
 </body>
 </html>

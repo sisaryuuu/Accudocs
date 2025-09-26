@@ -14,6 +14,8 @@ use App\Models\AdlCode;
 use App\Models\AllotmentClass;
 use App\Models\Mfopap;
 use App\Models\ContinuingOrCurrent;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ObligateDVORSController extends Controller
 {
@@ -26,14 +28,22 @@ class ObligateDVORSController extends Controller
 
     public function index()
     {
-        
-        return view('BudgetOfficer.index');
+        $sidebarCounts = $this->getSidebarCounts();
+        return view('BudgetOfficer.index', compact('sidebarCounts'));
     }
 
  public function fetchDvRequests()
 {
+    $currentUserId = auth()->id();
+    $lockDuration  = now()->subMinutes(10);
+
     $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter','orsRequest'])
         ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','ORS_received','ORS_onhold'])
+        ->where(function ($q) use ($currentUserId, $lockDuration) {
+            $q->whereNull('locked_by')                // not locked
+              ->orWhere('locked_by', $currentUserId)  // locked by me
+              ->orWhere('locked_at', '<=', $lockDuration); // lock expired
+        })
         ->latest()
         ->get();
 
@@ -42,80 +52,71 @@ class ObligateDVORSController extends Controller
             'id'           => $req->id,
             'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
             'program'      => $req->program->prcode ?? 'N/A',
-           'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req ->respocenter->description ?? '')) ?? 'N/A',
+            'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
             'amount'       => number_format($req->amount, 2),
             'status'       => $req->status,
             'date'         => $req->created_at->format('M d, Y'),
             'ors_number'   => $req->orsRequest->ors_number ?? null,
-            'uacscode_id'     => $req->orsRequest->uacscode_id?? null,
-            'adlcode_id'      => $req->orsRequest->adlcode_id ?? null,
-            'mfopap_id'       => $req->orsRequest->mfopap_id ?? null,
-          
+            'uacscode_id'  => $req->orsRequest->uacscode_id ?? null,
+            'adlcode_id'   => $req->orsRequest->adlcode_id ?? null,
+            'mfopap_id'    => $req->orsRequest->mfopap_id ?? null,
         ];
     }));
 }
-public function redirectToFirstPending()
-{
-    $dvRequest = DvRequest::whereIn('status', ['ORS_received', 'Incoming-TUPAD_verified','Incoming-GIP_verified','ORS_onhold'])
-                          ->orderBy('created_at', 'asc')
-                          ->first();
 
-    if (!$dvRequest) {
-        return redirect()->route('BudgetOfficer.dvrequests.index')
-                         ->with('info', 'No DV requests pending obligation.');
+    public function redirectToFirstPending()
+{
+    $currentUserId = auth()->id();
+    $lockDuration = now()->subMinutes(10);
+
+    $pendingRequests = DvRequest::whereHas('program', fn($q) => 
+                                $q->where('prcode', 'GIP','TUPAD')) 
+                            ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','ORS_received'])
+                            ->orderBy('created_at', 'asc')
+                            ->get();
+
+    if ($pendingRequests->isEmpty()) {
+        return redirect()->route('Budgetofficer.index')
+                         ->with('info', 'No ORS requests pending verification.');
     }
 
-    return redirect()->route('BudgetOfficer.dvrequests.withid', $dvRequest->id);
+    // Check for one you can work on (unlocked or locked by you, or expired lock)
+    $available = $pendingRequests->first(function ($req) use ($currentUserId, $lockDuration) {
+        return !$req->locked_by 
+            || $req->locked_by == $currentUserId 
+            || $req->locked_at <= $lockDuration;
+    });
+
+    if ($available) {
+        return redirect()->route('BudgetOfficer.dvrequests.withid', $available->id);
+    }
+
+    // If all are locked by others
+    return redirect()->route('BudgetOfficer.index')
+                     ->with('info', 'All pending ORS requests are currently locked by other users.');
 }
 
    public function show($id)
 {
     $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','logs'])
                     ->findOrFail($id);
-    $orsRequest = $dvRequest->orsRequest ?? null;
 
-    if (in_array($dvRequest->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified'])) {
+    $currentUserId = auth()->id();
+    $lockDuration = now()->subMinutes(10);
 
-        if ($orsRequest) {
-            $orsRequest->update([
-                'status'      => 'ORS_received',
-                'received_by' => auth()->id(),
-                'received_at' => now(),
-            ]);
-        }
-
-        $dvRequest->update([
-            'status' => 'ORS_received',
-        ]);
-
-        $focalId = $dvRequest->focalperson_id;
-        $status = 'Received Obligation Request and Status Received';
-        $action = 'Received'; // or something meaningful for your workflow
-        $remarks = $request->remarks ?? "Received ORS For Request Processing.";
-
-        $notification = Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => $status,
-            'action'         => $action,
-            'remarks'        => $remarks,
-        ]);
-        $this->pusher->trigger('dv-requests-' .$focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => $status,
-            'remarks'       => $remarks,
-            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-
-
-        $this->logAction(
-            $dvRequest->id,
-            'Budget Officer',
-            'ORS_received',
-            'ORS request received by Budget Officer for processing'
-        );
+  
+    if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at >= $lockDuration) {
+        return redirect()->route('BudgetOfficer.dvrequests.index')
+            ->with('error', 'This DV Request is currently being processed by another user.');
     }
 
+    if (!$dvRequest->locked_by || $dvRequest->locked_at < $lockDuration || $dvRequest->locked_by === $currentUserId) {
+        $dvRequest->update([
+            'locked_by' => $currentUserId,
+            'locked_at' => now(),
+        ]);
+    }
+    $orsRequest = $dvRequest->orsRequest ?? null;
     $lastLog = $dvRequest->logs()->latest()->first();
     $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
     return view('BudgetOfficer.obligatedvors', [
@@ -129,12 +130,111 @@ public function redirectToFirstPending()
         'contcurrents'        => ContinuingOrCurrent::all(),
     ]);
 }
-// In ObligatedDVORSController.php
+
+public function receive(Request $request, $id)
+{
+    try {
+        $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
+
+        // Only allow if status is verified from IMSD or Incoming
+        if (!in_array($dvRequest->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This request is not ready to be received by the Budget Officer.'
+            ], 422);
+        }
+
+        $receivedAt = now();
+
+        // Update ORS request if it exists
+        if ($dvRequest->orsRequest) {
+            $dvRequest->orsRequest->update([
+                'status'      => 'ORS_received',
+                'received_by' => auth()->id(),
+                'received_at' => $receivedAt,
+            ]);
+        }
+
+        // Update DV request
+        $dvRequest->update([
+            'status'      => 'ORS_received',
+            'received_by' => auth()->id(),
+            'received_at' => $receivedAt,
+            'locked_by'   => auth()->id(),
+            'locked_at'   => $receivedAt,
+        ]);
+
+        // Log action
+        $this->logAction(
+            $dvRequest->id,
+            'Budget_Officer',
+            'ORS_received',
+            'ORS request received by Budget Officer for processing'
+        );
+
+        // Notify focal person
+        $focalId = $dvRequest->focalperson_id;
+        $remarks = $request->remarks ?? "ORS request received by Budget Officer for processing";
+
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => 'ORS_received',
+            'action'         => 'Received',
+            'remarks'        => $remarks,
+        ]);
+
+        // Real-time push
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'ORS_received',
+            'remarks'       => $remarks,
+            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        // Return response
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Document has been received by Budget Officer (ORS).',
+                'data' => [
+                    'id'          => $dvRequest->id,
+                    'status'      => 'ORS_received',
+                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
+        }
+
+        return redirect()->route('BudgetOfficer.dvrequests.index')
+            ->with('success', 'Document has been received by Budget Officer (ORS).');
+
+    } catch (\Exception $e) {
+        \Log::error('Error receiving DV request: ' . $e->getMessage());
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while processing the request.'
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while processing the request.');
+    }
+}
+
+
     public function fetchRecent()
     {
+        $currentUserId = auth()->id();
+        $lockDuration  = now()->subMinutes(10);
         $recentDvRequest = DvRequest::with('focalPerson') 
             ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'ORS_received'])
             ->whereNotNull('focalperson_id')
+             ->where(function ($q) use ($currentUserId, $lockDuration) {
+            $q->whereNull('locked_by')                // not locked
+              ->orWhere('locked_by', $currentUserId)  // locked by me
+              ->orWhere('locked_at', '<=', $lockDuration); // lock expired
+        })
             ->latest()
             ->take(5)
             ->get();
@@ -158,7 +258,11 @@ public function store(Request $request, $dvRequestId)
 
     $dvRequest = DvRequest::findOrFail($dvRequestId);
 
-    $dvRequest->update(['status' => 'ORS_obligated']);
+    $dvRequest->status  = 'ORS_obligated';
+    $dvRequest->locked_by  = null;
+    $dvRequest->locked_at  = null;
+    $dvRequest->save();
+
     $year = date('Y');
     $month = date('m');
     $latestOrs = OrsRequest::latest()->first();
@@ -213,14 +317,56 @@ public function store(Request $request, $dvRequestId)
 
     $this->logAction(
         $dvRequest->id,
-        'Budget Officer',
+        'Budget_Officer',
         'ORS_obligated',
         'ORS Number ' . $orsNumber . ' assigned.'
     );
-    return redirect()
-        ->back()
+    return redirect()->route('BudgetOfficer.dvrequests.index')
         ->with('success', "ORS Test Request Created with ORS Number: $orsNumber");
 }
+
+
+      public function releaseLock($id)
+{
+    $dvRequest = DvRequest::with('program')->findOrFail($id);
+
+    if ($dvRequest->locked_by === auth()->id()) {
+        // Determine status based on program
+        $status = match ($dvRequest->program->prcode) {
+            'GIP'   => 'Incoming-GIP_verified',
+            'TUPAD' => 'Incoming-TUPAD_verified',
+            default => $dvRequest->status, // fallback to current status if not GIP/TUPAD
+        };
+
+        $dvRequest->update([
+            'locked_by' => null,
+            'locked_at' => null,
+            'status'    => $status,
+        ]);
+
+        
+    }
+
+    return response()->json(['success' => true]);
+}
+
+
+    public function refreshLock(Request $request, $id)
+    {
+        $dvRequest = DvRequest::findOrFail($id);
+
+        if ($dvRequest->locked_by !== auth()->id()) {
+            return response()->json(['error' => 'Not authorized to refresh lock'], 403);
+        }
+
+        $dvRequest->update([
+            'locked_at' => now(), // refresh timestamp
+        ]);
+
+        return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
+    }
+
+
     public function history()
     {
         $orsRequests = OrsRequest::with(['dvRequest.program', 'dvRequest.focalPerson', 'dvRequest.respocenter'])
@@ -307,7 +453,7 @@ public function store(Request $request, $dvRequestId)
     // Log action
     $this->logAction(
         $dvRequest->id,
-        'Budget Officer',
+        'Budget_Officer',
         'ORS_for_revision',
         $request->remarks ?? 'ORS request sent back for revision'
     );

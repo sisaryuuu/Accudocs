@@ -52,8 +52,36 @@ class AccountingUnitSeeder extends Seeder
             ]
         );
         $imsd->assignRole($imsdRole);
+         $imsd2 = AccountingUnit::firstOrCreate(
+            ['email' => 'imsd2@email.com'],
+            [
+                'fname' => 'IMSD2',
+                'mi' => 'I',
+                'lname' => 'User2',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
 
-        // Example: Incoming-GIP user
+        $imsd2->assignRole($imsdRole);
+
+            $imsd3 = AccountingUnit::firstOrCreate(
+            ['email' => 'imsd3@email.com'],
+            [
+                'fname' => 'IMSD3',
+                'mi' => 'I',
+                'lname' => 'User3',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+
+        $imsd3->assignRole($imsdRole);
+        
         $incomingGip = AccountingUnit::firstOrCreate(
             ['email' => 'incoming.gip@email.com'],
             [
@@ -67,6 +95,35 @@ class AccountingUnitSeeder extends Seeder
             ]
         );
         $incomingGip->assignRole($incomingGipRole);
+
+           $incomingGip2 = AccountingUnit::firstOrCreate(
+            ['email' => 'incoming.gip2@email.com'],
+            [
+                'fname' => 'Incoming2',
+                'mi' => 'G',
+                'lname' => 'IP2',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $incomingGip2->assignRole($incomingGipRole);
+
+           $incomingGip3 = AccountingUnit::firstOrCreate(
+            ['email' => 'incoming.gip2@email.com'],
+            [
+                'fname' => 'Incoming',
+                'mi' => 'G',
+                'lname' => 'IP',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $incomingGip3->assignRole($incomingGipRole);
+
 
         $incomingTupad = AccountingUnit::firstOrCreate(
             ['email' => 'incoming.tupad@email.com'],
@@ -82,6 +139,35 @@ class AccountingUnitSeeder extends Seeder
         );
         $incomingTupad->assignRole($incomingTupadRole);
 
+         $incomingTupad2 = AccountingUnit::firstOrCreate(
+            ['email' => 'incoming.tupad2@email.com'],
+            [
+                'fname' => 'Incoming2',
+                'mi' => 'T',
+                'lname' => 'Tupad2',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $incomingTupad2->assignRole($incomingTupadRole);
+
+         $incomingTupad3 = AccountingUnit::firstOrCreate(
+            ['email' => 'incoming.tupad3@email.com'],
+            [
+                'fname' => 'Incoming3',
+                'mi' => 'T',
+                'lname' => 'Tupad3',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $incomingTupad3->assignRole($incomingTupadRole);
+
+
         $budgetOfficer = AccountingUnit::firstOrCreate(
             ['email' => 'budget.officer@email.com'],
             [
@@ -95,6 +181,34 @@ class AccountingUnitSeeder extends Seeder
             ]
         );
         $budgetOfficer->assignRole($budgetOfficerRole);
+
+         $budgetOfficer2 = AccountingUnit::firstOrCreate(
+            ['email' => 'budget.officer2@email.com'],
+            [
+                'fname' => 'Budget2',
+                'mi' => 'O',
+                'lname' => 'Officer2',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $budgetOfficer2->assignRole($budgetOfficerRole);
+
+         $budgetOfficer3 = AccountingUnit::firstOrCreate(
+            ['email' => 'budget.officer3@email.com'],
+            [
+                'fname' => 'Budget3',
+                'mi' => 'O',
+                'lname' => 'Officer3',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $budgetOfficer3->assignRole($budgetOfficerRole);
         
         $outgoing = AccountingUnit::firstOrCreate(
             ['email' => 'outgoing@email.com'],
@@ -109,5 +223,33 @@ class AccountingUnitSeeder extends Seeder
             ]
         );
         $outgoing->assignRole($outgoingRole);
+
+         $outgoing2 = AccountingUnit::firstOrCreate(
+            ['email' => 'outgoing2@email.com'],
+            [
+                'fname' => 'Outgoing2',
+                'mi' => 'D',
+                'lname' => 'Going2',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $outgoing2->assignRole($outgoingRole);
+
+         $outgoing3 = AccountingUnit::firstOrCreate(
+            ['email' => 'outgoing3@email.com'],
+            [
+                'fname' => 'Outgoing3',
+                'mi' => 'D',
+                'lname' => 'Going3',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $outgoing3->assignRole($outgoingRole);
     }
 }

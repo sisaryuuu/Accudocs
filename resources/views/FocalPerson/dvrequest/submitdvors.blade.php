@@ -30,6 +30,17 @@
 
             <!-- Top Row -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 @foreach($mops as $mop)
+                <div class="border p-3 rounded-lg">
+                <label class="inline-flex items-center">
+                <input type="radio" 
+                        name="mode_of_payment_id" 
+                        value="{{ $mop->id }}" 
+                        class="mop-radio rounded text-green-600 focus:ring-green-500">
+                <span class="ml-2 font-medium text-gray-700">{{ $mop->mopname }}</span>
+                </label>
+                </div>
+                @endforeach
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Full Name</label>
                     <input type="text" 
@@ -95,18 +106,30 @@
                                value="{{ old('amount') }}" required
                                class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
                     </div>
-                    <div class="mb-4">
-                        <label for="gross" class="block text-sm font-medium text-gray-700">Gross</label>
-                        <input type="number" step="0.01" id="gross" name="gross" 
-                               value="{{ old('gross') }}"
-                               class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
-                    </div>
-                    <div>
-                        <label for="net" class="block text-sm font-medium text-gray-700">Net</label>
-                        <input type="number" step="0.01" id="net" name="net" 
-                               value="{{ old('net') }}"
-                               class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
-                    </div>
+                    <div id="payment-details" class="hidden">
+                       <div class="mb-4">
+                         <label for="bank_name" class="block text-sm font-medium text-gray-700">Bank Name</label>
+                        <input type="text" 
+                            name="payment_details[bank_name]" 
+                            placeholder="Bank / Account Name"
+                            class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
+                        </div>
+                        
+                        <div class="mb-4">
+                         <label for="bank_accnum" class="block text-sm font-medium text-gray-700">Bank Account Number</label>
+                        <input type="text" 
+                            name="payment_details[bank_accnum]" 
+                            placeholder="Account Number"
+                            class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
+                        </div>
+                       
+                        <div class="mb-4">
+                        <label for="bank_address" class="block text-sm font-medium text-gray-700">Bank Address</label>
+                        <input type="text" 
+                            name="payment_details[bank_address]" 
+                            placeholder="Bank Address / Check No."
+                            class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
+                        </div> 
                 </div>
             </div>
 
@@ -124,4 +147,18 @@
         </form>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const radios = document.querySelectorAll('input[name="mode_of_payment_id"]');
+    const paymentDetails = document.getElementById('payment-details');
+
+    radios.forEach(radio => {
+        radio.addEventListener('change', function () {
+            if (this.checked) {
+                paymentDetails.classList.remove('hidden');
+            }
+        });
+    });
+});
+</script>
 @endsection

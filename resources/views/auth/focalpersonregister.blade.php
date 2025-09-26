@@ -91,22 +91,6 @@
                 @enderror
             </div>
 
-            <!-- Program -->
-            <div class="mb-4">
-                <label class="block text-gray-700">Program</label>
-                <select name="program_id" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring focus:ring-blue-200">
-
-                    @foreach ($programs as $program)
-                        <option value="{{ $program->id }}" {{ old('program_id') == $program->id ? 'selected' : '' }}>
-                            {{ $program->prcode }} - {{ $program->description }}
-                        </option>
-                    @endforeach
-                </select>
-                @error('program_id')
-                    <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                @enderror
-            </div>
-
             <!-- Responsibility Center -->
             <div class="mb-4">
                 <label class="block text-gray-700">Responsibility Center</label>

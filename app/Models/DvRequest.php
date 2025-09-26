@@ -21,6 +21,8 @@ class DvRequest extends Model
         'particulars',
         'amount',
         'status',
+        'locked_at',
+        'locked_by',
     ];
 
     public function logs()
@@ -41,7 +43,25 @@ class DvRequest extends Model
     {
         return $this->hasOne(OrsRequest::class, 'dv_request_id');
     }
+    public function modeOfPayments()
+    {
+        return $this->belongsToMany(ModeOfPayment::class, 'dv_request_mode_of_payment')
+                    ->using(DvRequestModeOfPayment::class)
+                    ->withPivot('id') // pivot I
+                    ->withTimestamps();
+    }
 
+    public function paymentDetails()
+    {
+        return $this->hasManyThrough(
+            PaymentDetail::class,
+            DvRequestModeOfPayment::class,
+            'dv_request_id', // FK on pivot
+            'dv_request_mode_of_payment_id', // FK on details
+            'id', // local DV id
+            'id'  // pivot id
+        );
+    }
 
     public function program()
     {

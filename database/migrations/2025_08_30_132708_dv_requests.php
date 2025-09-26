@@ -31,12 +31,14 @@ return new class extends Migration
                 ->nullable()
                 ->constrained('responcenters')
                 ->restrictOnDelete();
-    
-            // request details
+            
             $table->string('particulars');
             $table->decimal('amount', 15, 2);
             $table->string('status')->default('submitted');
+            $table->unsignedBigInteger('locked_by')->nullable();
+            $table->timestamp('locked_at')->nullable();
             $table->timestamps();
+           
         });
     }
 

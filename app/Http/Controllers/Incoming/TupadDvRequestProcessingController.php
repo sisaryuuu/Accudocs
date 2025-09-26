@@ -8,8 +8,8 @@ use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Models\Notification;
 use App\Services\PusherService;
-
-
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class TupadDvRequestProcessingController extends Controller
 {
@@ -22,9 +22,16 @@ class TupadDvRequestProcessingController extends Controller
 
  public function index(Request $request)
     {
-        $query = DvRequest::whereHas('program', fn($q) =>
-                        $q->where('prcode', 'TUPAD'))
-                    ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process']);
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
+
+        $query = DvRequest::whereHas('program', fn($q) =>$q->where('prcode', 'TUPAD'))
+                    ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
+                    ->where(function ($q) use ($currentUserId,$lockDuration){
+                        $q->whereNull('locked_by')
+                        ->orWhere('locked_by',$currentUserId)
+                        ->orWhere('locked_at','<=',$lockDuration);
+                    });
 
 
         if ($request->filled('search')) {
@@ -43,8 +50,8 @@ class TupadDvRequestProcessingController extends Controller
         }
 
         $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
-
-        return view('Incoming.TUPAD.index', compact('dvRequests'));
+         $sidebarCounts = $this->getSidebarCounts();
+        return view('Incoming.TUPAD.index', compact('dvRequests','sidebarCounts'));
     }
     
     public function show($id)
@@ -53,54 +60,115 @@ class TupadDvRequestProcessingController extends Controller
                         ->whereHas('program', fn($q) => 
                             $q->where('prcode', 'TUPAD')) 
                         ->findOrFail($id);
+    $lockDuration = now()->subMinutes(10);
+    $currentUserId = auth()->id();
 
-    if ($dvRequest->status == 'IMSD_verified') {
+     if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
+        return redirect()->route('Incoming.TUPAD.index')
+            ->with('error', 'This DV Request is currently being processed by another user.');
+    }
+
+    if (!$dvRequest->locked_by || $dvRequest->locked_at <= $lockDuration) {
         $dvRequest->update([
-            'status'            => 'Incoming-TUPAD_in_process',
-            'accountingunit_id' => auth()->id(),
-            'received_by'       => auth()->id(),
-            'received_at'       => now(),
+            'locked_by' => $currentUserId,
+            'locked_at' => now(),
         ]);
-
-        $focalId = $dvRequest->focalperson_id;
-        $status = 'Incoming-TUPAD_in_process';
-        $action = 'Received';
-        $remarks = $request->remarks ?? 'Request received by Incoming for TUPAD processing';
-
-                $notification = Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $status,
-                    'action'          => $action,
-                    'remarks'        => $remarks,
-                ]);
-
-        if ($dvRequest->focalperson_id) {
-            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => $status,
-                'remarks'       => $remarks,
-                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-        }
-        $this->logAction(
-            $dvRequest->id, 
-            'Incoming',                    
-            'Incoming-TUPAD_in_process',     
-            'Request received by Incoming for TUPAD processing' 
-        );
-}
+    }
     $lastLog = $dvRequest->logs()->latest()->first();
     $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
 
     return view('Incoming.TUPAD.verifytupaddv', compact('dvRequest', 'lastStep'));
 }
+ public function receive(Request $request, $id)
+{
+    try {
+        $dvRequest = DvRequest::findOrFail($id);
+        
+        if ($dvRequest->status !== 'IMSD_verified') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This request has already been received.'  
+            ], 422);
+        }
+        
+        $receivedAt = now();
+        
+        $dvRequest->update([
+            'status'           => 'Incoming-TUPAD_received',
+            'accountingunit_id'=> auth()->id(),
+            'received_by'      => auth()->id(),
+            'received_at'      => $receivedAt,
+            'locked_by'        => auth()->id(),
+            'locked_at'        => $receivedAt,
+        ]);
+        $this->logAction(
+            $dvRequest->id,
+            'Incoming',
+            'Incoming-TUPAD_received',
+            'Request officially received by Incoming-TUPAD'
+        );
+        
+       
+        $focalId = $dvRequest->focalperson_id;
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => 'Incoming-TUPAD_received',
+            'action'         => 'Received',
+            'remarks'        => 'Request officially received by Incoming-TUPAD',
+        ]);
+        
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'Incoming-TUPAD_received',
+            'remarks'       => 'Request officially received by Incoming-TUPAD',
+            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+        
+       
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Document has been received by  Incoming-TUPAD.',
+                'data' => [
+                    'id' => $dvRequest->id,
+                    'status' => 'Incoming-TUPAD_received',
+                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
+        }
+        
+        return redirect()->route('Incoming.TUPAD.index')
+            ->with('success', 'Document has been received by Incoming-TUPAD.');
+            
+    } catch (\Exception $e) {
+        // Log the error
+        \Log::error('Error receiving DV request: ' . $e->getMessage());
+        
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while processing the request.'
+            ], 500);
+        }
+        
+        return redirect()->back()->with('error', 'An error occurred while processing the request.');
+    }
+}
  public function fetchtupadRecent()
+ 
     {
+          $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
         $recentDvRequests = DvRequest::with('focalPerson')
         ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
-        ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process'])
+        ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
         ->whereNotNull('focalperson_id')
+         ->where(function ($q) use ($currentUserId,$lockDuration){
+        $q->whereNull('locked_by')
+        ->orWhere('locked_by',$currentUserId)
+        ->orWhere('locked_at','<=',$lockDuration);
+        })
         ->latest()
         ->take(5)
         ->get();
@@ -110,11 +178,19 @@ class TupadDvRequestProcessingController extends Controller
 
      public function fetchAll(Request $request)
     {
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
+
         $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
             ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
-            ->whereIn('status', ['IMSD_verified','Incoming-TUPAD_in_process']);
+            ->whereIn('status', ['IMSD_verified','Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
+            ->where(function($q) use ($currentUserId,$lockDuration){
+                $q->whereNull('locked_by')
+                ->orWhere('locked_by',$currentUserId)
+                ->orwhere('locked_at','<=',$lockDuration);
+            });
 
-        // 🔍 Apply search filter for AJAX
+  
         if ($request->filled('search')) {
             $search = $request->input('search');
 
@@ -148,7 +224,12 @@ class TupadDvRequestProcessingController extends Controller
     public function fetch($id)
     {
         $dvRequest = DvRequest::with(['focalPerson', 'program','respocenter','accountingUnit'])
-            ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
+            ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
+             ->where(function($q) use ($currentUserId,$lockDuration){
+                $q->whereNull('locked_by')
+                ->orWhere('locked_by',$currentUserId)
+                ->orwhere('locked_at','<=',$lockDuration);
+            })
             ->findOrFail($id);
         
         return response()->json([
@@ -174,10 +255,12 @@ class TupadDvRequestProcessingController extends Controller
         $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
                               ->findOrFail($id);
 
-        $dvRequest->status = 'Incoming-TUPAD_verified';
-        $dvRequest->save();
-          
-
+                              
+         DvRequest::where('id', $dvRequest->id)->update([
+        'status'     => 'Incoming-TUPAD_verified',
+        'locked_by'  => null,
+        'locked_at'  => null,
+      ]);
          $focalId = $dvRequest->focalperson_id;
                 $status = 'Incoming-TUPAD_verified';
                 $action = 'Approved';
@@ -199,7 +282,6 @@ class TupadDvRequestProcessingController extends Controller
                 'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
         }
-
      $this->logAction(
             $dvRequest->id,
             'Incoming',
@@ -207,7 +289,7 @@ class TupadDvRequestProcessingController extends Controller
             $request->remarks ?? 'DV Request approved forwarded to Budget Officer.'
         );
 
-        return redirect()->route('Incoming.TUPAD.dvrequests.withid', $dvRequest->id)
+        return redirect()->route('Incoming.TUPAD.index', $dvRequest->id)
                          ->with('success', 'DV Request Approved.');
     }
         public function reject(Request $request, $id)
@@ -257,19 +339,67 @@ class TupadDvRequestProcessingController extends Controller
 
     
     public function redirectToFirstPending()
-    {
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
-                              ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process'])
-                              ->orderBy('created_at', 'asc')
-                              ->first();
+{
+    $currentUserId = auth()->id();
+    $lockDuration = now()->subMinutes(10);
 
-        if (!$dvRequest) {
-            return redirect()->route('Incoming.TUPAD.index')
-                             ->with('info', 'No TUPAD DV requests pending verification.');
+    // Get all pending GIP requests
+    $pendingRequests = DvRequest::whereHas('program', fn($q) => 
+                                $q->where('prcode', 'TUPAD')) 
+                            ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
+                            ->orderBy('created_at', 'asc')
+                            ->get();
+
+    if ($pendingRequests->isEmpty()) {
+        return redirect()->route('Incoming.TUPAD.index')
+                         ->with('info', 'No TUPAD DV requests pending verification.');
+    }
+
+    // Check for one you can work on (unlocked or locked by you, or expired lock)
+    $available = $pendingRequests->first(function ($req) use ($currentUserId, $lockDuration) {
+        return !$req->locked_by 
+            || $req->locked_by == $currentUserId 
+            || $req->locked_at <= $lockDuration;
+    });
+
+    if ($available) {
+        return redirect()->route('Incoming.TUPAD.dvrequests.withid', $available->id);
+    }
+
+    // If all are locked by others
+    return redirect()->route('Incoming.TUPAD.index')
+                     ->with('info', 'All pending TUPAD DV requests are currently locked by other users.');
+}
+
+      public function releaseLock($id)
+    {
+        $dvRequest = DvRequest::findOrFail($id);
+
+        if ($dvRequest->locked_by === auth()->id()) {
+            $dvRequest->update([
+                'locked_by' => null,
+                'locked_at' => null,
+            ]);
         }
 
-        return redirect()->route('Incoming.TUPAD.dvrequests.withid', $dvRequest->id);
+        return response()->json(['success' => true]);
     }
+
+    public function refreshLock(Request $request, $id)
+    {
+        $dvRequest = DvRequest::findOrFail($id);
+
+        if ($dvRequest->locked_by !== auth()->id()) {
+            return response()->json(['error' => 'Not authorized to refresh lock'], 403);
+        }
+
+        $dvRequest->update([
+            'locked_at' => now(), // refresh timestamp
+        ]);
+
+        return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
+    }
+
 public function history()
 {
     $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'accountingUnit'])

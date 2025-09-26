@@ -9,6 +9,7 @@ use App\Services\PusherService;
 use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class DvRequestProcessingController extends Controller
 
@@ -20,16 +21,22 @@ class DvRequestProcessingController extends Controller
         $this->pusher = $pusher;
     }
 
-        // Index method: list all DV requests pending IMSD processing
+            // Index method: list all DV requests pending IMSD processing
         public function index(Request $request)
     {
-        $query = DvRequest::query()
-            ->whereIn('status', ['submitted', 'IMSD_in_process']);
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
 
-        // Apply search filter
+        $query = DvRequest::query()
+            ->whereIn('status', ['submitted', 'IMSD_in_process'])
+            ->where(function ($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by') // not locked
+                ->orWhere('locked_by', $currentUserId) // locked by me
+                ->orWhere('locked_at', '<=', $lockDuration); // lock expired
+            });
+
         if ($request->filled('search')) {
             $search = $request->input('search');
-
             $query->where(function ($q) use ($search) {
                 $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
                 ->orWhereHas('focalPerson', fn($fp) =>
@@ -43,19 +50,28 @@ class DvRequestProcessingController extends Controller
         }
 
         $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
-
-        return view('RegionalOffices.IMSD.index', compact('dvRequests'));
+        $sidebarCounts = $this->getSidebarCounts();
+        
+        return view('RegionalOffices.IMSD.index', compact('dvRequests','sidebarCounts'));
     }
+
 
     // For JSON polling with search
     public function fetchAll(Request $request)
     {
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
+
         $query = DvRequest::with(['focalPerson', 'program', 'respocenter', 'accountingUnit'])
-            ->whereIn('status', ['submitted', 'IMSD_in_process']);
+            ->whereIn('status', ['submitted', 'IMSD_in_process','IMSD_received'])
+            ->where(function ($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by')
+                ->orWhere('locked_by', $currentUserId)
+                ->orWhere('locked_at', '<=', $lockDuration);
+            });
 
         if ($request->filled('search')) {
             $search = $request->input('search');
-
             $query->where(function ($q) use ($search) {
                 $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
                 ->orWhereHas('focalPerson', fn($fp) =>
@@ -96,44 +112,24 @@ class DvRequestProcessingController extends Controller
         ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD']))
         ->findOrFail($id);
 
-        // Automatically mark as IMSD_in_process if just submitted
-            if (strtolower($dvRequest->status) === 'submitted') {
-            $dvRequest->update([
-                'status' => 'IMSD_in_process',
-                'accountingunit_id' => auth()->id(),
-                'received_by' => auth()->id(),
-                'received_at' => now(),
-            ]);
+        $lockDuration   = now()->subMinutes(10);
+        $currentUserId  = auth()->id();
 
-            $this->logAction(
-                $dvRequest->id,
-                'IMSD',               // role
-                'IMSD_in_process',    // status
-                'Request received by IMSD for verification' // remarks
-            );
-               $focalId = $dvRequest->focalperson_id;
-                $status = 'IMSD_in_process';
-                $action = 'Received';
-                $remarks = $request->remarks ?? 'Request received by IMSD for verification';
-
-                $notification = Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $status,
-                    'action'         => $action,
-                    'remarks'        => $remarks,
-                ]);
-
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => $status,
-            'remarks'       => $remarks,
-            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
+        // Check lock
+        if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
+            return redirect()->route('RegionalOffices.IMSD.index')
+                ->with('error', 'This DV Request is currently being processed by another user.');
         }
 
+        // Lock if free or expired
+        if (!$dvRequest->locked_by || $dvRequest->locked_at <= $lockDuration) {
+            $dvRequest->update([
+                'locked_by' => $currentUserId,
+                'locked_at' => now(),
+            ]);
+        }
 
-        // Ensure all checklist items exist
+        // Ensure checklist items exist
         $checklistItems = [
             'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
             'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
@@ -144,27 +140,160 @@ class DvRequestProcessingController extends Controller
             $dvRequest->gipAttachments()->firstOrCreate(['name' => $item], ['is_present' => false]);
         }
 
-        // Determine last step for progress stepper
+        // Stepper
         $lastLog = $dvRequest->logs()->latest()->first();
-        $lastStep = $lastLog ? $lastLog->action : 'Submitted';  
+        $lastStep = $lastLog ? $lastLog->action : 'Submitted';
 
         return view('RegionalOffices.IMSD.verifydv', compact(
             'dvRequest', 'checklistItems', 'lastStep'
         ));
     }
+   public function receive(Request $request, $id)
+{
+    try {
+        $dvRequest = DvRequest::findOrFail($id);
+        
+        if ($dvRequest->status !== 'submitted') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This request has already been received.'
+            ], 422);
+        }
+        
+        $receivedAt = now();
+        
+        $dvRequest->update([
+            'status'           => 'IMSD_received',
+            'accountingunit_id'=> auth()->id(),
+            'received_by'      => auth()->id(),
+            'received_at'      => $receivedAt,
+            'locked_by'        => auth()->id(),
+            'locked_at'        => $receivedAt,
+        ]);
+        
+        // Log
+        $this->logAction(
+            $dvRequest->id,
+            'IMSD',
+            'IMSD_received',
+            'Request officially received by IMSD'
+        );
+        
+        // Notify focal person
+        $focalId = $dvRequest->focalperson_id;
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => 'IMSD_received',
+            'action'         => 'Received',
+            'remarks'        => 'Request officially received by IMSD',
+        ]);
+        
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'IMSD_received',
+            'remarks'       => 'Request officially received by IMSD',
+            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+        
+        // Check if request expects JSON (AJAX)
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Document has been received by IMSD.',
+                'data' => [
+                    'id' => $dvRequest->id,
+                    'status' => 'IMSD_received',
+                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
+        }
+        
+        // Fallback for non-AJAX requests (if needed)
+        return redirect()->route('RegionalOffices.IMSD.index')
+            ->with('success', 'Document has been received by IMSD.');
+            
+    } catch (\Exception $e) {
+        // Log the error
+        \Log::error('Error receiving DV request: ' . $e->getMessage());
+        
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while processing the request.'
+            ], 500);
+        }
+        
+        return redirect()->back()->with('error', 'An error occurred while processing the request.');
+    }
+}
+    public function startProcessing($id)
+{
+    $dvRequest = DvRequest::findOrFail($id);
+
+    if ($dvRequest->status !== 'IMSD_received') {
+        return back()->with('info', 'Request must be received first before processing.');
+    }
+
+    $dvRequest->update([
+        'status'    => 'IMSD_in_process',
+        'locked_by' => auth()->id(),
+        'locked_at' => now(),
+    ]);
+
+    // Log
+    $this->logAction(
+        $dvRequest->id,
+        'IMSD',
+        'IMSD_in_process',
+        'Processing started by IMSD'
+    );
+
+    // Notify focal person
+    $focalId = $dvRequest->focalperson_id;
+    $status  = 'IMSD_in_process';
+    $action  = 'Processing Started';
+    $remarks = 'Request is now being processed by IMSD';
+
+    Notification::create([
+        'focalperson_id' => $focalId,
+        'dv_request_id'  => $dvRequest->id,
+        'status'         => $status,
+        'action'         => $action,
+        'remarks'        => $remarks,
+    ]);
+
+    // Trigger real-time event
+    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+        'dv_request_id' => $dvRequest->id,
+        'status'        => $status,
+        'remarks'       => $remarks,
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
+    return back()->with('success', 'Processing started.');
+}
+
+
     public function fetchimsdRecent()
     {
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
+
         $recentDvRequests = DvRequest::with('focalPerson')
-        ->whereIn('status', ['Submitted', 'IMSD_in_process'])
+            ->whereIn('status', ['submitted', 'IMSD_in_process','IMSD_received'])
             ->whereNotNull('focalperson_id')
+            ->where(function ($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by') // not locked
+                ->orWhere('locked_by', $currentUserId) // locked by me
+                ->orWhere('locked_at', '<=', $lockDuration); // lock expired
+            })
             ->latest()
             ->take(8)
             ->get();
 
         return response()->json($recentDvRequests);
     }
-
-
     public function verify(Request $request, $id)
     {
         $request->validate([
@@ -189,13 +318,13 @@ class DvRequestProcessingController extends Controller
                 $attachment->update(['is_present' => $isPresent]);
             }
         }
-
-        // Mark DV request as verified
-        $dvRequest->update([
+            $dvRequest->update([
             'status' => 'IMSD_verified',
-            'received_by' => auth()->id(),
+            'locked_by' => null,
+            'locked_at' => null,
         ]);
-             $focalId = $dvRequest->focalperson_id;
+        
+        $focalId = $dvRequest->focalperson_id;
         $status = 'IMSD_verified';
         $action = 'Approved'; // or something meaningful for your workflow
         $remarks = $request->remarks ?? 'Request verified by IMSD';
@@ -221,29 +350,75 @@ class DvRequestProcessingController extends Controller
                 'Approved',
                 $request->remarks ?? 'Request verified by IMSD'
             );
-       
+            
         return redirect()->route('RegionalOffices.IMSD.index')
             ->with('success', 'DV Request has been verified successfully.');
     }
 
-    // Redirect to first pending DV request
+        // Redirect to first pending DV request
     public function redirectToFirstPending()
-    {
-        $dvRequest = DvRequest::whereHas('program', fn($q) => 
-                            $q->whereIn('prcode', ['GIP', 'TUPAD']))
-                        ->whereIn('status', ['submitted', 'IMSD_in_process'])
-                        ->orderBy('created_at', 'asc')
-                        ->first();
+{
+    $currentUserId = auth()->id();
+    $lockDuration = now()->subMinutes(10);
 
-        if (!$dvRequest) {
-            return redirect()->route('RegionalOffices.IMSD.index')
-                            ->with('info', 'No DV requests pending IMSD verification.');
-        }
+    // Get all pending GIP requests
+    $pendingRequests = DvRequest::whereHas('program', fn($q) => 
+                                $q->where('prcode', 'GIP','TUPAD')) 
+                            ->whereIn('status', 'submitted')
+                            ->orderBy('created_at', 'asc')
+                            ->get();
 
-        return redirect()->route('RegionalOffices.IMSD.verifydv', ['id' => $dvRequest->id]);
+    if ($pendingRequests->isEmpty()) {
+        return redirect()->route('RegionalOffices.IMSD.index')
+                         ->with('info', 'No IMSD DV requests pending verification.');
     }
 
-    // History log view
+    // Check for one you can work on (unlocked or locked by you, or expired lock)
+    $available = $pendingRequests->first(function ($req) use ($currentUserId, $lockDuration) {
+        return !$req->locked_by 
+            || $req->locked_by == $currentUserId 
+            || $req->locked_at <= $lockDuration;
+    });
+
+    if ($available) {
+        return redirect()->route('RegionalOffices.IMSD.verifydv', $available->id);
+    }
+
+    // If all are locked by others
+    return redirect()->route('RegionalOffices.IMSD.index')
+                     ->with('info', 'All pending GIP DV requests are currently locked by other users.');
+}
+
+      public function releaseLock($id)
+    {
+        $dvRequest = DvRequest::findOrFail($id);
+
+        if ($dvRequest->locked_by === auth()->id()) {
+            $dvRequest->update([
+                'locked_by' => null,
+                'locked_at' => null,
+            ]);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    public function refreshLock(Request $request, $id)
+    {
+        $dvRequest = DvRequest::findOrFail($id);
+
+        if ($dvRequest->locked_by !== auth()->id()) {
+            return response()->json(['error' => 'Not authorized to refresh lock'], 403);
+        }
+
+        $dvRequest->update([
+            'locked_at' => now(), // refresh timestamp
+        ]);
+
+        return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
+    }
+
+
     public function history()
     {
         $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'accountingUnit', 'logs'])
