@@ -221,6 +221,88 @@ public function receive(Request $request, $id)
         return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
 }
+public function startProcessing(Request $request, $id)
+{
+    try {
+        $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
+
+        // ✅ Allow only if already received (ORS_received)
+        if ($dvRequest->status !== 'ORS_received') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Request must be received before processing.'
+            ], 422);
+        }
+
+        $startedAt = now();
+
+        // Update DV request
+        $dvRequest->update([
+            'status'    => 'ORS_in_process',
+            'locked_by' => auth()->id(),
+            'locked_at' => $startedAt,
+        ]);
+
+        // Log action
+        $this->logAction(
+            $dvRequest->id,
+            'Budget_Officer',
+            'ORS_in_process',
+            'Processing started by Budget Officer'
+        );
+
+        // Notify focal person
+        $focalId = $dvRequest->focalperson_id;
+        $status  = 'ORS_in_process';
+        $action  = 'Processing Started';
+        $remarks = $request->remarks ?? 'Request is now being processed by Budget Officer';
+
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => $status,
+            'action'         => $action,
+            'remarks'        => $remarks,
+        ]);
+
+        // Trigger real-time event
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'remarks'       => $remarks,
+            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        // Return JSON for AJAX
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Processing started.',
+                'data' => [
+                    'id'         => $dvRequest->id,
+                    'status'     => $status,
+                    'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
+        }
+
+        // Redirect fallback
+        return redirect()->route('BudgetOfficer.dvrequests.index')
+            ->with('success', 'Processing started.');
+
+    } catch (\Exception $e) {
+        \Log::error('Error starting processing: ' . $e->getMessage());
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while starting processing.'
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while starting processing.');
+    }
+}
 
 
     public function fetchRecent()

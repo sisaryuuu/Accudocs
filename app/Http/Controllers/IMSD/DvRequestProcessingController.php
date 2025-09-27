@@ -227,51 +227,85 @@ class DvRequestProcessingController extends Controller
         return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
 }
-    public function startProcessing($id)
+   public function startProcessing(Request $request, $id)
 {
-    $dvRequest = DvRequest::findOrFail($id);
+    try {
+        $dvRequest = DvRequest::findOrFail($id);
 
-    if ($dvRequest->status !== 'IMSD_received') {
-        return back()->with('info', 'Request must be received first before processing.');
+        if ($dvRequest->status !== 'IMSD_received') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Request must be received first before processing.'
+            ], 422);
+        }
+
+        $startedAt = now();
+
+        $dvRequest->update([
+            'status'    => 'IMSD_in_process',
+            'locked_by' => auth()->id(),
+            'locked_at' => $startedAt,
+        ]);
+
+        // Log
+        $this->logAction(
+            $dvRequest->id,
+            'IMSD',
+            'IMSD_in_process',
+            'Processing started by IMSD'
+        );
+
+        // Notify focal person
+        $focalId = $dvRequest->focalperson_id;
+        $status  = 'IMSD_in_process';
+        $action  = 'Processing Started';
+        $remarks = 'Request is now being processed by IMSD';
+
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => $status,
+            'action'         => $action,
+            'remarks'        => $remarks,
+        ]);
+
+        // Trigger real-time event
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'remarks'       => $remarks,
+            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        // JSON response for AJAX
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Processing started.',
+                'data' => [
+                    'id'         => $dvRequest->id,
+                    'status'     => $status,
+                    'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
+        }
+
+        // Fallback redirect
+        return redirect()->route('RegionalOffices.IMSD.index')
+            ->with('success', 'Processing started.');
+
+    } catch (\Exception $e) {
+        \Log::error('Error starting processing: ' . $e->getMessage());
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while starting processing.'
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while starting processing.');
     }
-
-    $dvRequest->update([
-        'status'    => 'IMSD_in_process',
-        'locked_by' => auth()->id(),
-        'locked_at' => now(),
-    ]);
-
-    // Log
-    $this->logAction(
-        $dvRequest->id,
-        'IMSD',
-        'IMSD_in_process',
-        'Processing started by IMSD'
-    );
-
-    // Notify focal person
-    $focalId = $dvRequest->focalperson_id;
-    $status  = 'IMSD_in_process';
-    $action  = 'Processing Started';
-    $remarks = 'Request is now being processed by IMSD';
-
-    Notification::create([
-        'focalperson_id' => $focalId,
-        'dv_request_id'  => $dvRequest->id,
-        'status'         => $status,
-        'action'         => $action,
-        'remarks'        => $remarks,
-    ]);
-
-    // Trigger real-time event
-    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-        'dv_request_id' => $dvRequest->id,
-        'status'        => $status,
-        'remarks'       => $remarks,
-        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-    ]);
-
-    return back()->with('success', 'Processing started.');
 }
 
 
@@ -363,8 +397,8 @@ class DvRequestProcessingController extends Controller
 
     // Get all pending GIP requests
     $pendingRequests = DvRequest::whereHas('program', fn($q) => 
-                                $q->where('prcode', 'GIP','TUPAD')) 
-                            ->whereIn('status', 'submitted')
+                                $q->whereIn('prcode', ['GIP','TUPAD'])) 
+                            ->whereIn('status', ['submitted'])
                             ->orderBy('created_at', 'asc')
                             ->get();
 
@@ -397,6 +431,7 @@ class DvRequestProcessingController extends Controller
             $dvRequest->update([
                 'locked_by' => null,
                 'locked_at' => null,
+                'status'    => 'submitted',
             ]);
         }
 

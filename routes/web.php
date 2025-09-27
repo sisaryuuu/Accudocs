@@ -132,6 +132,9 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
     ->name('RegionalOffices.IMSD.verifydv');
      Route::post('/dvrequests/{id}/receive', [DvRequestProcessingController::class, 'receive'])
     ->name('IMSD.dvrequests.receive');
+    Route::post('/dvrequests/{id}/start-processing', 
+    [DvRequestProcessingController::class, 'startProcessing'])->name('IMSD.dvrequests.startProcessing');
+
     Route::post('/dvrequests/{id}/verify', [DvRequestProcessingController::class, 'verify'])
     ->name('IMSD.dvrequests.verify');
     Route::get('/history', [DvRequestProcessingController::class, 'history'])
@@ -168,7 +171,11 @@ Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->gr
     ->middleware('permission:gip.view')
     ->name('Incoming.GIP.dvrequests.withid');
     Route::post('/dvrequests/{id}/receive', [GIPDvRequestProcessingController::class, 'receive'])
+    ->middleware('permission:gip.approve')
     ->name('Incoming.GIP.dvrequests.receive');
+     Route::post('/dvrequests/{id}/start-processing', [GIPDvRequestProcessingController::class, 'startProcessing'])
+     ->middleware('permission:gip.approve')
+    ->name('Incoming.GIP.dvrequests.startProcessing');
     Route::get('/history', [GIPDvRequestProcessingController::class, 'history'])
     ->middleware('permission:gip.view')
     ->name('dvrequests.giphistory');
@@ -203,7 +210,12 @@ Route::middleware(['auth:web', 'role:Incoming-TUPAD'])->prefix('Incoming/TUPAD')
     ->middleware('permission:tupad.view')
     ->name('Incoming.TUPAD.dvrequests.withid');
        Route::post('/dvrequests/{id}/receive', [TupadDvRequestProcessingController::class, 'receive'])
+    ->middleware('permission:tupad.approve')
     ->name('Incoming.TUPAD.dvrequests.receive');
+
+    Route::post('/dvrequests/{id}/start-processing', [TupadDvRequestProcessingController::class, 'startProcessing'])
+    ->middleware('permission:tupad.approve')
+    ->name('dvrequests.startProcessing');
     Route::get('/history', [TupadDvRequestProcessingController::class, 'history'])
     ->middleware('permission:tupad.view')
     ->name('dvrequests.history');
@@ -248,6 +260,8 @@ Route::middleware(['auth:web', 'role:Budget_Officer'])->prefix('/BudgetOfficer')
     ->name('dvrequests.withid');
      Route::post('/dvrequests/{id}/receive', [ObligateDVORSController::class, 'receive'])
     ->name('dvrequests.receive');
+    Route::post('/dvrequests/{id}/start-processing', [ObligateDVORSController::class, 'startProcessing'])
+    ->name('dvrequests.startProcessing');
     Route::get('/history', [ObligateDVORSController::class, 'history'])
     ->middleware('permission:budget.view')
     ->name('dvrequests.loghistory');
@@ -289,6 +303,9 @@ Route::middleware(['auth:web','role:Outgoing'])->prefix('/Outgoing')->name('Outg
         Route::post('/dvrequests/{id}/receive', [OutgoingDvController::class, 'receive'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.receive');
+         Route::post('/dvrequests/{id}/start-processing', [OutgoingDvController::class, 'startProcessing'])
+        ->middleware('permission:outgoing.view')
+        ->name('dvrequests.startProcessing');
         Route::post('/dvrequests/{id}/finalize', [OutgoingDvController::class, 'finalize'])
          ->middleware('permission:outgoing.approve')
          ->name('dvrequests.finalize');

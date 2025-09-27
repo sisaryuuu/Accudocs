@@ -143,33 +143,31 @@
                 </div>
                     <div class="flex justify-end space-x-3" id="button-container">
                     @if($dvRequest->status === 'Incoming-GIP_received')
-                <div class="flex justify-end">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Approve
+                    <button type="button"
+                        onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
+                        class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                        id="start-btn">
+                        <span class="button-text">Start Processing</span>
+                        <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
                     </button>
-                </div>
-            </form>
-
-            <form action="{{ route('Incoming.GIP.dvrequests.reject', $dvRequest->id) }}" method="POST">
-                @csrf
-                 <div class="flex justify-end">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Reject
-                    </button>
-                </div>
-                </form>
-                </a>
-                <a href="{{ route('Incoming.GIP.index') }}" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                 <div class="flex justify-end">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Cancel
-                    </button>
-                </div>
-                </a>
-             @elseif($dvRequest->status === 'IMSD_verified')
+                        <a href="{{ route('Incoming.GIP.index') }} "
+                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            Back
+                        </a>
+                     @elseif($dvRequest->status === 'Incoming-GIP_in_process')
+                        {{-- Verify + Back --}}
+                        <button type="submit"
+                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            Verify
+                        </button>
+                        <a href="{{ route('Incoming.GIP.index') }}"
+                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            Back
+                        </a>
+                    @elseif($dvRequest->status === 'IMSD_verified')
                         <button type="button"
                             onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
@@ -191,6 +189,10 @@
                         </a>
                     @endif
                 </div>
+
+              
+            </form>
+        </div>
                     </div>
         </div>
     <!-- Sidebar -->
@@ -260,70 +262,89 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
             body: formData
         });
 
-        let data;
-        const contentType = response.headers.get('content-type');
-        
-        // Try to parse JSON response
-        try {
-            const responseText = await response.text();
-            console.log('Response:', responseText); // Debug log
-            data = JSON.parse(responseText);
-        } catch (parseError) {
-            console.error('JSON Parse Error:', parseError);
-            console.log('Raw response:', await response.text());
-            throw new Error('Server returned invalid JSON response');
-        }
-        
-        if (response.ok && data.success) {
-            // Show success message using the message from backend
+        const responseText = await response.text();
+        let data = JSON.parse(responseText);
+
+      if (response.ok && data.success) {
             showMessage(data.message, 'success');
-            
-            // Update the button container to show Verify and Cancel buttons
-            updateButtonsToVerifyMode(dvRequestId);
-            
-            // Update any displayed timestamps or status if needed
-            if (data.data) {
-                console.log('Updated status:', data.data.status);
-                console.log('Received at:', data.data.received_at);
-            }
-            
-            // Reload recent requests
+            updateButtonsToStartProcessingMode(dvRequestId);
             loadRecentRequests();
-            
-        } else if (!response.ok) {
-            // Handle HTTP error responses
-            if (response.status === 422) {
-                throw new Error(data.message || 'Validation error occurred');
-            } else if (response.status === 500) {
-                throw new Error(data.message || 'Server error occurred');
-            } else {
-                throw new Error(data.message || `HTTP ${response.status} error`);
-            }
         } else {
-            throw new Error(data.message || 'Unknown error occurred');
+            throw new Error(data.message || 'Error receiving request');
         }
-        
     } catch (error) {
-        console.error('Full Error Details:', error);
-        
-        let errorMessage = 'An error occurred while receiving the request';
-        
-        if (error.message.includes('JSON')) {
-            errorMessage = 'Server response error. Please try refreshing the page.';
-        } else if (error.message) {
-            errorMessage = error.message;
-        }
-        
-        showMessage(errorMessage, 'error');
-        
-        // Reset button state on error
+        console.error('Receive Error:', error);
+        showMessage(error.message || 'Failed to receive request', 'error');
         buttonElement.disabled = false;
         buttonText.textContent = 'Receive';
         spinner.classList.add('hidden');
     }
-}
+    // Reset button state on error
+        buttonElement.disabled = false;
+        buttonText.textContent = 'Receive';
+        spinner.classList.add('hidden');
+   
+       
+}   
+async function handleStartProcessing(dvRequestId, buttonElement) {
+    const spinner = document.getElementById('start-loading-spinner');
+    const buttonText = buttonElement.querySelector('.button-text');
+    
+    buttonElement.disabled = true;
+    buttonText.textContent = 'Starting...';
+    spinner.classList.remove('hidden');
+    
+    try {
+        const formData = new FormData();
+        formData.append('_token', document.querySelector('input[name="_token"]').value);
+        
+        const response = await fetch(`/Incoming/GIP/dvrequests/${dvRequestId}/start-processing`, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
+            },
+            body: formData
+        });
 
-// Function to update buttons to verify mode
+        const responseText = await response.text();
+        let data = JSON.parse(responseText);
+
+        if (response.ok && data.success) {
+            showMessage(data.message, 'success');
+            updateButtonsToVerifyMode(dvRequestId);
+            loadRecentRequests();
+        } else {
+            throw new Error(data.message || 'Error starting processing');
+        }
+    } catch (error) {
+        console.error('Start Processing Error:', error);
+        showMessage(error.message || 'Failed to start processing', 'error');
+        buttonElement.disabled = false;
+        buttonText.textContent = 'Start Processing';
+        spinner.classList.add('hidden');
+    }
+}
+function updateButtonsToStartProcessingMode(dvRequestId) {
+    const buttonContainer = document.getElementById('button-container');
+    buttonContainer.innerHTML = `
+        <button type="button"
+            onclick="handleStartProcessing(${dvRequestId}, this)"
+            class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+            id="start-btn">
+            <span class="button-text">Start Processing</span>
+            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </button>
+          <a href="{{ route('Incoming.GIP.index') }}"
+                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            Back
+                        </a>
+    `;
+}
 function updateButtonsToVerifyMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
     

@@ -68,24 +68,34 @@
                         <input type="text" value="₱{{ number_format($dvRequest->amount, 2) }}" 
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                     </div>
-                          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                     @if($mop->pivot->paymentDetail)
-                        <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Name</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Address</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
-                @else
-                        <p class="text-xs text-gray-400">No payment details available</p>
-                @endif
                 </div>
+                
+                <!-- Payment Details Section -->
+                @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
+                    @foreach($dvRequest->modeOfPayments as $mop)
+                        @if($mop->pivot && $mop->pivot->paymentDetail)
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Bank Name</label>
+                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
+                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Bank Address</label>
+                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                                </div>
+                            </div>
+                            @break
+                        @endif
+                    @endforeach
+                    @if(!$dvRequest->modeOfPayments->contains(function($mop) { return $mop->pivot && $mop->pivot->paymentDetail; }))
+                        <p class="text-xs text-gray-400">No payment details available</p>
+                    @endif
+                @endif
+
                 <!-- UACS Code -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">UACS Code</label>
@@ -139,7 +149,7 @@
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                     </div>
                 </div>
-
+  
                 <!-- Remarks -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Remarks / Notes</label>
@@ -147,21 +157,23 @@
                               class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm text-sm"
                               placeholder="Enter remarks or notes...">{{ old('remarks') }}</textarea>
                 </div>
+                
                 <div id="button-container" class="flex justify-end space-x-3">
                   @if($dvRequest->status === 'ORS_received')
-                <!-- Actions -->
-                <div class="flex justify-end space-x-3">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Obligate
+                  <button type="button"
+                        onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
+                        class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                        id="start-btn">
+                        <span class="button-text">Start Processing</span>
+                        <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
                     </button>
-                    <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        onclick="releaseLock(event, {{ $dvRequest->id }})"
-                       class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Cancel
-                    </a>
-                </div>
-            </form>
+                        <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
+                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            Back
+                        </a>
               @elseif($dvRequest->status === 'Incoming-GIP_verified')
                   <button type="button"
                             onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
@@ -173,7 +185,7 @@
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                         </button>
-                          <a href="{{ route('BudgetOfficer.dvrequests.index') }} "
+                          <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
                         class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
                             Back
                         </a>
@@ -188,24 +200,51 @@
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                         </button>
-                          <a href="{{ route('BudgetOfficer.dvrequests.index') }} "
+                          <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
                         class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
                             Back
                         </a>
+                @elseif($dvRequest->status === 'Incoming-TUPAD_in_process')
+                <div class="flex justify-end space-x-3">
+                    <button type="submit" 
+                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                        Obligate
+                    </button>
+                    <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
+                        onclick="releaseLock(event, {{ $dvRequest->id }})"
+                       class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                        Cancel
+                    </a>
+                </div>
+                @elseif($dvRequest->status === 'Incoming-GIP_in_process')
+                <div class="flex justify-end space-x-3">
+                    <button type="submit" 
+                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                        Obligate
+                    </button>
+                    <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
+                        onclick="releaseLock(event, {{ $dvRequest->id }})"
+                       class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                        Cancel
+                    </a>
+                </div>
                    @else
                         <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
                         class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
                             Back
                         </a>
                     @endif
+                </div>
+            </form>
         </div>
 
         <!-- Sidebar -->
         <div class="lg:col-span-1">
             <div class="bg-white shadow-md rounded-xl p-6">
-                                <ul id="recent-requests" class="space-y-3">
-                        <li class="text-sm text-gray-500">Loading...</li>
-                    </ul>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Requests</h3>
+                <ul id="recent-requests" class="space-y-3">
+                    <li class="text-sm text-gray-500">Loading...</li>
+                </ul>
             </div>
         </div>
 
@@ -213,8 +252,8 @@
 </div>
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
 @endsection
-<script>
 
+<script>
 // Function to show toast messages
 function showMessage(message, type = 'success') {
     const container = document.getElementById('message-container');
@@ -268,67 +307,88 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
             body: formData
         });
 
-        let data;
-        const contentType = response.headers.get('content-type');
-        
-        // Try to parse JSON response
-        try {
-            const responseText = await response.text();
-            console.log('Response:', responseText); // Debug log
-            data = JSON.parse(responseText);
-        } catch (parseError) {
-            console.error('JSON Parse Error:', parseError);
-            console.log('Raw response:', await response.text());
-            throw new Error('Server returned invalid JSON response');
-        }
-        
+        const responseText = await response.text();
+        const data = JSON.parse(responseText);
+
         if (response.ok && data.success) {
-            // Show success message using the message from backend
             showMessage(data.message, 'success');
-            
-            // Update the button container to show Verify and Cancel buttons
-            updateButtonsToVerifyMode(dvRequestId);
-            
-            // Update any displayed timestamps or status if needed
-            if (data.data) {
-                console.log('Updated status:', data.data.status);
-                console.log('Received at:', data.data.received_at);
-            }
-            
-            // Reload recent requests
+            updateButtonsToStartProcessingMode(dvRequestId);
             loadRecentRequests();
-            
-        } else if (!response.ok) {
-            // Handle HTTP error responses
-            if (response.status === 422) {
-                throw new Error(data.message || 'Validation error occurred');
-            } else if (response.status === 500) {
-                throw new Error(data.message || 'Server error occurred');
-            } else {
-                throw new Error(data.message || `HTTP ${response.status} error`);
-            }
         } else {
-            throw new Error(data.message || 'Unknown error occurred');
+            throw new Error(data.message || 'Error receiving request');
         }
-        
     } catch (error) {
-        console.error('Full Error Details:', error);
-        
-        let errorMessage = 'An error occurred while receiving the request';
-        
-        if (error.message.includes('JSON')) {
-            errorMessage = 'Server response error. Please try refreshing the page.';
-        } else if (error.message) {
-            errorMessage = error.message;
-        }
-        
-        showMessage(errorMessage, 'error');
-        
-        // Reset button state on error
+        console.error('Receive Error:', error);
+        showMessage(error.message || 'Failed to receive request', 'error');
+    } finally {
+        // Reset button state
         buttonElement.disabled = false;
         buttonText.textContent = 'Receive';
         spinner.classList.add('hidden');
     }
+}
+
+async function handleStartProcessing(dvRequestId, buttonElement) {
+    const spinner = document.getElementById('start-loading-spinner');
+    const buttonText = buttonElement.querySelector('.button-text');
+    
+    buttonElement.disabled = true;
+    buttonText.textContent = 'Starting...';
+    spinner.classList.remove('hidden');
+    
+    try {
+        const formData = new FormData();
+        formData.append('_token', document.querySelector('input[name="_token"]').value);
+        
+        const response = await fetch(`/BudgetOfficer/dvrequests/${dvRequestId}/start-processing`, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
+            },
+            body: formData
+        });
+
+        const responseText = await response.text();
+        let data = JSON.parse(responseText);
+
+        if (response.ok && data.success) {
+            showMessage(data.message, 'success');
+            updateButtonsToVerifyMode(dvRequestId);
+            loadRecentRequests();
+        } else {
+            throw new Error(data.message || 'Error starting processing');
+        }
+    } catch (error) {
+        console.error('Start Processing Error:', error);
+        showMessage(error.message || 'Failed to start processing', 'error');
+    } finally {
+        // Reset button state
+        buttonElement.disabled = false;
+        buttonText.textContent = 'Start Processing';
+        spinner.classList.add('hidden');
+    }
+}
+
+function updateButtonsToStartProcessingMode(dvRequestId) {
+    const buttonContainer = document.getElementById('button-container');
+    buttonContainer.innerHTML = `
+        <button type="button"
+            onclick="handleStartProcessing(${dvRequestId}, this)"
+            class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+            id="start-btn">
+            <span class="button-text">Start Processing</span>
+            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </button>
+        <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
+            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+            Back
+        </a>
+    `;
 }
 
 // Function to update buttons to verify mode
@@ -336,23 +396,79 @@ function updateButtonsToVerifyMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
     
     buttonContainer.innerHTML = `
-    
         <div class="flex justify-end space-x-3">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Obligate
-                    </button>
-                    <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        onclick="releaseLock(event, {{ $dvRequest->id }})"
-                       class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Cancel
-                    </a>
-    </div>
+            <button type="submit" 
+                    class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                Obligate
+            </button>
+            <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
+                onclick="releaseLock(event, {{ $dvRequest->id }})"
+               class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                Cancel
+            </a>
+        </div>
     `;
+}
+
+// 🔘 Manual release lock button
+function releaseLock(event, id) {
+    event.preventDefault(); // stop normal redirect
+
+    fetch(`/BudgetOfficer/dvrequests/${id}/release-lock`, {
+        method: "POST",
+        headers: {
+            "X-CSRF-TOKEN": "{{ csrf_token() }}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+    }).then(() => {
+        // Redirect after releasing lock
+        window.location.href = "{{ route('BudgetOfficer.dvrequests.index') }}";
+    }).catch(err => {
+        console.error("Release lock failed:", err);
+        // Still redirect to index to avoid stuck state
+        window.location.href = "{{ route('BudgetOfficer.dvrequests.index') }}";
+    });
+}
+
+async function loadRecentRequests() {
+    try {
+        const res = await fetch("{{ route('BudgetOfficer.dvrequests.recent') }}");
+        const data = await res.json();
+        console.log('Recent requests data:', data); // Debug output
+
+        let html = '';
+        if (data.length === 0) {
+            html = `<li class="text-sm text-gray-500">No recent requests.</li>`;
+        } else {
+            data.forEach(r => {
+                html += `
+                    <li>
+                        <a href="/BudgetOfficer/dvrequests/${r.id}" 
+                           class="block p-3 bg-gray-50 hover:bg-blue-50 rounded-lg border border-gray-200 transition">
+                            <p class="text-sm font-medium text-gray-900">
+                                Control #${r.id} • ${r.particulars || ''}
+                            </p>
+                            <p class="text-sm text-gray-600">
+                                ${(r.focal_person?.fname || 'Unknown')} ${(r.focal_person?.lname || '')} • 
+                                ${new Date(r.created_at).toLocaleDateString()}
+                            </p>
+                        </a>
+                    </li>`;
+            });
+        }
+        document.getElementById('recent-requests').innerHTML = html;
+    } catch (e) {
+        console.error("Failed to load recent requests", e);
+        document.getElementById('recent-requests').innerHTML = `<li class="text-sm text-red-500">Failed to load requests</li>`;
+    }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
     const dvRequestId = "{{ $dvRequest->id }}";
+
+    // Load recent requests on page load
+    loadRecentRequests();
 
     // 🔄 Auto-refresh lock every 2 minutes
     const refreshInterval = setInterval(() => {
@@ -376,62 +492,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 🧹 Release lock when user leaves the page
     window.addEventListener("beforeunload", () => {
-        navigator.sendBeacon(`/BudgetOfficerdvrequests/${dvRequestId}/release-lock`, 
+        navigator.sendBeacon(`/BudgetOfficer/dvrequests/${dvRequestId}/release-lock`, 
             JSON.stringify({ _token: "{{ csrf_token() }}" }));
     });
+
+    // Auto-refresh recent requests every 30 seconds
+    setInterval(loadRecentRequests, 30000);
 });
-
-// 🔘 Manual release lock button (if you need it in blade)
-function releaseLock(event, id) {
-    event.preventDefault(); // stop normal redirect
-
-    fetch(`/BudgetOfficer/dvrequests/${id}/release-lock`, {
-        method: "POST",
-        headers: {
-            "X-CSRF-TOKEN": "{{ csrf_token() }}",
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-        }
-    }).then(() => {
-        // Redirect after releasing lock
-        window.location.href = "{{ route('BudgetOfficer.dvrequests.index') }}";
-    }).catch(err => {
-        console.error("Release lock failed:", err);
-        // Still redirect to index to avoid stuck state
-        window.location.href = "{{ route('BudgetOfficer.dvrequests.index') }}";
-    });
-}
-async function loadRecentRequests() {
-    try {
-        const res = await fetch("{{ route('BudgetOfficer.dvrequests.recent') }}");
-        const data = await res.json();
-        console.log(data); // 👀 debug output
-
-        let html = '';
-        if (data.length === 0) {
-            html = `<li class="text-sm text-gray-500">No recent requests.</li>`;
-        } else {
-            data.forEach(r => {
-                html += `
-                    <li>
-                        <a href="/BudgetOfficer/dvrequests/${r.id}" 
-                           class="block p-3 bg-gray-50 hover:bg-blue-50 rounded-lg border border-gray-200 transition">
-                            <p class="text-sm font-medium text-gray-900">
-                                Control #${r.id} • ${r.particulars ?? ''}
-                            </p>
-                            <p class="text-sm text-gray-600">
-                                ${(r.focal_person?.fname ?? 'Unknown')} ${(r.focal_person?.lname ?? '')} • 
-                                ${new Date(r.created_at).toLocaleDateString()}
-                            </p>
-                        </a>
-                    </li>`;
-            });
-        }
-        document.getElementById('recent-requests').innerHTML = html;
-    } catch (e) {
-        console.error("Failed to load recent requests", e);
-    }
-}
-setInterval(loadRecentRequests, 5000);
-loadRecentRequests();
 </script>

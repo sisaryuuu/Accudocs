@@ -142,7 +142,6 @@ class TupadDvRequestProcessingController extends Controller
             ->with('success', 'Document has been received by Incoming-TUPAD.');
             
     } catch (\Exception $e) {
-        // Log the error
         \Log::error('Error receiving DV request: ' . $e->getMessage());
         
         if ($request->expectsJson() || $request->ajax()) {
@@ -155,6 +154,88 @@ class TupadDvRequestProcessingController extends Controller
         return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
 }
+public function startProcessing(Request $request, $id)
+{
+    try {
+        $dvRequest = DvRequest::findOrFail($id);
+
+        if ($dvRequest->status !== 'Incoming-TUPAD_received') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Request must be received first before processing.'
+            ], 422);
+        }
+
+        $startedAt = now();
+
+        $dvRequest->update([
+            'status'    => 'Incoming-TUPAD_in_process',
+            'locked_by' => auth()->id(),
+            'locked_at' => $startedAt,
+        ]);
+
+        // Log
+        $this->logAction(
+            $dvRequest->id,
+            'Incoming',
+            'Incoming-TUPAD_in_process',
+            'Processing started by Incoming-TUPAD',
+        );
+
+        // Notify focal person
+        $focalId = $dvRequest->focalperson_id;
+        $status  = 'Incoming-TUPAD_in_process';
+        $action  = 'Processing Started';
+        $remarks = 'Request is now being processed by Incoming-TUPAD';
+
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => $status,
+            'action'         => $action,
+            'remarks'        => $remarks,
+        ]);
+
+        // Trigger real-time event
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'remarks'       => $remarks,
+            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        // JSON response for AJAX
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Processing started.',
+                'data' => [
+                    'id'         => $dvRequest->id,
+                    'status'     => $status,
+                    'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
+        }
+
+        // Fallback redirect
+        return redirect()->route('Incoming.TUPAD.index')
+            ->with('success', 'Processing started.');
+
+    } catch (\Exception $e) {
+        \Log::error('Error starting processing: ' . $e->getMessage());
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while starting processing.'
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while starting processing.');
+    }
+}
+
+
  public function fetchtupadRecent()
  
     {
@@ -379,6 +460,7 @@ class TupadDvRequestProcessingController extends Controller
             $dvRequest->update([
                 'locked_by' => null,
                 'locked_at' => null,
+                'status'    => 'IMSD_verified', 
             ]);
         }
 
