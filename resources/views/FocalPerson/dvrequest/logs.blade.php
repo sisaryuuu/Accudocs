@@ -65,7 +65,7 @@
         <!-- Main Content -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between">
-                <h3 class="text-lg font-semibold text-gray-900">Activity Timeline</h3>
+                <h3 class="text-lg font-semibold text-gray-900">Activity Timeline  Ref Number: {{ $dvRequest->reference_number }}</h3>
                 <span id="logCount" class="text-sm text-gray-500">{{ $logs->count() }} {{ Str::plural('entry', $logs->count()) }}</span>
             </div>
 
@@ -73,7 +73,6 @@
                 <table class="w-full divide-y divide-gray-200" id="logsTable">
                     <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">#</th>
                         <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actor</th>
                         <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                         <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
@@ -82,12 +81,7 @@
                     <tbody class="bg-white divide-y divide-gray-200" id="logsBody">
                         @foreach($logs as $log)
                             <tr class="hover:bg-gray-50 transition-colors duration-150">
-                                <!-- Step Number -->
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">
-                                        {{ $loop->iteration }}
-                                    </div>
-                                </td>
+                         
 
                                 <!-- Actor -->
                                 <td class="px-6 py-4">

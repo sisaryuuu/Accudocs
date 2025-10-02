@@ -86,16 +86,26 @@ class DvRequestProcessingController extends Controller
 
         $dvRequests = $query->latest()->get();
 
-        $result = $dvRequests->map(fn($request) => [
-            'id'           => $request->id,
-            'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
-            'submitted_to' => auth()->id(),
-            'program'      => $request->program->prcode ?? 'N/A',
-            'respocenter'  => $request->respocenter->rccode ?? 'N/A',
-            'amount'       => number_format($request->amount, 2),
-            'status'       => $request->status,
-            'date'         => $request->created_at->format('M d, Y h:i A'),
-        ]);
+    $result = $dvRequests->map(function ($request) {
+    $base = [
+        'id'             => $request->id,
+        'accounting_control_number' => $request->accounting_control_number,  
+        'submitted_by'   => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+        'submitted_to'   => auth()->id(),
+        'program'        => $request->program->prcode ?? 'N/A',
+        'respocenter'    => $request->respocenter->rccode ?? 'N/A',
+        'amount'         => number_format($request->amount, 2),
+        'status'         => $request->status,
+        'date'           => $request->created_at->format('M d, Y h:i A'),
+    ];
+
+    // Only include per-user sequence if the logged-in user is a focal person
+    if (auth()->guard('focal')->check()) {
+        $base['user_sequence'] = $request->user_sequence;
+    }
+
+    return $base;
+});
 
         return response()->json($result);
     }
@@ -109,7 +119,7 @@ class DvRequestProcessingController extends Controller
             'gipAttachments',
             'logs'
         ])
-        ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD']))
+        ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD','TEV']))
         ->findOrFail($id);
 
         $lockDuration   = now()->subMinutes(10);
@@ -397,7 +407,7 @@ class DvRequestProcessingController extends Controller
 
     // Get all pending GIP requests
     $pendingRequests = DvRequest::whereHas('program', fn($q) => 
-                                $q->whereIn('prcode', ['GIP','TUPAD'])) 
+                                $q->whereIn('prcode', ['GIP','TUPAD','TEV'])) 
                             ->whereIn('status', ['submitted'])
                             ->orderBy('created_at', 'asc')
                             ->get();
@@ -457,7 +467,7 @@ class DvRequestProcessingController extends Controller
     public function history()
     {
         $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'accountingUnit', 'logs'])
-            ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD']))
+            ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD','TEV']))
             ->where('status', 'IMSD_verified')
             ->orderBy('updated_at', 'desc')
             ->get();

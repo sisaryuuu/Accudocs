@@ -22,10 +22,10 @@ class LoginController extends Controller
         'MALSU' => 'Regional Offices.MALSU.index',
         'Incoming-TUPAD' => 'Incoming.TUPAD.index',
         'Incoming-GIP' => 'Incoming.GIP.index',
-        'Incoming-TEV' => 'TEV.IncomingTEV.index',
+        'Incoming-TEV' => 'Incoming.TEV.index',
         'Budget_Officer' => 'BudgetOfficer.dvrequests.index',
         'Outgoing' => 'Outgoing.dvrequests.index',
-        'Accounting_III' => 'Admin.dashboard',
+        'Accounting_III' => 'Accounting.dvrequests.index',
         'Focal_Person' => 'FocalPerson.dvrequest.index',
     ];
 

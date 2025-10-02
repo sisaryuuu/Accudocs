@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted By</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Responsibility Center</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gross Amount</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Submitted</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -195,7 +195,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-600">${req.date}</td>
                      ${
-                            req.status === 'Incoming-GIP_verified' || req.status === 'Incoming-TUPAD_verified'
+                            req.status === 'Incoming-GIP_verified' || req.status === 'Incoming-TUPAD_verified' || req.status === 'Incoming-TEV_verified'
                             ? `<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <button type="button" 
                                     onclick="handleReceiveAction(${req.id}, this)"

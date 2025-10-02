@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Models\Notification;
+use App\Models\TUPADAttachment;
 use App\Services\PusherService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -74,10 +75,17 @@ class TupadDvRequestProcessingController extends Controller
             'locked_at' => now(),
         ]);
     }
+    
+    $attachments = TUPADAttachment::forRequest($dvRequest->id)
+        ->orderBy('sort_order')
+        ->get()
+        ->groupBy('modality');
+
+
     $lastLog = $dvRequest->logs()->latest()->first();
     $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
 
-    return view('Incoming.TUPAD.verifytupaddv', compact('dvRequest', 'lastStep'));
+    return view('Incoming.TUPAD.verifytupaddv', compact('dvRequest', 'lastStep','attachments'));
 }
  public function receive(Request $request, $id)
 {
@@ -232,7 +240,7 @@ public function startProcessing(Request $request, $id)
         }
 
         return redirect()->back()->with('error', 'An error occurred while starting processing.');
-    }
+    }   
 }
 
 
@@ -291,6 +299,7 @@ public function startProcessing(Request $request, $id)
 
         $result = $dvRequests->map(fn($request) => [
             'id'           => $request->id,
+            'accounting_control_number' => $request->accounting_control_number,
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',

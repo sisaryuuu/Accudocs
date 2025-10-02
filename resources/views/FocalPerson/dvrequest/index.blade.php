@@ -77,7 +77,7 @@
                     <table class="w-full divide-y divide-gray-200" id="dvTable">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request No.</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DV Number</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payee Name</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TIN/Employee No.</th>
@@ -95,7 +95,7 @@
                             @foreach($dvRequests as $request)
                             <tr class="hover:bg-gray-50 transition-colors duration-150">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    #{{ $request->control_no ?? $request->id }}
+                                    #{{ $request ->user_sequence }}
                                 </td>
                                <td id="dv-{{ $request->id }}" class="px-6 py-4 whitespace-nowrap text-sm">
                                     @if($request->dv_number)

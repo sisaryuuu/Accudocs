@@ -13,6 +13,9 @@ class DvRequest extends Model
 
     protected $fillable = [
         'dv_number',
+        'reference_number',
+        'accounting_control_number',
+        'user_sequence',     
         'accountingunit_id',
         'received_by_id',
         'focalperson_id',
@@ -32,6 +35,10 @@ class DvRequest extends Model
     public function gipAttachments()
     {
         return $this->hasMany(GIPAttachment::class, 'dv_request_id');
+    }
+    public function tupadAttachments()
+    {
+        return $this->hasMany(TUPADAttachment::class, 'dv_request_id');
     }
 
     public function focalperson()

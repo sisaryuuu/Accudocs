@@ -38,7 +38,7 @@ class ObligateDVORSController extends Controller
     $lockDuration  = now()->subMinutes(10);
 
     $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter','orsRequest'])
-        ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','ORS_received','ORS_onhold'])
+        ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','Incoming-TEV_verified','ORS_received','ORS_onhold'])
         ->where(function ($q) use ($currentUserId, $lockDuration) {
             $q->whereNull('locked_by')                // not locked
               ->orWhere('locked_by', $currentUserId)  // locked by me
@@ -71,7 +71,7 @@ class ObligateDVORSController extends Controller
 
     $pendingRequests = DvRequest::whereHas('program', fn($q) => 
                                 $q->where('prcode', 'GIP','TUPAD')) 
-                            ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','ORS_received'])
+                            ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','Incoming-TEV_verified','ORS_received'])
                             ->orderBy('created_at', 'asc')
                             ->get();
 
@@ -137,7 +137,7 @@ public function receive(Request $request, $id)
         $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
 
         // Only allow if status is verified from IMSD or Incoming
-        if (!in_array($dvRequest->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified'])) {
+        if (!in_array($dvRequest->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','Incoming-TEV_verified'])) {
             return response()->json([
                 'success' => false,
                 'message' => 'This request is not ready to be received by the Budget Officer.'
@@ -150,6 +150,7 @@ public function receive(Request $request, $id)
         if ($dvRequest->orsRequest) {
             $dvRequest->orsRequest->update([
                 'status'      => 'ORS_received',
+                 'gross' => $request->input('amount', $dvRequest->amount), // 🔹 update if sent
                 'received_by' => auth()->id(),
                 'received_at' => $receivedAt,
             ]);
@@ -158,6 +159,7 @@ public function receive(Request $request, $id)
         // Update DV request
         $dvRequest->update([
             'status'      => 'ORS_received',
+            'gross' => $request->input('amount', $dvRequest->amount), // 🔹 update if sent
             'received_by' => auth()->id(),
             'received_at' => $receivedAt,
             'locked_by'   => auth()->id(),
@@ -239,9 +241,16 @@ public function startProcessing(Request $request, $id)
         // Update DV request
         $dvRequest->update([
             'status'    => 'ORS_in_process',
+            'gross' => $request->input('amount', $dvRequest->amount), // 🔹 update if sent
             'locked_by' => auth()->id(),
             'locked_at' => $startedAt,
         ]);
+
+        if ($dvRequest->orsRequest) {
+        $dvRequest->orsRequest->update([
+            'gross' => $dvRequest->amount, // ✅ keep ORS gross in sync
+        ]);
+    }
 
         // Log action
         $this->logAction(
@@ -310,7 +319,7 @@ public function startProcessing(Request $request, $id)
         $currentUserId = auth()->id();
         $lockDuration  = now()->subMinutes(10);
         $recentDvRequest = DvRequest::with('focalPerson') 
-            ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'ORS_received'])
+            ->whereIn('status', ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','Incoming-TEV_verified', 'ORS_received'])
             ->whereNotNull('focalperson_id')
              ->where(function ($q) use ($currentUserId, $lockDuration) {
             $q->whereNull('locked_by')                // not locked
@@ -323,58 +332,153 @@ public function startProcessing(Request $request, $id)
 
         return response()->json($recentDvRequest);
     }
+// Simplified updateAmount method for inline editing
+public function updateAmount(Request $request, $id)
+{
+    $request->validate([
+        'amount'  => 'required|numeric|min:0.01',
+        'remarks' => 'nullable|string|max:1000',
+    ]);
+
+    $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
+
+    // ✅ Only allow while DV is in process, received, or on hold
+    if (!in_array($dvRequest->status, ['ORS_received', 'ORS_in_process', 'ORS_onhold'])) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Amount can only be edited while request is received, in process, or on hold.'
+        ], 422);
+    }
+
+    // Check if user has permission to edit (locked by current user or not locked)
+    $currentUserId = auth()->id();
+    $lockDuration = now()->subMinutes(10);
+    
+    if ($dvRequest->locked_by && 
+        $dvRequest->locked_by !== $currentUserId && 
+        $dvRequest->locked_at >= $lockDuration) {
+        return response()->json([
+            'success' => false,
+            'message' => 'This request is currently locked by another user.'
+        ], 422);
+    }
+
+    $oldAmount = $dvRequest->amount;
+    $newAmount = $request->amount;
+
+    try {
+        DB::beginTransaction();
+
+        // Update DV.amount
+        $dvRequest->update([
+            'amount' => $newAmount,
+            'locked_by' => $currentUserId,
+            'locked_at' => now(),
+        ]);
+
+        // ✅ Always sync ORS.gross with DV.amount
+        if ($dvRequest->orsRequest) {
+            $dvRequest->orsRequest->update([
+                'gross' => $newAmount,
+            ]);
+        }
+
+        // Log action with detailed information
+        $this->logAction(
+            $dvRequest->id,
+            'Budget_Officer',
+            'Amount_Edited',
+            "DV/ORS Gross updated from ₱" . number_format($oldAmount, 2) . 
+            " to ₱" . number_format($newAmount, 2) . 
+            ($request->remarks ? " - Reason: " . $request->remarks : "")
+        );
+
+        // Notify focal person
+        if ($dvRequest->focalperson_id) {
+            Notification::create([
+                'focalperson_id' => $dvRequest->focalperson_id,
+                'dv_request_id'  => $dvRequest->id,
+                'status'         => $dvRequest->status,
+                'action'         => 'Amount Updated',
+                'remarks'        => $request->remarks ?? "Budget Officer updated the DV/ORS gross amount from ₱" . number_format($oldAmount, 2) . " to ₱" . number_format($newAmount, 2),
+            ]);
+
+            // Real-time notification
+            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'amount-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'old_amount' => number_format($oldAmount, 2),
+                'new_amount' => number_format($newAmount, 2),
+                'remarks' => $request->remarks,
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Amount successfully updated.',
+            'data' => [
+                'old_amount' => number_format($oldAmount, 2),
+                'new_amount' => number_format($newAmount, 2),
+                'dv_amount' => number_format($dvRequest->amount, 2),
+                'ors_gross' => number_format($dvRequest->orsRequest->gross ?? 0, 2),
+                'updated_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Error updating amount: ' . $e->getMessage());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred while updating the amount.'
+        ], 500);
+    }
+}
+
 
 public function store(Request $request, $dvRequestId)
 {
     // Validate inputs
     $request->validate([
         'uacscode_id'      => 'required|string|max:255',
-        'adlcode_id'       => 'required|string|max:255',
-        'allotment_class_id'=> 'required|string|max:255',
-        'mfopap_id'        => 'required|string|max:255',
-        'contcurrent_id'   => 'required|string|max:255',
+        'adlcode_id'         => 'required|exists:adlcodes,id',
+        'allotment_class_id' => 'required|exists:allotment_classes,id',
+        'mfopap_id'          => 'required|exists:mfopaps,id',
+        'contcurrent_id'     => 'required|exists:contcurrents,id',
         'gross'            => 'nullable|numeric',
-        'net'              => 'nullable|numeric',
         'remarks'          => 'nullable|string|max:1000',
     ]);
 
-    $dvRequest = DvRequest::findOrFail($dvRequestId);
-
-    $dvRequest->status  = 'ORS_obligated';
-    $dvRequest->locked_by  = null;
-    $dvRequest->locked_at  = null;
-    $dvRequest->save();
-
-    $year = date('Y');
-    $month = date('m');
-    $latestOrs = OrsRequest::latest()->first();
-    $series = $latestOrs ? $latestOrs->id + 1 : 1;
-    $series = str_pad($series, 4, '0', STR_PAD_LEFT);
-
-    // Extract year & month
-    $year = now()->format('Y');
-    $month = now()->format('m');
-
-    $orsNumber = "{$request->allotment_class_id}-{$request->contcurrent_id}-{$year}-{$month}-{$series}";
+    $dvRequest = DvRequest::findOrFail($dvRequestId)->fresh();
+  $dvRequest->update([
+    'status'    => 'ORS_obligated',
+    'locked_by' => null,
+    'locked_at' => null,
+]);
+     $orsNumber = $this->generateOrsNumber(
+        $request->allotment_class_id,
+        $request->contcurrent_id
+    );
 
     $ors = OrsRequest::create([
-        'ors_number'        => $orsNumber,
-        'dv_request_id'     => $dvRequest->id,
-        'focalperson_id'    => $dvRequest->focalperson_id,
-        'accountingunit_id' => $dvRequest->accounting_id ?? null,
-        'uacscode_id'       => $request->uacscode_id,
-        'adlcode_id'        => $request->adlcode_id,
-        'allotment_class_id'=> $request->allotment_class_id,
-        'mfopap_id'         => $request->mfopap_id,
-        'contcurrent_id'    => $request->contcurrent_id,
-        'gross'             => $request->gross,
-        'net'               => $request->net,
-        'remarks'           => $request->remarks,
-        'status'            => 'ORS_received',
-        'obligated_by'      => auth()->id(),
-        'obligated_at'      => now(),
-    ]);
-
+    'ors_number'         => $orsNumber,
+    'dv_request_id'      => $dvRequest->id,
+    'focalperson_id'     => $dvRequest->focalperson_id,
+    'accountingunit_id'  => $dvRequest->accounting_id ?? null,
+    'uacscode_id'        => $request->uacscode_id,
+    'adlcode_id'         => $request->adlcode_id,
+    'allotment_class_id' => $request->allotment_class_id,
+    'mfopap_id'          => $request->mfopap_id,
+    'contcurrent_id'     => $request->contcurrent_id,
+    'gross'              => $dvRequest->amount, // ✅ always equal to DV
+    'remarks'            => $request->remarks,
+    'status'             => 'ORS_obligated',
+    'obligated_by'       => auth()->id(),
+    'obligated_at'       => now(),
+]);
      $ors->update(['status' => 'ORS_obligated']); // ✅ sync status with DV
 
 
@@ -458,18 +562,23 @@ public function store(Request $request, $dvRequestId)
 
         return view('BudgetOfficer.loghistory', compact('orsRequests'));
     }
- private function generateOrsNumber($allotmentClassId, $ccode)
+    private function generateOrsNumber($allotmentClassId, $contcurrentId)
     {
         $year  = now()->format('Y');
         $month = now()->format('m');
 
-        // Count for series
+        // ✅ Fetch actual codes from DB
+        $allotment = AllotmentClass::findOrFail($allotmentClassId)->allotcode;
+        $ccode     = ContinuingOrCurrent::findOrFail($contcurrentId)->ccode;
+
+        // ✅ Series counter (per combo)
         $series = OrsRequest::whereYear('created_at', $year)
             ->whereMonth('created_at', $month)
+            ->where('allotment_class_id', $allotmentClassId)
+            ->where('contcurrent_id', $contcurrentId)
             ->count() + 1;
 
-        $allotment = str_pad($allotmentClassId, 2, '0', STR_PAD_LEFT);
-
+        // ✅ Final format: allotcode-ccode-year-month-series
         return "{$allotment}-{$ccode}-{$year}-{$month}-" . str_pad($series, 4, '0', STR_PAD_LEFT);
     }
     public function onhold(Request $request, $id)

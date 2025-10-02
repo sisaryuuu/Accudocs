@@ -311,6 +311,7 @@ class GIPDvRequestProcessingController extends Controller
 
         $result = $dvRequests->map(fn($request) => [
             'id'           => $request->id,
+            'accounting_control_number' => $request->accounting_control_number,
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',

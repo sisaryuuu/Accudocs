@@ -10,9 +10,14 @@ return new class extends Migration
     {
         Schema::create('dv_requests', function (Blueprint $table) {
             $table->id();
+            $table->string('reference_number')->unique(); 
             $table->string('dv_number')->nullable(); 
-            
-              $table->foreignId('accountingunit_id')
+            $table->unsignedInteger('user_sequence');
+            $table->unique(['focalperson_id', 'user_sequence']);
+            $table->unsignedInteger('accounting_control_number')->nullable();
+            $table->unique(['accountingunit_id', 'accounting_control_number']);
+
+            $table->foreignId('accountingunit_id')
                     ->nullable()
                     ->constrained('accountingunits')
                     ->restrictOnDelete();
@@ -45,6 +50,8 @@ return new class extends Migration
     public function down(): void
     {
          Schema::table('dv_requests', function (Blueprint $table) {
+              $table->dropUnique(['focalperson_id', 'user_sequence']);
+        $table->dropColumn(['control_number', 'user_sequence']);
         $table->dropForeign(['respocenter_id']);
         $table->dropColumn('respocenter_id');
                 $table->dropForeign(['focalperson_id']);
@@ -53,6 +60,7 @@ return new class extends Migration
         $table->dropColumn('program_id');
          $table->dropForeign(['accountingunit_id']);
         $table->dropColumn('accountingunit_id');
+           $table->dropColumn('reference_number');
 
     });
     }

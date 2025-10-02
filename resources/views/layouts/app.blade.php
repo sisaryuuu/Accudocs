@@ -148,13 +148,36 @@
                         {{ request()->routeIs('Incoming.TUPAD.verifytupaddv.withid') ? 'bg-gray-200 font-semibold' : '' }}">
                     Verify Documents
                 </a>
-                <a href="{{ route('dvrequests.history') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.history') ? 'bg-gray-200 font-semibold' : '' }}">
+                <a href="{{ route('dvrequests.tupadhistory') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.tupadhistory') ? 'bg-gray-200 font-semibold' : '' }}">
                     Request History
                 </a>
         
             </div>
             @endrole
+                    @role('Incoming-TEV')
+                <div class="flex space-x-3">
+                    <!-- Received Documents -->
+                    <a href="{{ route('Incoming.TEV.index') }}" 
+                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Incoming.TEV.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                        Received Documents
+                    </a>
+
+                    <!-- Verify Documents -->
+                    <a href="{{ route('Incoming.TEV.verifytevdv') }}" 
+                    class="block py-2 px-4 rounded hover:bg-gray-200
+                            {{ request()->routeIs('Incoming.TEV.dvrequests.withid') ? 'bg-gray-200 font-semibold' : '' }}">
+                        Verify Documents
+                    </a>
+
+                    <!-- Request History -->
+                    <a href="{{ route('dvrequests.tev') }}" 
+                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.tevhistory') ? 'bg-gray-200 font-semibold' : '' }}">
+                        Request History
+                    </a>
+                </div>
+            @endrole
+
 
             @role('Budget_Officer')
                  <div class="flex space-x-3">
@@ -191,6 +214,22 @@
                 </a>
             @endrole
 
+               @role('Accounting_III')
+              <a href="{{ route('Accounting.dvrequests.index') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.dvrequests.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Pending DV Documents
+                </a>
+            <a href="{{ route('Accounting.dvrequest.redirectFirstPending') }}"
+                class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.dvrequest.redirectFirstPending') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Finalize DV Documents
+                </a>
+                <a href="{{ route('Accounting.dvrequests.rancahistory') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.dvrequests.rancahistory') ? 'bg-gray-200 font-semibold' : '' }}">
+                    DV Log History
+                </a>
+            @endrole
+
+
             <!-- Right Section -->
             <div class="flex items-center space-x-4">
                 @php    
@@ -222,7 +261,11 @@
                                 Profile
                                 </a>
                             @endif
-                        <a href="#" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Settings</a>
+                       @role('Admin')
+                            <a href="{{ route('admin.settings.edit') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                Settings
+                            </a>
+                        @endrole
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Logout</button>

@@ -58,7 +58,7 @@
         <div class="mt-6">
             <a href="{{ route('Incoming.TUPAD.index') }}" 
                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg">
-               ← Back to Incoming GIP
+               ← Back To Document Processing
             </a>
         </div>
     </div>

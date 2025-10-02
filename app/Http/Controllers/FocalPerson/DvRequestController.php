@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\FocalPerson;
 
 use App\Http\Controllers\Controller;
+
 use App\Models\DvRequest;
 use App\Notifications\DvRequestUpdated;
 use App\Models\DvRequestLog;
@@ -12,7 +13,9 @@ use App\Models\PaymentDetail;
 use App\Models\DvRequestModeOfPayment;
 use App\Services\PusherService;
 use App\Models\Notification;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 
 class DvRequestController extends Controller
@@ -65,7 +68,7 @@ class DvRequestController extends Controller
     /**
      * Store a newly created DV Request.
      */
-    public function store(Request $request)
+  public function store(Request $request)
 {
     $request->validate([
         'program_id'  => 'required|exists:programs,id',
@@ -78,40 +81,64 @@ class DvRequestController extends Controller
         'payment_details.bank_address'=> 'nullable|string|max:255',
     ]);
 
-    $dv = DvRequest::create([
-       'focalperson_id' => Auth::guard('focal')->id(),
-       'program_id'     => $request->program_id,
-       'amount'         => $request->amount,
-       'particulars'    => $request->particulars,
-       'fname'          => $request->fname,
-       'mi'             => $request->mi,
-       'lname'          => $request->lname,
-       'tin_number'     => $request->tin,
-       'respocenter_id' => $request->respocenter_id,
-       'address'        => $request->address,
-       'status'         => 'submitted',
-    ]);
+    $focalpersonId = Auth::guard('focal')->id();
 
-   $dv->modeOfPayments()->attach($request->mode_of_payment_id);
+    if (!$focalpersonId) {
+        abort(403, 'Only focal persons can submit DV requests.');
+    }
 
-    // 2️⃣ Retrieve the pivot row
-    $dvRequestMop = DvRequestModeOfPayment::where('dv_request_id', $dv->id)
-        ->where('mode_of_payment_id', $request->mode_of_payment_id)
-        ->first();
+    $dv = DB::transaction(function () use ($request, $focalpersonId) {
+        // global control number (accounting)
+        $nextControlNumber = (DvRequest::max('accounting_control_number') ?? 0) + 1;
 
-    // 3️⃣ Save payment details
-    $dvRequestMop->paymentDetail()->create([
-        'bank_name'   => $request->input("payment_details.bank_name"),
-        'bank_accnum' => $request->input("payment_details.bank_accnum"),
-        'bank_address'=> $request->input("payment_details.bank_address"),
-    ]);
-    
+        // per-user sequence
+        $nextUserSequence = (DvRequest::where('focalperson_id', $focalpersonId)->max('user_sequence') ?? 0) + 1;
+
+        // generate a unique reference_number (very unlikely to loop, but we check existence)
+        do {
+            $referenceNumber = 'DVORS-' . strtoupper(Str::random(8)); // e.g. DV-8F3C9A2B
+        } while (DvRequest::where('reference_number', $referenceNumber)->exists());
+
+        // create DV
+        $dv = DvRequest::create([
+            'focalperson_id'            => $focalpersonId,
+            'reference_number'          => $referenceNumber,
+            'accounting_control_number' => $nextControlNumber,
+            'user_sequence'             => $nextUserSequence,
+            'program_id'                => $request->program_id,
+            'amount'                    => $request->amount,
+            'particulars'               => $request->particulars,
+            'fname'                     => $request->fname,
+            'mi'                        => $request->mi,
+            'lname'                     => $request->lname,
+            'tin_number'                => $request->tin,
+            'respocenter_id'            => $request->respocenter_id,
+            'address'                   => $request->address,
+            'status'                    => 'submitted',
+        ]);
+
+        // attach mode of payment
+        $dv->modeOfPayments()->attach($request->mode_of_payment_id);
+
+        // retrieve pivot and save payment details
+        $dvRequestMop = DvRequestModeOfPayment::where('dv_request_id', $dv->id)
+            ->where('mode_of_payment_id', $request->mode_of_payment_id)
+            ->first();
+
+        $dvRequestMop->paymentDetail()->create([
+            'bank_name'   => $request->input("payment_details.bank_name"),
+            'bank_accnum' => $request->input("payment_details.bank_accnum"),
+            'bank_address'=> $request->input("payment_details.bank_address"),
+        ]);
+
+        return $dv;
+    });
+
     $this->logAction($dv, 'SUBMITTED', 'submitted', 'Request submitted by Focal Person');
 
     return redirect()->route('FocalPerson.dvrequest.index')
         ->with('success', 'DV Request submitted successfully!');
 }
-
 
     public function show(DvRequest $dvRequest)
     {

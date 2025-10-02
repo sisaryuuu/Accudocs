@@ -21,7 +21,6 @@
             <tr>
                 <th class="px-6 py-3 text-left">Name</th>
                 <th class="px-6 py-3 text-left">Email</th>
-                <th class="px-6 py-3 text-left">Program</th>
                 <th class="px-6 py-3 text-left">Role</th>   
                 <th class="px-6 py-3 text-right">Actions</th>
             </tr>
@@ -31,7 +30,6 @@
                 <tr class="border-t">
                     <td class="px-6 py-3">{{ $unit->fname }} {{ $unit->mi }} {{ $unit->lname }}</td>
                     <td class="px-6 py-3">{{ $unit->email }}</td>
-                    <td class="px-6 py-3">{{ $unit->program->prcode ?? '-' }}</td>
                     <td class="px-6 py-3">{{ $unit->roles->pluck('name')->join(', ') ?? '-' }}</td>
                     <td class="px-6 py-3 text-right space-x-2">
 

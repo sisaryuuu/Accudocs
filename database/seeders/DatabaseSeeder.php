@@ -20,6 +20,12 @@ class DatabaseSeeder extends Seeder
             AccountingUnitSeeder::class,  // Create accounting units
             FocalPersonSeeder::class,   // Finally create focal persons
             ModeOfPaymentSeeder::class,
+            MfopapsSeeder::class,
+            ContCurrentSeeder::class,
+            AllotmentClassSeeder::class,
+            ADLNumberSeeder::class,
+            TUPADAttachmentSeeder::class,
+            GIPAttachmentSeeder::class,
         ]);
     }
 }

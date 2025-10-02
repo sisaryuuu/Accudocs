@@ -12,7 +12,7 @@
 
             <form action="{{ route('BudgetOfficer.dvrequests.store', $dvRequest->id) }}" method="POST" class="space-y-6">
                 @csrf
-                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Mode of Payment</label>
 
                     @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
@@ -35,7 +35,8 @@
                     @else
                     <p class="text-gray-400">N/A</p>
                     @endif
-                    </div>
+                </div>
+
                 <!-- Basic Info -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -61,15 +62,47 @@
                     <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
 
-                <!-- Amounts -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Gross Amount</label>
-                        <input type="text" value="₱{{ number_format($dvRequest->amount, 2) }}" 
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                    </div>
+                <!-- Enhanced Amounts Section -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Gross Amount</label>
+                    
+                    @if(in_array($dvRequest->status, ['ORS_received', 'ORS_in_process', 'ORS_onhold']))
+                        <!-- Inline Editable Amount -->
+                        <div class="mt-1 relative">
+                            <div class="editable-amount-container flex items-center space-x-2">
+                                <span class="editable-amount cursor-pointer hover:bg-gray-50 px-3 py-2 border border-gray-300 rounded-lg transition-colors duration-200" 
+                                      data-dv-id="{{ $dvRequest->id }}" 
+                                      data-amount="{{ $dvRequest->amount }}"
+                                      title="Click to edit amount">
+                                    ₱{{ number_format($dvRequest->amount, 2) }}
+                                </span>
+                                <button type="button" 
+                                        class="edit-amount-btn text-blue-600 hover:text-blue-800 text-sm"
+                                        data-dv-id="{{ $dvRequest->id }}" 
+                                        data-current-amount="{{ $dvRequest->amount }}"
+                                        title="Edit amount">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <!-- Hidden input for form submission -->
+                            <input type="hidden" name="amount" id="amount-hidden" value="{{ $dvRequest->amount }}">
+                            <p class="text-xs text-green-600 mt-1 flex items-center">
+                                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                </svg>
+                                Amount is editable while ORS is being processed
+                            </p>
+                        </div>
+                    @else
+                        <!-- Read-only Amount -->
+                        <input type="text" value="₱{{ number_format($dvRequest->amount, 2) }}"
+                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm bg-gray-50" readonly>
+                        <p class="text-xs text-gray-500 mt-1">Amount cannot be edited in current status</p>
+                    @endif
                 </div>
-                
+
                 <!-- Payment Details Section -->
                 @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
                     @foreach($dvRequest->modeOfPayments as $mop)
@@ -101,39 +134,63 @@
                     <label class="block text-sm font-medium text-gray-700">UACS Code</label>
                     <input type="text" name="uacscode_id" 
                         class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
-                        placeholder="Type UACS code...">
+                        placeholder="Type UACS code..." required>
                 </div>
 
-                <!-- ADL Code -->
+              <!-- ADL Code -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">ADL Code</label>
-                    <input type="text" name="adlcode_id" 
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
-                        placeholder="Type ADL code...">
+                    <select name="adlcode_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
+                        <option value="">-- Select ADL Code --</option>
+                        @foreach($adlCodes as $adl)
+                            <option value="{{ $adl->id }}">
+                                {{ $adl->adlcode }} - {{ $adl->description }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <!-- Allotment Class -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Allotment Class</label>
-                    <input type="text" name="allotment_class_id" 
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
-                        placeholder="Type Allotment Class...">  
+                    <select name="allotment_class_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
+                        <option value="">-- Select Allotment Class --</option>
+                        @foreach($allotment_classes as $class)
+                            <option value="{{ $class->id }}">
+                                {{ $class->allotcode }} - {{ $class->description }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <!-- MFO/PAP -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">MFO/PAP</label>
-                    <input type="text" name="mfopap_id" 
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
-                        placeholder="Type MFO/PAP...">
+                    <select name="mfopap_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
+                        <option value="">-- Select MFO/PAP --</option>
+                        @foreach($mfopaps as $mfopap)
+                            <option value="{{ $mfopap->id }}">
+                                {{ $mfopap->mfocode }} - {{ $mfopap->mfodescription }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <!-- Continuing/Current -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Continuing/Current</label>
-                    <input type="text" name="contcurrent_id" 
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm"
-                        placeholder="Type Continuing/Current...">
+                    <select name="contcurrent_id" 
+                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
+                        <option value="">-- Select --</option>
+                        @foreach($contcurrents as $cont)
+                            <option value="{{ $cont->id }}">
+                                {{ $cont->ccode }} - {{ $cont->description }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <!-- Received Info -->
@@ -249,12 +306,215 @@
         </div>
 
     </div>
-</div>
+</div>  
+
+<!-- Toast Container -->
+<div class="toast-container position-fixed top-0 end-0 p-3" id="toast-container"></div>
+
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
 @endsection
+<!-- Add jQuery if not already included -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<!-- Add Bootstrap if not already included for toast functionality -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-// Function to show toast messages
+// Inline Amount Editor Class
+class InlineAmountEditor {
+    constructor() {
+        this.init();
+    }
+
+    init() {
+        this.makeAmountsEditable();
+        this.bindEvents();
+    }
+
+    makeAmountsEditable() {
+        $('.editable-amount').each(function() {
+            const currentAmount = $(this).data('amount');
+            const dvId = $(this).data('dv-id');
+            const formattedAmount = parseFloat(currentAmount).toFixed(2);
+            
+            $(this).html(`
+                <span class="amount-display">₱${new Intl.NumberFormat('en-PH').format(currentAmount)}</span>
+                <input type="number" class="form-control form-control-sm amount-input d-none w-32" 
+                       value="${formattedAmount}" min="0.01" step="0.01" data-dv-id="${dvId}">
+            `);
+        });
+    }
+
+    bindEvents() {
+        // Click to edit
+        $(document).on('click', '.amount-display, .edit-amount-btn', (e) => {
+            e.preventDefault();
+            const $target = $(e.target).closest('.editable-amount-container').find('.editable-amount');
+            if ($target.length) {
+                this.startEditing($target);
+            }
+        });
+
+        // Save on Enter or blur
+        $(document).on('keypress', '.amount-input', (e) => {
+            if (e.which === 13) { // Enter key
+                this.saveAmount($(e.target));
+            }
+        });
+
+        $(document).on('blur', '.amount-input', (e) => {
+            this.saveAmount($(e.target));
+        });
+
+        // Cancel on Escape
+        $(document).on('keyup', '.amount-input', (e) => {
+            if (e.which === 27) { // Escape key
+                this.cancelEditing($(e.target));
+            }
+        });
+    }
+
+    startEditing($container) {
+        const $display = $container.find('.amount-display');
+        const $input = $container.find('.amount-input');
+        
+        $display.addClass('d-none');
+        $input.removeClass('d-none').focus().select();
+        
+        // Store original value for cancel
+        $input.data('original-value', $input.val());
+    }
+
+    cancelEditing($input) {
+        const $container = $input.closest('.editable-amount');
+        const $display = $container.find('.amount-display');
+        
+        // Restore original value
+        $input.val($input.data('original-value'));
+        
+        $input.addClass('d-none');
+        $display.removeClass('d-none');
+    }
+
+    saveAmount($input) {
+        const dvId = $input.data('dv-id');
+        const newAmount = parseFloat($input.val());
+        const originalValue = parseFloat($input.data('original-value'));
+        const $container = $input.closest('.editable-amount');
+        const $display = $container.find('.amount-display');
+
+        // Check if value actually changed
+        if (Math.abs(newAmount - originalValue) < 0.01) {
+            this.cancelEditing($input);
+            return;
+        }
+
+        // Validate amount
+        if (!newAmount || newAmount <= 0) {
+            this.showError('Please enter a valid amount greater than 0');
+            $input.focus();
+            return;
+        }
+
+        // Show loading state
+        $input.prop('disabled', true);
+        $container.append('<span class="saving-indicator ml-2"><i class="fas fa-spinner fa-spin text-gray-500"></i></span>');
+
+        // Save via AJAX
+        $.ajax({
+            url: `/BudgetOfficer/dvrequests/${dvId}/update-amount`,
+            method: 'PUT',
+            data: {
+                amount: newAmount,
+                remarks: `Amount updated via inline edit from ₱${this.formatNumber(originalValue)} to ₱${this.formatNumber(newAmount)}`,
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: (response) => {
+                // Update display
+                $display.text('₱' + this.formatNumber(newAmount));
+                $container.data('amount', newAmount);
+                
+                // Update hidden input for form submission
+                $('#amount-hidden').val(newAmount);
+                
+                this.showSuccess('Amount updated successfully');
+                
+                // Hide input, show display
+                $input.addClass('d-none').prop('disabled', false);
+                $display.removeClass('d-none');
+            },
+            error: (xhr) => {
+                let errorMessage = 'Failed to update amount';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMessage = xhr.responseJSON.message;
+                }
+                
+                this.showError(errorMessage);
+                $input.prop('disabled', false).focus();
+            },
+            complete: () => {
+                $container.find('.saving-indicator').remove();
+            }
+        });
+    }
+
+    formatNumber(number) {
+        return new Intl.NumberFormat('en-PH', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(number);
+    }
+
+    showSuccess(message) {
+        this.showToast(message, 'success');
+    }
+
+    showError(message) {
+        this.showToast(message, 'error');
+    }
+
+    showToast(message, type = 'info') {
+        const bgClass = type === 'success' ? 'bg-green-500' : 
+                       type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+        const icon = type === 'success' ? 'fa-check-circle' : 
+                    type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+
+        const toast = $(`
+            <div class="${bgClass} text-white px-4 py-3 rounded-lg shadow-lg mb-2 transform transition-all duration-300 translate-x-full opacity-0">
+                <div class="flex items-center">
+                    <i class="fas ${icon} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+            </div>
+        `);
+
+        // Ensure toast container exists
+        if ($('#toast-container').length === 0) {
+            $('body').append('<div class="fixed top-4 right-4 z-50" id="toast-container"></div>');
+        }
+
+        $('#toast-container').append(toast);
+        
+        // Animate in
+        setTimeout(() => {
+            toast.removeClass('translate-x-full opacity-0');
+        }, 100);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            toast.addClass('translate-x-full opacity-0');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, 3000);
+    }
+}
+
+// Initialize inline editor
+$(document).ready(function() {
+    new InlineAmountEditor();
+});
+
+// Your existing JavaScript functions...
 function showMessage(message, type = 'success') {
     const container = document.getElementById('message-container');
     const messageDiv = document.createElement('div');
@@ -295,8 +555,11 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
         // Create form data for traditional form submission
         const formData = new FormData();
         formData.append('_token', document.querySelector('input[name="_token"]').value);
-        
-        // Make AJAX request to receive the DV request
+         
+        const amountInput = document.querySelector('#amount-hidden') || document.querySelector('input[name="amount"]');
+        if (amountInput) {
+            formData.append('amount', amountInput.value);
+        }
         const response = await fetch(`/BudgetOfficer/dvrequests/${dvRequestId}/receive`, {
             method: 'POST',
             headers: {
@@ -339,7 +602,13 @@ async function handleStartProcessing(dvRequestId, buttonElement) {
     try {
         const formData = new FormData();
         formData.append('_token', document.querySelector('input[name="_token"]').value);
-        
+
+        // Include amount if editable
+        const amountInput = document.querySelector('#amount-hidden') || document.querySelector('input[name="amount"]');
+        if (amountInput) {
+            formData.append('amount', amountInput.value);
+        }
+
         const response = await fetch(`/BudgetOfficer/dvrequests/${dvRequestId}/start-processing`, {
             method: 'POST',
             headers: {
@@ -350,8 +619,7 @@ async function handleStartProcessing(dvRequestId, buttonElement) {
             body: formData
         });
 
-        const responseText = await response.text();
-        let data = JSON.parse(responseText);
+        const data = await response.json();
 
         if (response.ok && data.success) {
             showMessage(data.message, 'success');
@@ -364,7 +632,6 @@ async function handleStartProcessing(dvRequestId, buttonElement) {
         console.error('Start Processing Error:', error);
         showMessage(error.message || 'Failed to start processing', 'error');
     } finally {
-        // Reset button state
         buttonElement.disabled = false;
         buttonText.textContent = 'Start Processing';
         spinner.classList.add('hidden');
@@ -410,7 +677,7 @@ function updateButtonsToVerifyMode(dvRequestId) {
     `;
 }
 
-// 🔘 Manual release lock button
+// Manual release lock button
 function releaseLock(event, id) {
     event.preventDefault(); // stop normal redirect
 
@@ -470,7 +737,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Load recent requests on page load
     loadRecentRequests();
 
-    // 🔄 Auto-refresh lock every 2 minutes
+    // Auto-refresh lock every 2 minutes
     const refreshInterval = setInterval(() => {
         fetch(`/BudgetOfficer/dvrequests/${dvRequestId}/refresh-lock`, {
             method: "POST",
@@ -490,7 +757,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .catch(err => console.error("Refresh lock failed:", err));
     }, 120000); // every 2 minutes (120,000 ms)
 
-    // 🧹 Release lock when user leaves the page
+    // Release lock when user leaves the page
     window.addEventListener("beforeunload", () => {
         navigator.sendBeacon(`/BudgetOfficer/dvrequests/${dvRequestId}/release-lock`, 
             JSON.stringify({ _token: "{{ csrf_token() }}" }));

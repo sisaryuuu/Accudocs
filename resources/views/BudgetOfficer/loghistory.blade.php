@@ -43,10 +43,7 @@
                                 {{ $ors->dvRequest->respocenter->description ?? '' }}
                             </td>
                             <td class="px-4 py-2 border-b">
-                                ₱{{ number_format($ors->gross ?? 0, 2) }}
-                            </td>
-                            <td class="px-4 py-2 border-b">
-                                ₱{{ number_format($ors->net ?? 0, 2) }}
+                                ₱{{ number_format($ors->dvRequest->amount ?? 0, 2) }}
                             </td>
                             <td class="px-4 py-2 border-b">
                                 @php

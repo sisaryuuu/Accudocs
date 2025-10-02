@@ -178,7 +178,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
             html += `
                 <tr class="hover:bg-gray-50 transition-colors duration-150">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#${request.id}</td>
+                   <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                            Control #${request.accounting_control_number}
+                            ${request.user_sequence !== undefined 
+                                ? `<br><span class="text-xs text-gray-500">Seq: ${request.user_sequence}</span>` 
+                                : ''}
+                        </td>
                     <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${request.program}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${request.respocenter}</td>

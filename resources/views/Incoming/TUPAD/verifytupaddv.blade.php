@@ -64,6 +64,32 @@
                     <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
 
+                                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Required Attachments</h3>
+
+                    @if($attachments && $attachments->count())
+                        @foreach($attachments as $modality => $items)
+                            <h4 class="text-md font-medium text-gray-700 mt-3 mb-2">{{ strtoupper($modality) }}</h4>
+                            <ul class="space-y-2">
+                                @foreach($items as $item)
+                                    <li class="flex items-center">
+                                        <input type="checkbox" 
+                                            name="attachments[{{ $item->id }}]" 
+                                            value="1"
+                                            class="h-4 w-4 text-blue-600 border-gray-300 rounded mr-2"
+                                            {{ $item->is_present ? 'checked' : '' }}>
+                                        <span class="text-sm text-gray-900">{{ $item->name }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endforeach
+                    @else
+                        <p class="text-gray-400">No attachments checklist available.</p>
+                    @endif
+                </div>
+
+
+
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Amount</label>
