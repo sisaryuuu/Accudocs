@@ -18,6 +18,7 @@
   <title>@yield('title', 'Dashboard')</title>
 </head>
 <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col space-y-2"></div>
+
 <body class="bg-gray-100 font-sans">
 <script>
     @if (session('success'))
@@ -354,7 +355,7 @@
         @yield('content')
     </main>
 </div>
-
+@stack('scripts')
 
 </body>
 </html>

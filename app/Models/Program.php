@@ -21,4 +21,11 @@ class Program extends Model
     {
         return $this->hasMany(AccountingUnit::class);
     }
+
+    // Program.php
+public function requests()
+{
+    return $this->hasMany(Program::class, 'program_id');
+}
+
 }
