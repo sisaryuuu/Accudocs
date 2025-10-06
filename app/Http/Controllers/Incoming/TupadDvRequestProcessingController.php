@@ -54,17 +54,25 @@ class TupadDvRequestProcessingController extends Controller
          $sidebarCounts = $this->getSidebarCounts();
         return view('Incoming.TUPAD.index', compact('dvRequests','sidebarCounts'));
     }
-    
-    public function show($id)
+ public function show($id)
 {
-    $dvRequest = DvRequest::with(['accountingUnit','program','logs'])
-                        ->whereHas('program', fn($q) => 
-                            $q->where('prcode', 'TUPAD')) 
-                        ->findOrFail($id);
+    $dvRequest = DvRequest::with([
+      'accountingUnit',
+        'program',
+        'focalPerson',
+        'respocenter',
+        'modeOfPayments',
+        'paymentDetails', // This will use your hasManyThrough relationship
+        'tupadAttachments',
+        'logs'
+    ])
+    ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
+    ->findOrFail($id);
+    
     $lockDuration = now()->subMinutes(10);
     $currentUserId = auth()->id();
 
-     if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
+    if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
         return redirect()->route('Incoming.TUPAD.index')
             ->with('error', 'This DV Request is currently being processed by another user.');
     }
@@ -76,17 +84,29 @@ class TupadDvRequestProcessingController extends Controller
         ]);
     }
     
-    $attachments = TUPADAttachment::forRequest($dvRequest->id)
-        ->orderBy('sort_order')
-        ->get()
-        ->groupBy('modality');
-
+    // Get attachments for the selected modality only
+    $selectedModality = $dvRequest->tupad_modality;
+    
+   $attachments = collect();
+    if ($selectedModality) {
+        $attachments = $dvRequest->tupadAttachments()
+            ->where('modality', $selectedModality)
+            ->orderBy('sort_order')
+            ->get();
+    }
 
     $lastLog = $dvRequest->logs()->latest()->first();
     $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
 
-    return view('Incoming.TUPAD.verifytupaddv', compact('dvRequest', 'lastStep','attachments'));
+    return view('Incoming.TUPAD.verifytupaddv', compact(
+        'dvRequest', 
+        'lastStep', 
+        'attachments',
+        'selectedModality'
+    ));
 }
+
+
  public function receive(Request $request, $id)
 {
     try {
@@ -335,53 +355,75 @@ public function startProcessing(Request $request, $id)
             'date'         => $dvRequest->created_at->format('M d, Y h:i A'),
         ]);
     }
+  public function verify(Request $request, $id)
+{
+    $request->validate([
+        'remarks' => 'nullable|string|max:1000',
+        'attachments' => 'array',
+    ]);
 
-    public function verify(Request $request, $id)
-    {
-        $request->validate([
-            'remarks' => 'nullable|string|max:1000',
-        ]);
+    $dvRequest = DvRequest::with('tupadAttachments')
+        ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
+        ->findOrFail($id);
 
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
-                              ->findOrFail($id);
+    // Update TUPAD attachments if any were checked/unchecked
+    if ($request->has('attachments') && $dvRequest->tupad_modality) {
+        // Mark submitted attachments as present
+        foreach ($request->attachments as $attachmentId => $value) {
+            $attachment = $dvRequest->tupadAttachments()->find($attachmentId);
+            if ($attachment) {
+                $attachment->update(['is_present' => true]);
+            }
+        }
+        
+        // Uncheck attachments that weren't submitted
+        $submittedIds = array_keys($request->attachments);
+        $dvRequest->tupadAttachments()
+            ->where('modality', $dvRequest->tupad_modality)
+            ->whereNotIn('id', $submittedIds)
+            ->update(['is_present' => false]);
+    }
 
-                              
-         DvRequest::where('id', $dvRequest->id)->update([
+    // Update status
+    DvRequest::where('id', $dvRequest->id)->update([
         'status'     => 'Incoming-TUPAD_verified',
         'locked_by'  => null,
         'locked_at'  => null,
-      ]);
-         $focalId = $dvRequest->focalperson_id;
-                $status = 'Incoming-TUPAD_verified';
-                $action = 'Approved';
-                $remarks = $request->remarks ?? 'DV Request approved forwarded to Budget Officer.';
+    ]);
+    
+    $focalId = $dvRequest->focalperson_id;
+    $status = 'Incoming-TUPAD_verified';
+    $action = 'Approved';
+    $remarks = $request->remarks ?? 'DV Request approved forwarded to Budget Officer.';
 
-                $notification = Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $status,
-                    'action'         => $action,
-                    'remarks'        => $remarks,
-                ]);
+    Notification::create([
+        'focalperson_id' => $focalId,
+        'dv_request_id'  => $dvRequest->id,
+        'status'         => $status,
+        'action'         => $action,
+        'remarks'        => $remarks,
+    ]);
 
-        if ($dvRequest->focalperson_id) {
-            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        =>  $status,
-                'remarks'       => 'Request approved by Incoming for TUPAD processing',
-                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-        }
-     $this->logAction(
-            $dvRequest->id,
-            'Incoming',
-            'Approved',
-            $request->remarks ?? 'DV Request approved forwarded to Budget Officer.'
-        );
-
-        return redirect()->route('Incoming.TUPAD.index', $dvRequest->id)
-                         ->with('success', 'DV Request Approved.');
+    if ($dvRequest->focalperson_id) {
+        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'remarks'       => 'Request approved by Incoming for TUPAD processing',
+            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
     }
+    
+    $this->logAction(
+        $dvRequest->id,
+        'Incoming',
+        'Approved',
+        $request->remarks ?? 'DV Request approved forwarded to Budget Officer.'
+    );
+
+    return redirect()->route('Incoming.TUPAD.index')
+        ->with('success', 'DV Request Approved.');
+}
+
         public function reject(Request $request, $id)
     {
         $request->validate([
@@ -501,26 +543,31 @@ public function history()
 
     return view('Incoming.TUPAD.loghistory', compact('dvRequests'));
 }
-   protected function logAction($dvRequestId, $action, $status, $remarks = null)
-    {
-        $logData = [
-            'dv_request_id' => $dvRequestId,
-            'action'        => $action,
-            'status'        => $status,
-            'remarks'       => $remarks,
-        ];
+  protected function logAction($dvRequestId, $action, $status, $remarks = null)
+{
+    \Log::info('LogAction Debug', [
+        'web_check' => auth()->guard('web')->check(),
+        'focal_check' => auth()->guard('focal')->check(),
+        'auth_id' => auth()->id(),
+        'guard' => auth()->getDefaultDriver()
+    ]);
 
-        // Detect which guard is active
-        if (auth()->guard('focal')->check()) {
-            $logData['focalperson_id'] = auth()->id();
-        } elseif (auth()->guard('web')->check()) {
-            $logData['accountingunit_id'] = auth()->id();
-        } else {
-            $logData['external_actor'] = 'System';
-        }
+    $logData = [
+        'dv_request_id' => $dvRequestId,
+        'action'        => $action,
+        'status'        => $status,
+        'remarks'       => $remarks,
+    ];
 
-        DvRequestLog::create($logData);
+    if (auth()->guard('web')->check()) {
+        $logData['accountingunit_id'] = auth()->id();
+    } elseif (auth()->guard('focal')->check()) {
+        $logData['focalperson_id'] = auth()->id();
+    } else {
+        $logData['external_actor'] = 'System';
     }
 
+    DvRequestLog::create($logData);
+}
 
 }

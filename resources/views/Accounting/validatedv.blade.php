@@ -61,7 +61,72 @@
                     <label class="block text-sm font-medium text-gray-700">Particulars</label>
                     <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
+                 @if($dvRequest->program->prcode === 'GIP')
 
+                        <h2 class="text-md font-semibold text-gray-800 mb-3">Attachments Checklist</h2>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                @foreach($dvRequest->gipAttachments as $attachment)
+                <div class="flex items-center space-x-2">
+                    <input 
+                        type="checkbox" 
+                        name="attachments[{{ $attachment->name }}]"
+                        id="attachment_{{ $loop->index }}"
+                        class="h-4 w-4 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                        style="accent-color: #16a34a;"
+                         {{ $attachment->is_present ? 'checked' : '' }} disabled
+                        @if($dvRequest->status !== 'Incoming-GIP_in_process') @endif>
+                    <label 
+                        for="attachment_{{ $loop->index }}"
+                        class="text-sm cursor-pointer {{ $attachment->is_present ? 'text-green-600 font-semibold' : 'text-gray-700' }}"
+                    >
+                        {{ $attachment->name }}
+                    </label>
+                </div>
+                @endforeach
+            </div>
+                @endif
+
+                  @if($dvRequest->program->prcode === 'TUPAD')
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        TUPAD Attachments Checklist
+                        @if($selectedModality)
+                            <span class="text-sm font-normal text-blue-600">
+                                (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
+                            </span>
+                        @endif
+                    </h3>
+                 
+                    @if($selectedModality && $attachments && $attachments->count() > 0)
+                        <ul class="space-y-2">
+                            @foreach($attachments as $item)
+                                <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition">
+                                    <input type="checkbox" 
+                                        name="attachments[{{ $item->id }}]" 
+                                        value="1"
+                                        id="attachment_{{ $item->id }}"
+                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                                        {{ $item->is_present ? 'checked' : '' }} disabled>
+                                    <label for="attachment_{{ $item->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
+                                        {{ $item->name }}
+                                    </label>
+                                    @if($item->is_present)
+                                        <span class="text-xs text-green-600 font-medium">✓ Present</span>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                        
+                        <p class="text-xs text-gray-500 mt-4">
+                            <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
+                        </p>
+                    @elseif(!$selectedModality)
+                        <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
+                    @else
+                        <p class="text-gray-400">No attachments found for the selected modality.</p>
+                    @endif
+                </div>
+                @endif
                 <!-- Enhanced Amounts Section for RANCA -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Gross Amount</label>

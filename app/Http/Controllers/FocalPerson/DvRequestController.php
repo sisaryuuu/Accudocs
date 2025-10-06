@@ -190,43 +190,94 @@ class DvRequestController extends Controller
             abort(403, 'Unauthorized access.');
         }
 
-        if ($dvRequest->status !== 'ORS_for_revision') {
+           if (!in_array($dvRequest->status, ['submitted', 'ORS_for_revision'])) {
             return redirect()->route('FocalPerson.dvrequest.index')
                 ->with('error', 'This DV request cannot be edited unless it is in ORS_for_revision status.');
         }
 
-        $programs = Program::all();
+      
+    $programs = Program::all();
+    $dvRequest->load('modeOfPayments');
+
         return view('FocalPerson.dvrequest.edit', compact('dvRequest', 'programs'));
     }
 
     public function update(Request $request, DvRequest $dvRequest)
-    {
-        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
-            abort(403, 'Unauthorized access.');
-        }
-
-        if ($dvRequest->status !== 'ORS_for_revision') {
-            return redirect()->route('FocalPerson.dvrequest.index')
-                ->with('error', 'This DV request cannot be updated unless it is in ORS_for_revision status.');
-        }
-
-        $request->validate([
-            'program_id'  => 'required|exists:programs,id',
-            'respocenter_id' => 'required|exists:responcenters,id',
-            'amount'      => 'required|numeric|min:0',
-            'particulars' => 'required|string|max:255',
-        ]);
-
-        $dvRequest->update($request->only([
-            'program_id', 'respocenter_id', 'amount', 'particulars',
-            'fname', 'mi', 'lname', 'tin_number', 'address'
-        ]));
-
-        $this->logAction($dvRequest, 'ORS_revision_updated', 'Updated', 'DV Request updated by Focal Person');
-
-        return redirect()->route('FocalPerson.dvrequest.index')
-            ->with('success', 'DV Request updated successfully.');
+{
+    if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+        abort(403, 'Unauthorized access.');
     }
+
+    // Allow editing if status is 'submitted' or 'ORS_for_revision'
+    if (!in_array($dvRequest->status, ['submitted', 'ORS_for_revision'])) {
+        return redirect()->route('FocalPerson.dvrequest.index')
+            ->with('error', 'This DV request cannot be updated unless it is in submitted or ORS_for_revision status.');
+    }
+
+    $request->validate([
+        'program_id'            => 'required|exists:programs,id',
+        'respocenter_id'        => 'required|exists:responcenters,id',
+        'amount'                => 'required|numeric|min:0',
+        'particulars'           => 'required|string|max:255',
+        'fname'                 => 'nullable|string|max:255',
+        'mi'                    => 'nullable|string|max:10',
+        'lname'                 => 'nullable|string|max:255',
+        'tin_number'            => 'nullable|string|max:20',
+        'address'               => 'nullable|string|max:255',
+        'mode_of_payment_id'    => 'required|exists:mode_of_payments,id',
+        'payment_details.bank_name'   => 'nullable|string|max:255',
+        'payment_details.bank_accnum' => 'nullable|string|max:255',
+        'payment_details.bank_address'=> 'nullable|string|max:255',
+    ]);
+
+    // Capture old values for logging
+    $oldData = $dvRequest->only([
+        'program_id', 'respocenter_id', 'amount', 'particulars',
+        'fname', 'mi', 'lname', 'tin_number', 'address'
+    ]);
+
+    $dvRequest->update($request->only(array_keys($oldData)));
+
+    // Handle mode of payment update
+    $modeId = $request->mode_of_payment_id;
+    if (!$dvRequest->modeOfPayments->contains($modeId)) {
+        // Detach old and attach new mode
+        $dvRequest->modeOfPayments()->sync([$modeId]);
+    }
+
+    // Update payment details in pivot
+    $dvRequestMop = DvRequestModeOfPayment::where('dv_request_id', $dvRequest->id)
+        ->where('mode_of_payment_id', $modeId)
+        ->first();
+
+    if ($dvRequestMop) {
+        $dvRequestMop->paymentDetail()->updateOrCreate(
+            ['dv_request_mode_of_payment_id' => $dvRequestMop->id],
+            [
+                'bank_name'   => $request->input("payment_details.bank_name"),
+                'bank_accnum' => $request->input("payment_details.bank_accnum"),
+                'bank_address'=> $request->input("payment_details.bank_address"),
+            ]
+        );
+    }
+
+    // Determine changes for logging
+    $changes = [];
+    foreach ($oldData as $key => $oldValue) {
+        $newValue = $dvRequest->$key;
+        if ($oldValue != $newValue) {
+            $changes[] = ucfirst(str_replace('_', ' ', $key)) . " changed from '{$oldValue}' to '{$newValue}'";
+        }
+    }
+
+    $changes[] = "Mode of Payment updated"; // Always log if the payment mode can be updated
+    $remarks = implode('; ', $changes);
+
+    $this->logAction($dvRequest, 'ORS_revision_updated', 'Updated', $remarks);
+
+    return redirect()->route('FocalPerson.dvrequest.index')
+        ->with('success', 'DV Request updated successfully.');
+}
 
         public function destroy(DvRequest $dvRequest)
     {
@@ -404,25 +455,54 @@ protected function logAction(DvRequest $dvRequest, string $status, string $actio
 
 
 
-    public function latestStep(DvRequest $dvRequest)
+   public function latestStep(DvRequest $dvRequest)
 {
     $lastLog = $dvRequest->logs()->latest()->first();
-    $action  = $lastLog?->action ?? 'Submitted';
+    $lastAction = $lastLog ? $lastLog->action : 'submitted';
 
-    $normalized = match (true) {
-        str_contains($action, 'Submitted')   => 'Submitted',
-        str_contains($action, 'IMSD')        => 'IMSD',
-        str_contains($action, 'Incoming')    => 'Incoming',
-        str_contains($action, 'Budget')      => 'Budget Officer',
-        str_contains($action, 'Outgoing')    => 'Outgoing',
-        str_contains($action, 'Completed')   => 'Completed',
-        default                              => 'Submitted',
-    };
+    $statusToStepMap = [
+        'submitted' => 'Submitted',
+        'IMSD_received' => 'IMSD',
+        'IMSD_in_process' => 'IMSD',
+        'IMSD_verified' => 'IMSD',
+        'Incoming-TUPAD_received' => 'Incoming',
+        'Incoming-TUPAD_in_process' => 'Incoming',
+        'Incoming-TUPAD_verified' => 'Incoming',
+        'Incoming-TUPAD_rejected' => 'Incoming',
+        'Incoming-GIP_received' => 'Incoming',
+        'Incoming-GIP_in_process' => 'Incoming',
+        'Incoming-GIP_verified' => 'Incoming',
+        'Incoming-GIP_rejected' => 'Incoming',
+        'Incoming-TEV_received' => 'Incoming',
+        'Incoming-TEV_in_process' => 'Incoming',
+        'Incoming-TEV_verified' => 'Incoming',
+        'Incoming-TEV_rejected' => 'Incoming',
+        'ORS_received' => 'Budget_Officer',
+        'ORS_in_process' => 'Budget_Officer',
+        'ORS_obligated' => 'Budget_Officer',
+        'ORS_onhold' => 'Budget_Officer',
+        'ORS_for_revision' => 'Budget_Officer',
+        'Outgoing_received' => 'Outgoing',
+        'Outgoing_in_process' => 'Outgoing',
+        'Outgoing_finalized' => 'Outgoing',
+        'RANCA_received' => 'Accounting_III',
+        'RANCA_in_process' => 'Accounting_III',
+        'RANCA_validated' => 'Accounting_III',
+        'RANCA_amount_updated' => 'Accounting_III',
+    ];
+
+    // Map lastStep from latest log only
+    $lastStep = $statusToStepMap[$lastAction] ?? $lastAction;
+
+    $isRejected = stripos($lastAction, 'rejected') !== false;
 
     return response()->json([
-        'lastStep' => $normalized,
+        'lastStep' => $lastStep,
+        'isRejected' => $isRejected
     ]);
-
 }
 
+
+
 }
+   

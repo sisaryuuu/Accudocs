@@ -65,6 +65,42 @@
                     <label class="block text-sm font-medium text-gray-700">Particulars</label>
                     <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
+   <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">Attachments Verified by IMSD</h3>
+
+    @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0)
+        <!-- Scrollable container with max height -->
+        <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg bg-white mb-4">
+            <ul class="space-y-2 p-2">
+                @foreach($dvRequest->gipAttachments as $attachment)
+                    <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition border-b border-gray-100 last:border-b-0">
+                        <input type="checkbox"
+                            name="gip_attachments[{{ $attachment->id }}]"
+                            id="gip_attachment_{{ $attachment->id }}"
+                            class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mr-3 flex-shrink-0"
+                            {{ $attachment->is_present ? 'checked' : '' }}>
+                        <label for="gip_attachment_{{ $attachment->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
+                            {{ $attachment->name }}
+                        </label>
+                        @if($attachment->is_present)
+                            <span class="text-xs text-green-600 font-medium flex-shrink-0">✓ Present</span>
+                        @else
+                            <span class="text-xs text-gray-400 flex-shrink-0">Missing</span>
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+
+        <button type="button" 
+                onclick="saveAttachments()"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            Save Attachment Changes
+        </button>
+    @else
+        <p class="text-sm text-gray-500">No attachments available.</p>
+    @endif
+</div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -116,24 +152,21 @@
                         class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
                 </div>
             </div>
+                         </div> <!-- end bank/payment details grid -->
 
-                    
-                <div class="bg-gray-50 border rounded-lg p-4">
-                <h2 class="text-md font-semibold text-green-800 mb-3"> Attachments Verified by IMSD</h2>
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                    @foreach($dvRequest->gipAttachments as $attachment)
-                                    <div class="flex items-center space-x-2">
-                        <input type="checkbox" disabled
-                            class="h-4 w-4 border-gray-300 rounded"
-                            style="accent-color: #16a34a;" {{-- Force Tailwind green-600 --}}
-                            @if($attachment->is_present) checked @endif>
-                        <span class="{{ $attachment->is_present ? 'text-green-600 font-semibold' : 'text-gray-400 line-through' }}">
-                            {{ $attachment->name }}
-                        </span>
+                <!-- Insert: Attachments checklist (styled like your TUPAD example) -->
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Received By</label>
+                        <input type="text" value="{{ $dvRequest->accountingUnit->fname ?? '' }} {{ $dvRequest->accountingUnit->lname ?? '' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
                     </div>
-                    @endforeach
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Received From</label>
+                        <input type="text"  value="{{ $dvRequest->focalPerson->fname ?? 'DILI MAKIT.AN' }} {{ $dvRequest->focalPerson->lname ?? 'WALA' }}"  class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                    </div>
                 </div>
-            </div>
+             
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Remarks / Lacking</label>
@@ -191,24 +224,85 @@
                 </div>
 
               
-            </form>
-        </div>
-                    </div>
-        </div>
-    <!-- Sidebar -->
+             </form>
+        </div> <!-- end left column (lg:col-span-2) -->
+
+        <!-- Sidebar (right column) -->
         <div class="lg:col-span-1">
             <div class="bg-white shadow-md rounded-xl p-6">
-                                <ul id="recent-requests" class="space-y-3">
-                        <li class="text-sm text-gray-500">Loading...</li>
-                    </ul>
+                <ul id="recent-requests" class="space-y-3">
+                    <li class="text-sm text-gray-500">Loading...</li>
+                </ul>
             </div>
         </div>
-</div>
+    </div> <!-- end grid -->
+</div> <!-- end container -->
 
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
 @endsection
 <script>
+function saveAttachments() {
+    const form = document.querySelector('form'); // Your main form
+    const formData = new FormData(form);
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '⏳ Saving...';
+    
+    fetch(`{{ route('Incoming.GIP.updateAttachments', $dvRequest->id) }}`, {
+        method: 'POST', // Laravel will handle PUT via _method
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json',
+            'X-HTTP-Method-Override': 'PUT'
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Success notification
+            alert('✅ Attachments updated successfully!');
+            // Optional: Update the UI to show saved state
+        } else {
+            alert('❌ Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ An error occurred while saving attachments.');
+    })
+    .finally(() => {
+        // Restore button
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
 
+document.addEventListener('DOMContentLoaded', () => {
+    const checkboxes = document.querySelectorAll('input[name^="gip_attachments["]');
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const listItem = e.target.closest('li');
+            const statusSpan = listItem.querySelector('span.text-xs');
+
+            if (e.target.checked) {
+                // When checked → mark as Present
+                statusSpan.textContent = '✓ Present';
+                statusSpan.classList.remove('text-gray-400');
+                statusSpan.classList.add('text-green-600', 'font-medium');
+            } else {
+                // When unchecked → mark as Missing
+                statusSpan.textContent = 'Missing';
+                statusSpan.classList.remove('text-green-600', 'font-medium');
+                statusSpan.classList.add('text-gray-400');
+            }
+        });
+    });
+});
 // Function to show toast messages
 function showMessage(message, type = 'success') {
     const container = document.getElementById('message-container');

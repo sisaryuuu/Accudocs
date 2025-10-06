@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Models\OrsRequest;
 use App\Models\DvRequest;
 use App\Services\PusherService;
+use App\Models\TUPADAttachment;
+use App\Models\GIPAttachment;
 use App\Models\Notification;
 use App\Models\DvRequestLog;
 use Illuminate\Support\Facades\DB;
@@ -98,7 +100,7 @@ class RANCAController extends Controller
     /** Show DV for processing */
     public function show($id)
     {
-        $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','logs'])
+        $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','tupadAttachments','logs'])
             ->findOrFail($id);
 
         $currentUserId = auth()->id();
@@ -111,6 +113,17 @@ class RANCAController extends Controller
                 ->with('error', 'This DV Request is currently locked by another user.');
         }
 
+         $selectedModality = $dvRequest->tupad_modality;
+    
+   $attachments = collect();
+    if ($selectedModality) {
+        $attachments = $dvRequest->tupadAttachments()
+            ->where('modality', $selectedModality)
+            ->orderBy('sort_order')
+            ->get();
+    }
+
+
         $dvRequest->update([
             'locked_by' => $currentUserId,
             'locked_at' => now(),
@@ -119,7 +132,7 @@ class RANCAController extends Controller
         $lastLog  = $dvRequest->logs()->latest()->first();
         $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
 
-        return view('Accounting.validatedv', compact('dvRequest', 'lastStep'));
+        return view('Accounting.validatedv', compact('dvRequest', 'lastStep','selectedModality','attachments'));
     }
 
     /** Receive DV */
@@ -135,28 +148,29 @@ class RANCAController extends Controller
             $receivedAt = now();
             $dvRequest->update([
                 'status'      => 'RANCA_received',
+                 'accountingunit_id'=> auth()->id(),
                 'received_by' => auth()->id(),
                 'received_at' => $receivedAt,
                 'locked_by'   => auth()->id(),
                 'locked_at'   => $receivedAt,
             ]);
 
-            $this->logAction($dvRequest->id, 'Accounting_III', 'RANCA_received', 'Received by RANCA');
+            $this->logAction($dvRequest->id, 'Accounting_III', $dvRequest->status, 'Received by RANCA');
 
             // Notify focal person
             if ($dvRequest->focalperson_id) {
                 Notification::create([
                     'focalperson_id' => $dvRequest->focalperson_id,
                     'dv_request_id'  => $dvRequest->id,
-                    'status'         => 'RANCA_received',
-                    'action'         => 'Received',
+                    'status'         => $dvRequest->status,
+                    'action'         => 'Accounting_III',
                     'remarks'        => 'DV Request received by RANCA for processing',
                 ]);
 
                 // Real-time notification
                 $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
-                    'status'        => 'RANCA_received',
+                    'status'        => $dvRequest->status,
                     'remarks'       => 'DV Request received by RANCA for processing',
                     'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);
@@ -167,7 +181,7 @@ class RANCAController extends Controller
                 'message' => 'Document has been received by RANCA.',
                 'data' => [
                     'id' => $dvRequest->id,
-                    'status' => 'RANCA_received',
+                    'status' => $dvRequest->status,
                     'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
                 ]
             ]);
@@ -195,21 +209,21 @@ class RANCAController extends Controller
                 'locked_at' => $startedAt,
             ]);
 
-            $this->logAction($dvRequest->id, 'Accounting_III', 'RANCA_in_process', 'Processing started by RANCA');
+            $this->logAction($dvRequest->id, 'Accounting_III', $dvRequest->status, 'Processing started by RANCA');
 
             // Notify focal person
             if ($dvRequest->focalperson_id) {
                 Notification::create([
                     'focalperson_id' => $dvRequest->focalperson_id,
                     'dv_request_id'  => $dvRequest->id,
-                    'status'         => 'RANCA_in_process',
-                    'action'         => 'Processing Started',
+                    'status'         => $dvRequest->status,
+                    'action'         => 'Accounting_III',
                     'remarks'        => 'DV Request is now being processed by RANCA',
                 ]);
 
                 $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
-                    'status'        => 'RANCA_in_process',
+                    'status'        => $dvRequest->status,
                     'remarks'       => 'DV Request is now being processed by RANCA',
                     'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);
@@ -298,7 +312,7 @@ class RANCAController extends Controller
                     'focalperson_id' => $dvRequest->focalperson_id,
                     'dv_request_id'  => $dvRequest->id,
                     'status'         => $dvRequest->status,
-                    'action'         => 'Amount Updated',
+                    'action'         => 'Accounting_III',
                     'remarks'        => $request->remarks ?? "RANCA updated the DV amount from ₱" . number_format($oldAmount, 2) . " to ₱" . number_format($newAmount, 2),
                 ]);
 
@@ -393,7 +407,7 @@ class RANCAController extends Controller
             $this->logAction(
                 $dvRequest->id, 
                 'Accounting_III', 
-                'RANCA_validated', 
+               $dvRequest->status, 
                 $request->remarks ?? 'DV Request finalized by RANCA'
             );
 
@@ -402,14 +416,14 @@ class RANCAController extends Controller
                 Notification::create([
                     'focalperson_id' => $dvRequest->focalperson_id,
                     'dv_request_id'  => $dvRequest->id,
-                    'status'         => 'RANCA_validated',
-                    'action'         => 'Validated',
+                    'status'         => $dvRequest->status,
+                    'action'         => 'Accounting_III',
                     'remarks'        => $request->remarks ?? 'DV Request has been finalized by RANCA',
                 ]);
 
                 $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
-                    'status'        => 'RANCA_validated',
+                    'status'        => $dvRequest->status,
                     'remarks'       => $request->remarks ?? 'DV Request has been finalized by RANCA',
                     'timestamp'     => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);

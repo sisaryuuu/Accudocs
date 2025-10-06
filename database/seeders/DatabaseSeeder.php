@@ -25,7 +25,6 @@ class DatabaseSeeder extends Seeder
             AllotmentClassSeeder::class,
             ADLNumberSeeder::class,
             TUPADAttachmentSeeder::class,
-            GIPAttachmentSeeder::class,
         ]);
     }
 }

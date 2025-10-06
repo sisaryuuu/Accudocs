@@ -347,8 +347,64 @@ class GIPDvRequestProcessingController extends Controller
             'date'         => $dvRequest->created_at->format('M d, Y h:i A'),
         ]);
     }
+   public function updateAttachments(Request $request, $id)
+    {
+        try {
+            $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
+                                  ->findOrFail($id);
 
-    public function verify(Request $request, $id)
+            // Verify the user has permission (locked by them)
+            if ($dvRequest->locked_by !== auth()->id()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have permission to update this request.'
+                ], 403);
+            }
+
+            // Get checked attachment IDs from request
+            $checkedAttachments = $request->input('gip_attachments', []);
+
+            // Update all attachments for this DV request
+            foreach ($dvRequest->gipAttachments as $attachment) {
+                $attachment->is_present = isset($checkedAttachments[$attachment->id]);
+                $attachment->save();
+            }
+
+            // Log the update
+            $this->logAction(
+                $dvRequest->id,
+                'Incoming',
+                $dvRequest->status,
+                'Attachment checklist updated by Incoming-GIP'
+            );
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Attachments updated successfully.',
+                    'data' => [
+                        'updated_count' => $dvRequest->gipAttachments->count(),
+                        'present_count' => $dvRequest->gipAttachments->where('is_present', true)->count()
+                    ]
+                ]);
+            }
+
+            return redirect()->back()->with('success', 'Attachments updated successfully.');
+
+        } catch (\Exception $e) {
+            \Log::error('Error updating attachments: ' . $e->getMessage());
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while updating attachments.'
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'An error occurred while updating attachments.');
+        }
+    }
+   public function verify(Request $request, $id)
     {
         $request->validate([
             'remarks' => 'nullable|string|max:1000',
@@ -358,47 +414,51 @@ class GIPDvRequestProcessingController extends Controller
                               ->findOrFail($id);
 
         $dvRequest->update([
-        'status' => 'Incoming-GIP_verified',
-        'locked_by'=> null,
-        'locked_at'=> null,
+            'status' => 'Incoming-GIP_verified',
+            'locked_by'=> null,
+            'locked_at'=> null,
         ]);
 
-        $checkedAttachments = $request->input('attachments', []);
+        // FIX: Use the correct form field name 'gip_attachments'
+        $checkedAttachments = $request->input('gip_attachments', []);
+        
         foreach ($dvRequest->gipAttachments as $attachment) {
-        $attachment->is_present = isset($checkedAttachments[$attachment->name]);
-        $attachment->save();
-    }
+            // Check if this attachment ID exists in the checked array
+            $attachment->is_present = isset($checkedAttachments[$attachment->id]);
+            $attachment->save();
+        }
 
         $focalId = $dvRequest->focalperson_id;
         $status = 'Incoming-GIP_verified';
         $action = 'Approved';
-        $remarks = $request->remarks ?? 'Request rejected by Incoming-TUPAD';
+        $remarks = $request->remarks ?? 'Request verified by Incoming-GIP';
 
-            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
-            'status'        => 'IMSD_verified',
-            'remarks'       => $request->remarks ?? 'Request verified by IMSD',
+            'status'        => 'Incoming-GIP_verified',
+            'remarks'       => $request->remarks ?? 'Request verified by Incoming-GIP',
             'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-    ]);
+        ]);
 
-      $notification = Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $status,
-                    'action'         => $action,
-                    'remarks'        => $remarks,
-                ]);
-     $this->logAction(
+        $notification = Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => $status,
+            'action'         => $action,
+            'remarks'        => $remarks,
+        ]);
+        
+        $this->logAction(
             $dvRequest->id,
             'Incoming',
             'Approved',
             $request->remarks ?? 'Request verified by Incoming-GIP'
         );
 
-            
         return redirect()->route('Incoming.GIP.index')
                          ->with('success', 'DV Request has been verified successfully.');
     }
+
         public function reject(Request $request, $id)
     {
         $request->validate([

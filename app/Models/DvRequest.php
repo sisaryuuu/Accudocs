@@ -24,6 +24,7 @@ class DvRequest extends Model
         'particulars',
         'amount',
         'status',
+        'tupad_modality',
         'locked_at',
         'locked_by',
     ];
@@ -38,7 +39,7 @@ class DvRequest extends Model
     }
     public function tupadAttachments()
     {
-        return $this->hasMany(TUPADAttachment::class, 'dv_request_id');
+        return $this->hasMany(TupadAttachment::class, 'dv_request_id');
     }
 
     public function focalperson()

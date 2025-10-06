@@ -8,35 +8,38 @@
         
         <!-- Left Section - Incoming Form -->
         <div class="lg:col-span-2 bg-white shadow rounded-xl p-6">
-            <h1 class="text-2xl font-bold text-gray-900 mb-6">Incoming</h1>
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">Incoming TUPAD</h1>
 
             <form action="{{ route('Incoming.TUPAD.dvrequests.verify', $dvRequest->id) }}" method="POST" class="space-y-6">
                 @csrf
 
-                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <!-- Mode of Payment -->
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Mode of Payment</label>
 
                     @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
-                    <ul class="space-y-2">
-                        @foreach($dvRequest->modeOfPayments as $mop)
-                            <li class="flex items-center p-3 rounded-lg border
-                                @if($loop->first) border-blue-500 bg-blue-50 @else border-gray-200 bg-white @endif">
-                                <input 
-                                    type="radio" 
-                                    name="selected_mop" 
-                                    value="{{ $mop->id }}" 
-                                    class="h-4 w-4 text-blue-600 border-gray-300 mr-2"
-                                    @if($loop->first) checked @endif
-                                    disabled
-                                >
-                                <span class="text-sm font-medium text-gray-900">{{ $mop->mopname ?? 'N/A' }}</span>
-                            </li>
-                        @endforeach
-                    </ul>
+                        <ul class="space-y-2">
+                            @foreach($dvRequest->modeOfPayments as $mop)
+                                <li class="flex items-center p-3 rounded-lg border
+                                    @if($loop->first) border-blue-500 bg-blue-50 @else border-gray-200 bg-white @endif">
+                                    <input 
+                                        type="radio" 
+                                        name="selected_mop" 
+                                        value="{{ $mop->id }}" 
+                                        class="h-4 w-4 text-blue-600 border-gray-300 mr-2"
+                                        @if($loop->first) checked @endif
+                                        disabled
+                                    >
+                                    <span class="text-sm font-medium text-gray-900">{{ $mop->mopname ?? 'N/A' }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
                     @else
-                    <p class="text-gray-400">N/A</p>
+                        <p class="text-gray-400">N/A</p>
                     @endif
-                    </div>
+                </div>
+
+                <!-- Request Info -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Control No.</label>
@@ -52,44 +55,63 @@
                         <label class="block text-sm font-medium text-gray-700">Program</label>
                         <input type="text" value="{{ $dvRequest->program->prcode ?? 'N/A'}}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
-                        <p class="mt-1 text-sm text-gray-900">
-                          {{ $dvRequest->respocenter->rccode}} {{$dvRequest->respocenter->description}}
-                        </p>
-                    </div>
                 </div>
+
+                <!-- Responsibility Center -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
+                    <input type="text" value="{{ $dvRequest->respocenter->rccode ?? '' }} - {{ $dvRequest->respocenter->description ?? '' }}"
+                           class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                </div>
+
+                <!-- Particulars -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Particulars</label>
                     <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
 
-                                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Required Attachments</h3>
+                <!-- TUPAD Attachments Checklist -->
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        TUPAD Attachments Checklist
+                        @if($selectedModality)
+                            <span class="text-sm font-normal text-blue-600">
+                                (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
+                            </span>
+                        @endif
+                    </h3>
 
-                    @if($attachments && $attachments->count())
-                        @foreach($attachments as $modality => $items)
-                            <h4 class="text-md font-medium text-gray-700 mt-3 mb-2">{{ strtoupper($modality) }}</h4>
-                            <ul class="space-y-2">
-                                @foreach($items as $item)
-                                    <li class="flex items-center">
-                                        <input type="checkbox" 
-                                            name="attachments[{{ $item->id }}]" 
-                                            value="1"
-                                            class="h-4 w-4 text-blue-600 border-gray-300 rounded mr-2"
-                                            {{ $item->is_present ? 'checked' : '' }}>
-                                        <span class="text-sm text-gray-900">{{ $item->name }}</span>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        @endforeach
+                    @if($selectedModality && $attachments && $attachments->count() > 0)
+                        <ul class="space-y-2">
+                            @foreach($attachments as $item)
+                                <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition">
+                                    <input type="checkbox" 
+                                        name="attachments[{{ $item->id }}]" 
+                                        value="1"
+                                        id="attachment_{{ $item->id }}"
+                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                                        {{ $item->is_present ? 'checked' : '' }}>
+                                    <label for="attachment_{{ $item->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
+                                        {{ $item->name }}
+                                    </label>
+                                    @if($item->is_present)
+                                        <span class="text-xs text-green-600 font-medium">✓ Present</span>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                        
+                        <p class="text-xs text-gray-500 mt-4">
+                            <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
+                        </p>
+                    @elseif(!$selectedModality)
+                        <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
                     @else
-                        <p class="text-gray-400">No attachments checklist available.</p>
+                        <p class="text-gray-400">No attachments found for the selected modality.</p>
                     @endif
                 </div>
 
-
-
+                <!-- Amount -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Amount</label>
@@ -97,85 +119,94 @@
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
                 </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                     @if($mop->pivot->paymentDetail)
+
+                <!-- Payment Details -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    @if($dvRequest->paymentDetails && $dvRequest->paymentDetails->count() > 0)
+                        @php
+                            $paymentDetail = $dvRequest->paymentDetails->first();
+                        @endphp
                         <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Name</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                            <label class="block text-sm font-medium text-gray-700">Bank Name</label>
+                            <input type="text" value="{{ $paymentDetail->bank_name ?? 'N/A' }}" 
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                         </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
+                            <input type="text" value="{{ $paymentDetail->bank_accnum ?? 'N/A' }}" 
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                         </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Address</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Bank Address</label>
+                            <input type="text" value="{{ $paymentDetail->bank_address ?? 'N/A' }}" 
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                         </div>
-                @else
-                        <p class="text-xs text-gray-400">No payment details available</p>
-                @endif
+                    @else
+                        <p class="text-xs text-gray-400 col-span-3">No payment details available</p>
+                    @endif
                 </div>
 
+                <!-- Received Info -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Received By</label>
-                        <input type="text" value="{{ $dvRequest->accountingUnit->fname ?? '' }} {{ $dvRequest->accountingUnit->lname ?? '' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                        <input type="text" value="{{ $dvRequest->accountingUnit->fname ?? '' }} {{ $dvRequest->accountingUnit->lname ?? '' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Received From</label>
-                        <input type="text"  value="{{ $dvRequest->focalPerson->fname ?? 'DILI MAKIT.AN' }} {{ $dvRequest->focalPerson->lname ?? 'WALA' }}"  class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                        <input type="text"  value="{{ $dvRequest->focalPerson->fname ?? 'Unknown' }} {{ $dvRequest->focalPerson->lname ?? '' }}"  class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
                 </div>
 
-               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Date Received</label>
-                    <input type="date" 
-                        value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d') : '' }}"
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                <!-- Date and Time -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Date Received</label>
+                        <input type="date" 
+                            value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d') : '' }}"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Time</label>
+                        <input type="time"   
+                            value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('H:i') : '' }}"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Time</label>
-                    <input type="time"   
-                        value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('H:i') : '' }}"
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
-                </div>
-            </div>
 
+                <!-- Remarks -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Remarks / Lacking</label>
                     <textarea id="remarks" name="remarks" rows="3" 
                               class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 text-sm"
                               placeholder="Enter remarks or notes..."></textarea>
                 </div>
-                   <div class="flex justify-end space-x-3" id="button-container">
-                 @if($dvRequest->status === 'Incoming-TUPAD_in_process')
-                <div class="flex justify-end">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Approve
-                    </button>
-                </div>
-            </form>
-            <form action="{{ route('Incoming.TUPAD.dvrequests.reject', $dvRequest->id) }}" method="POST">
-                @csrf
-                 <div class="flex justify-end">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Reject
-                    </button>
-                </div>
-                </form>
-                </a>
-                <a href="{{ route('Incoming.TUPAD.index') }}"  onclick="releaseLock(event, {{ $dvRequest->id }})">
-                 <div class="flex justify-end">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Cancel
-                    </button>
-                </div>
-                </a>
-            @elseif($dvRequest->status === 'IMSD_verified')
+
+                <!-- Action Buttons -->
+                <div class="flex justify-end space-x-3" id="button-container">
+                    @if($dvRequest->status === 'Incoming-TUPAD_in_process')
+                        <button type="submit" 
+                                class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            Approve
+                        </button>
+                    </form>
+                    
+                    <form action="{{ route('Incoming.TUPAD.dvrequests.reject', $dvRequest->id) }}" method="POST" class="inline">
+                        @csrf
+                        <button type="submit" 
+                                class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            Reject
+                        </button>
+                    </form>
+                    
+                    <a href="{{ route('Incoming.TUPAD.index') }}" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                        <button type="button" 
+                                class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            Cancel
+                        </button>
+                    </a>
+
+                    @elseif($dvRequest->status === 'IMSD_verified')
                         <button type="button"
                             onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
@@ -186,34 +217,41 @@
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                         </button>
+                        <a href="{{ route('Incoming.TUPAD.index') }}" onclick="releaseLock(event, {{ $dvRequest->id }})"
+                           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            Back
+                        </a>
+                    </form>
 
-            @elseif($dvRequest->status === 'Incoming-TUPAD_received')
-                    <button type="button"
-                        onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
-                        class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                        id="start-btn">
-                        <span class="button-text">Start Processing</span>
-                        <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    </button>
-                        <a href="{{ route('Incoming.GIP.index') }} "
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                    @elseif($dvRequest->status === 'Incoming-TUPAD_received')
+                        <button type="button"
+                            onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
+                            class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                            id="start-btn">
+                            <span class="button-text">Start Processing</span>
+                            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </button>
+                        <a href="{{ route('Incoming.TUPAD.index') }}" onclick="releaseLock(event, {{ $dvRequest->id }})"
+                           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                             Back
                         </a>
-            @else
-                        <a href="{{ route('Incoming.GIP.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                    </form>
+
+                    @else
+                        <a href="{{ route('Incoming.TUPAD.index') }}" onclick="releaseLock(event, {{ $dvRequest->id }})"
+                           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                             Back
                         </a>
-            @endif
+                    </form>
+                    @endif
                 </div>
-                    </div>
-               
+            </div>
         </div>
-   <!-- Sidebar -->
-          <!-- Right Sidebar -->
+
+        <!-- Right Sidebar -->
         <div class="lg:col-span-1">
             <div class="bg-white shadow-md rounded-xl p-6 sticky top-24">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Requests</h2>
@@ -224,12 +262,44 @@
         </div>
     </div>
 </div>
+
+<!-- Message Container -->
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
 @endsection
 <script>
 
-// Function to show toast messages
-function showMessage(message, type = 'success') {
+document.addEventListener('DOMContentLoaded', () => {
+    const tupadCheckboxes = document.querySelectorAll('input[name^="attachments["]');
+
+    tupadCheckboxes.forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const listItem = e.target.closest('li');
+            let statusSpan = listItem.querySelector('span.text-xs');
+
+            // If there’s no existing span (for unchecked ones), create it
+            if (!statusSpan) {
+                statusSpan = document.createElement('span');
+                statusSpan.classList.add('text-xs', 'ml-2');
+                listItem.appendChild(statusSpan);
+            }
+
+            if (e.target.checked) {
+                // ✅ Mark as Present
+                statusSpan.textContent = '✓ Present';
+                statusSpan.classList.remove('text-gray-400');
+                statusSpan.classList.add('text-green-600', 'font-medium');
+            } else {
+                // ❌ Mark as Missing
+                statusSpan.textContent = 'Missing';
+                statusSpan.classList.remove('text-green-600', 'font-medium');
+                statusSpan.classList.add('text-gray-400');
+            }
+        });
+    });
+});
+
+// Define functions in global scope
+window.showMessage = function(message, type = 'success') {
     const container = document.getElementById('message-container');
     const messageDiv = document.createElement('div');
     
@@ -240,12 +310,10 @@ function showMessage(message, type = 'success') {
     
     container.appendChild(messageDiv);
     
-    // Animate in
     setTimeout(() => {
         messageDiv.classList.remove('translate-x-full', 'opacity-0');
     }, 100);
     
-    // Remove after 3 seconds
     setTimeout(() => {
         messageDiv.classList.add('translate-x-full', 'opacity-0');
         setTimeout(() => {
@@ -254,23 +322,20 @@ function showMessage(message, type = 'success') {
             }
         }, 300);
     }, 3000);
-}
+};
 
-async function handleReceiveAction(dvRequestId, buttonElement) {
+window.handleReceiveAction = async function(dvRequestId, buttonElement) {
     const spinner = document.getElementById('loading-spinner');
     const buttonText = buttonElement.querySelector('.button-text');
     
-    // Show loading state
     buttonElement.disabled = true;
     buttonText.textContent = 'Receiving...';
     spinner.classList.remove('hidden');
     
     try {
-        // Create form data for traditional form submission
         const formData = new FormData();
         formData.append('_token', document.querySelector('input[name="_token"]').value);
         
-        // Make AJAX request to receive the DV request
         const response = await fetch(`/Incoming/TUPAD/dvrequests/${dvRequestId}/receive`, {
             method: 'POST',
             headers: {
@@ -280,10 +345,11 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
             },
             body: formData
         });
-    const responseText = await response.text();
+
+        const responseText = await response.text();
         let data = JSON.parse(responseText);
 
-      if (response.ok && data.success) {
+        if (response.ok && data.success) {
             showMessage(data.message, 'success');
             updateButtonsToStartProcessingMode(dvRequestId);
             loadRecentRequests();
@@ -297,14 +363,9 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
         buttonText.textContent = 'Receive';
         spinner.classList.add('hidden');
     }
-    // Reset button state on error
-        buttonElement.disabled = false;
-        buttonText.textContent = 'Receive';
-        spinner.classList.add('hidden');
-   
-       
-}
-async function handleStartProcessing(dvRequestId, buttonElement) {
+};
+
+window.handleStartProcessing = async function(dvRequestId, buttonElement) {
     const spinner = document.getElementById('start-loading-spinner');
     const buttonText = buttonElement.querySelector('.button-text');
     
@@ -343,7 +404,8 @@ async function handleStartProcessing(dvRequestId, buttonElement) {
         buttonText.textContent = 'Start Processing';
         spinner.classList.add('hidden');
     }
-}
+};
+
 function updateButtonsToStartProcessingMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
     buttonContainer.innerHTML = `
@@ -357,74 +419,19 @@ function updateButtonsToStartProcessingMode(dvRequestId) {
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
         </button>
-         <a href="{{ route('Incoming.GIP.index') }} "
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
+        <a href="{{ route('Incoming.TUPAD.index') }}" onclick="releaseLock(event, ${dvRequestId})"
+           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Back
+        </a>
     `;
 }
-// Function to update buttons to verify mode
+
 function updateButtonsToVerifyMode(dvRequestId) {
-    const buttonContainer = document.getElementById('button-container');
-    
-    buttonContainer.innerHTML = `
-    
-         <a href="{{ route('Incoming.GIP.index') }}" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                 <div class="flex justify-end">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Cancel
-                    </button>
-                </div>
-                </a>
-
-         <div class="flex justify-end">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Reject
-                    </button>
-                </div>
-                </form>
-                </a>
-         <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Approve
-        </button>
-    `;
+    location.reload();
 }
 
-    document.addEventListener("DOMContentLoaded", () => {
-    const dvRequestId = "{{ $dvRequest->id }}";
-
-    const refreshInterval = setInterval(() => {
-        fetch(`/Incoming/TUPAD/dvrequests/${dvRequestId}/refresh-lock`, {
-            method: "POST",
-            headers: {
-                "X-CSRF-TOKEN": "{{ csrf_token() }}",
-                "Accept": "application/json"
-            }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                console.log("🔒 Lock refreshed at:", data.locked_at);
-            } else {
-                console.warn("⚠️ Lock not refreshed:", data.error);
-            }
-        })
-        .catch(err => console.error("Refresh lock failed:", err));
-    }, 120000); 
-
-   
-    window.addEventListener("beforeunload", () => {
-        navigator.sendBeacon(`/Incoming/TUPAD/dvrequests/${dvRequestId}/release-lock`, 
-            JSON.stringify({ _token: "{{ csrf_token() }}" }));
-    });
-});
-
-
-function releaseLock(event, id) {
-    event.preventDefault(); 
+window.releaseLock = function(event, id) {
+    event.preventDefault();
 
     fetch(`/Incoming/TUPAD/dvrequests/${id}/release-lock`, {
         method: "POST",
@@ -434,19 +441,17 @@ function releaseLock(event, id) {
             "Content-Type": "application/json"
         }
     }).then(() => {
-       
         window.location.href = "{{ route('Incoming.TUPAD.index') }}";
     }).catch(err => {
         console.error("Release lock failed:", err);
-      
         window.location.href = "{{ route('Incoming.TUPAD.index') }}";
     });
-}
+};
+
 async function loadRecentRequests() {
     try {
         const res = await fetch("{{ route('Incoming.TUPAD.dvrequests.fetchtupadRecent') }}");
         const data = await res.json();
-        console.log(data); // 👀 debug output
 
         let html = '';
         if (data.length === 0) {
@@ -473,6 +478,35 @@ async function loadRecentRequests() {
         console.error("Failed to load recent requests", e);
     }
 }
-setInterval(loadRecentRequests, 5000);
-loadRecentRequests();
+
+// Document ready logic
+document.addEventListener("DOMContentLoaded", () => {
+    const dvRequestId = "{{ $dvRequest->id }}";
+
+    const refreshInterval = setInterval(() => {
+        fetch(`/Incoming/TUPAD/dvrequests/${dvRequestId}/refresh-lock`, {
+            method: "POST",
+            headers: {
+                "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                "Accept": "application/json"
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                console.log("Lock refreshed");
+            }
+        })
+        .catch(err => console.error("Refresh lock failed:", err));
+    }, 120000); 
+
+    window.addEventListener("beforeunload", () => {
+        navigator.sendBeacon(`/Incoming/TUPAD/dvrequests/${dvRequestId}/release-lock`, 
+            JSON.stringify({ _token: "{{ csrf_token() }}" }));
+    });
+
+    // Initial load
+    loadRecentRequests();
+    setInterval(loadRecentRequests, 5000);
+});
 </script>

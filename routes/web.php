@@ -134,7 +134,7 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
     ->name('RegionalOffices.IMSD.index');
     Route::get('/dvrequests/fetchimsdRecent', [DvRequestProcessingController::class, 'fetchimsdRecent'])
     ->name('RegionalOffices.IMSD.dvrequests.fetchimsdRecent');
-    Route::get('/fetch-all', [DvRequestProcessingController::class, 'fetchAll'])
+   Route::get('/RegionalOffices/IMSD/fetchAll', [DvRequestProcessingController::class, 'fetchAll'])
     ->name('RegionalOffices.IMSD.fetchAll');
     Route::get('/dvrequests/{id}', [DvRequestProcessingController::class, 'show'])
     ->name('RegionalOffices.IMSD.verifydv');
@@ -159,6 +159,9 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
     ->name('dvrequests.refreshLock');
     Route::post('/dvrequests/{id}/release-lock', [DvRequestProcessingController::class, 'releaseLock'])
     ->name('dvrequests.releaseLock');
+    Route::get('/RegionalOffices/IMSD/dvrequests/{id}/tupad-attachments/{modality}', 
+    [DvRequestProcessingController::class, 'getTupadAttachmentsByModality'])
+    ->name('RegionalOffices.IMSD.dvrequests.tupadAttachments');
 });
 
 
@@ -195,7 +198,8 @@ Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->gr
     ->name('Incoming.GIP.dvrequests.verify');
     Route::post('/dvrequests/{id}/reject', [GIPDvRequestProcessingController::class, 'reject'])
     ->name('Incoming.GIP.dvrequests.reject');
-    
+    Route::put('incoming/gip/dvrequests/{id}/attachments', [GIPDvRequestProcessingController::class, 'updateAttachments'])
+    ->name('Incoming.GIP.updateAttachments');
     Route::post('/dvrequests/{id}/refresh-lock', [GIPDvRequestProcessingController::class, 'refreshLock'])
     ->name('Incoming.GIP.dvrequests.refreshLock');
 
@@ -238,7 +242,8 @@ Route::middleware(['auth:web', 'role:Incoming-TUPAD'])->prefix('Incoming/TUPAD')
     Route::get('/dvrequests/{id}/fetch', [TupadDvRequestProcessingController::class, 'fetch'])
     ->middleware('permission:tupad.view')
     ->name('Incoming.TUPAD.dvrequests.fetch');
-
+  Route::put('/dvrequests/{id}/attachments', [TupadDvRequestProcessingController::class, 'updateAttachments'])
+        ->name('Incoming.TUPAD.dvrequests.updateAttachments');
        Route::post('/dvrequests/{id}/refresh-lock', [TupadDvRequestProcessingController::class, 'refreshLock'])
     ->name('Incoming.TUPAD.dvrequests.refreshLock');
 
@@ -349,6 +354,8 @@ Route::middleware(['auth:web','role:Outgoing'])->prefix('/Outgoing')->name('Outg
         Route::post('/dvrequests/{id}/finalize', [OutgoingDvController::class, 'finalize'])
          ->middleware('permission:outgoing.approve')
          ->name('dvrequests.finalize');
+         Route::put('/dvrequests/{id}/attachments', [OutgoingDvController::class, 'updateAttachments'])
+        ->name('dvrequests.updateAttachments');
         Route::post('/dvrequests/{id}/refresh-lock', [OutgoingDvController::class, 'refreshLock'])
         ->name('dvrequests.refreshLock');
         Route::post('/dvrequests/{id}/release-lock', [OutgoingDvController::class, 'releaseLock'])

@@ -22,6 +22,7 @@ class AccountingUnitSeeder extends Seeder
         $incomingTupadRole = Role::firstOrCreate(['name' => 'Incoming-TUPAD']);
         $budgetOfficerRole = Role::firstOrCreate(['name' => 'Budget_Officer']);
         $outgoingRole = Role::firstOrCreate(['name' => 'Outgoing']);
+         $accountingRole = Role::firstOrCreate(['name' => 'Accounting_III']);
 
         // Create Admin account
         $admin = AccountingUnit::firstOrCreate(
@@ -46,7 +47,7 @@ class AccountingUnitSeeder extends Seeder
                 'mi' => 'I',
                 'lname' => 'User',
                 'password' => ('password'),
-                'profile_image' => 'default.png',
+                'profile_image' => '27.jpg',
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
@@ -89,7 +90,7 @@ class AccountingUnitSeeder extends Seeder
                 'mi' => 'G',
                 'lname' => 'IP',
                 'password' => ('password'),
-                'profile_image' => 'default.png',
+                'profile_image' => '30.jpg',
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
@@ -146,7 +147,7 @@ class AccountingUnitSeeder extends Seeder
                 'mi' => 'T',
                 'lname' => 'Tupad2',
                 'password' => ('password'),
-                'profile_image' => 'default.png',
+                'profile_image' => '35.jpg',
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
@@ -175,7 +176,7 @@ class AccountingUnitSeeder extends Seeder
                 'mi' => 'O',
                 'lname' => 'Officer',
                 'password' => ('password'),
-                'profile_image' => 'default.png',
+                'profile_image' => '52.jpg',
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
@@ -217,7 +218,7 @@ class AccountingUnitSeeder extends Seeder
                 'mi' => 'D',
                 'lname' => 'Going',
                 'password' => ('password'),
-                'profile_image' => 'default.png',
+                'profile_image' => '37.jpg',
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
@@ -251,5 +252,19 @@ class AccountingUnitSeeder extends Seeder
             ]
         );
         $outgoing3->assignRole($outgoingRole);
+
+        $accounting = AccountingUnit::firstOrCreate(
+            ['email' => 'accounting3@email.com'],
+            [
+                'fname' => 'Accounting',
+                'mi' => 'A',
+                'lname' => 'Accounting',
+                'password' => ('password'),
+                'profile_image' => '79.jpg',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $accounting->assignRole($accountingRole);
     }
 }

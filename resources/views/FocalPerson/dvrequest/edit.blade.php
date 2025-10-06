@@ -3,7 +3,7 @@
 @section('title', 'Edit DV Request')
 
 @section('content')
-<div class="max-w-6xl mx-auto mt-8">
+<div class="max-w-6xl mx-auto mt-8" x-data="paymentForm()">
     <h2 class="text-2xl font-semibold mb-6">Edit DV Request</h2>
 
     <!-- Error messages -->
@@ -28,6 +28,8 @@
         <form action="{{ route('FocalPerson.dvrequest.update', $dvRequest->id) }}" method="POST" class="space-y-6">
             @csrf
             @method('PUT')
+
+            <!-- Basic Info -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Full Name</label>
@@ -72,7 +74,7 @@
                 </div>
             </div>
 
-            <!-- Middle Section -->
+            <!-- Particulars + Amounts -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- Particulars -->
                 <div>
@@ -84,28 +86,53 @@
                 <!-- Amounts -->
                 <div>
                     <div class="mb-4">
-                        <label for="amount" class="block text-sm font-medium text-gray-700">Amount</label>
+                        <label for="amount" class="block text-sm font-medium text-gray-700">Gross Amount</label>
                         <input type="number" step="0.01" id="amount" name="amount" 
                                value="{{ old('amount', $dvRequest->amount) }}" required
                                class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
                     </div>
-                    <div class="mb-4">
-                        <label for="gross" class="block text-sm font-medium text-gray-700">Gross</label>
-                        <input type="number" step="0.01" id="gross" name="gross" 
-                               value="{{ old('gross', $dvRequest->gross) }}"
-                               class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
-                    </div>
-                    <div>
-                        <label for="net" class="block text-sm font-medium text-gray-700">Net</label>
-                        <input type="number" step="0.01" id="net" name="net" 
-                               value="{{ old('net', $dvRequest->net) }}"
-                               class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
-                    </div>
+
+
+            <!-- Mode of Payment -->
+            <div>
+                <label for="mode_of_payment_id" class="block text-sm font-medium text-gray-700">Mode of Payment</label>
+                <select id="mode_of_payment_id" name="mode_of_payment_id" 
+                        x-model="selectedMode"
+                        class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400" required>
+                    <option value="">-- Select Mode of Payment --</option>
+                    @foreach(\App\Models\ModeOfPayment::all() as $mode)
+                        <option value="{{ $mode->id }}"
+                            {{ old('mode_of_payment_id', $dvRequest->modeOfPayments->first()->id ?? '') == $mode->id ? 'selected' : '' }}>
+                            {{ $mode->mopname }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <!-- Bank Details -->
+            <div x-show="showBankFields" x-transition class="mt-4 space-y-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Bank Name</label>
+                    <input type="text" name="payment_details[bank_name]" 
+                           value="{{ old('payment_details.bank_name', $dvRequest->modeOfPayments->first()->paymentDetail->bank_name ?? '') }}"
+                           class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
+                    <input type="text" name="payment_details[bank_accnum]" 
+                           value="{{ old('payment_details.bank_accnum', $dvRequest->modeOfPayments->first()->paymentDetail->bank_accnum ?? '') }}"
+                           class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Bank Address</label>
+                    <input type="text" name="payment_details[bank_address]" 
+                           value="{{ old('payment_details.bank_address', $dvRequest->modeOfPayments->first()->paymentDetail->bank_address ?? '') }}"
+                           class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
                 </div>
             </div>
 
             <!-- Actions -->
-            <div class="flex justify-end">
+            <div class="flex justify-end mt-6">
                 <a href="{{ route('FocalPerson.dvrequest.index') }}" 
                    class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition mr-3">
                     Cancel
@@ -118,4 +145,23 @@
         </form>
     </div>
 </div>
+
+<script>
+    function paymentForm() {
+        return {
+            selectedMode: '{{ old('mode_of_payment_id', $dvRequest->modeOfPayments->first()->id ?? '') }}',
+            showBankFields: false,
+            init() {
+                this.toggleBankFields();
+                this.$watch('selectedMode', () => this.toggleBankFields());
+            },
+            toggleBankFields() {
+                // You can customize this logic — adjust the name check to your actual mode name in DB
+                const bankModes = ['bank transfer', 'deposit', 'check'];
+                const selectedText = document.querySelector('#mode_of_payment_id')?.selectedOptions[0]?.text?.toLowerCase() || '';
+                this.showBankFields = bankModes.some(mode => selectedText.includes(mode));
+            }
+        }
+    }
+</script>
 @endsection

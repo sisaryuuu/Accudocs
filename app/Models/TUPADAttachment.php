@@ -41,21 +41,4 @@ class TupadAttachment extends Model
     |--------------------------------------------------------------------------
     */
 
-    // Get only master template (no dv_request_id)
-    public function scopeMaster($query)
-    {
-        return $query->whereNull('dv_request_id');
-    }
-
-    // Get only attached to a specific dv_request
-    public function scopeForRequest($query, $dvRequestId)
-    {
-        return $query->where('dv_request_id', $dvRequestId);
-    }
-
-    // Group by modality
-    public function scopeByModality($query, $modality)
-    {
-        return $query->where('modality', $modality);
-    }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Services\PusherService;
+use App\Models\TUPADAttachment;
 use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -117,6 +118,7 @@ class DvRequestProcessingController extends Controller
             'program',
             'focalPerson',
             'gipAttachments',
+            'tupadAttachments',
             'logs'
         ])
         ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD','TEV']))
@@ -149,6 +151,8 @@ class DvRequestProcessingController extends Controller
         foreach ($checklistItems as $item) {
             $dvRequest->gipAttachments()->firstOrCreate(['name' => $item], ['is_present' => false]);
         }
+
+        $selectedModality = $dvRequest->tupadAttachments()->first()->modality ?? null;
 
         // Stepper
         $lastLog = $dvRequest->logs()->latest()->first();
@@ -202,6 +206,7 @@ class DvRequestProcessingController extends Controller
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
             'status'        => 'IMSD_received',
+            'isRejected'    => false,  // ← ADD THIS
             'remarks'       => 'Request officially received by IMSD',
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
@@ -283,6 +288,7 @@ class DvRequestProcessingController extends Controller
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
+            'isRejected'    => false,
             'remarks'       => $remarks,
             'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
@@ -338,67 +344,110 @@ class DvRequestProcessingController extends Controller
 
         return response()->json($recentDvRequests);
     }
-    public function verify(Request $request, $id)
-    {
-        $request->validate([
-            'remarks'     => 'nullable|string|max:1000',
-            'attachments' => 'array',
-        ]);
+  public function verify(Request $request, $id)
+{
+    $request->validate([
+        'remarks'     => 'nullable|string|max:1000',
+        'modality'    => 'nullable|string',
+        'attachments' => 'array',
+    ]);
 
-        $dvRequest = DvRequest::with('gipAttachments')->findOrFail($id);
+    $dvRequest = DvRequest::with(['gipAttachments', 'tupadAttachments'])->findOrFail($id);
 
-       // Run only if program is GIP
-        if ($dvRequest->program->prcode === 'GIP') {
-            // Update attachments
-            $checklistItems = [
-                'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
-                'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
-                'Birth Certificate', 'Internship Agreement', 'Evaluation Form-GIP',
-            ];
-
-            foreach ($checklistItems as $item) {
-                $isPresent = isset($request->attachments[$item]);
-                $attachment = $dvRequest->gipAttachments()->firstOrCreate(['name' => $item]);
-                $attachment->update(['is_present' => $isPresent]);
+    // Handle TUPAD attachments
+    if ($dvRequest->program->prcode === 'TUPAD' && $request->filled('modality')) {
+        $modality = $request->modality;
+        
+        // Save the selected modality to the DV request
+        $dvRequest->tupad_modality = $modality;
+        $dvRequest->save();
+        
+        // Check if attachments already exist for this DV request
+        $existingCount = $dvRequest->tupadAttachments()
+            ->where('modality', $modality)
+            ->count();
+        
+        // If no attachments exist, copy from templates
+        if ($existingCount === 0) {
+            $templates = TUPADAttachment::whereNull('dv_request_id')
+                ->where('modality', $modality)
+                ->orderBy('sort_order')
+                ->get();
+            
+            foreach ($templates as $template) {
+                TUPADAttachment::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'name' => $template->name,
+                    'modality' => $template->modality,
+                    'sort_order' => $template->sort_order,
+                    'is_present' => false,
+                ]);
             }
         }
-            $dvRequest->update([
-            'status' => 'IMSD_verified',
-            'locked_by' => null,
-            'locked_at' => null,
-        ]);
         
-        $focalId = $dvRequest->focalperson_id;
-        $status = 'IMSD_verified';
-        $action = 'Approved'; // or something meaningful for your workflow
-        $remarks = $request->remarks ?? 'Request verified by IMSD';
+        // Now update the is_present status based on checkbox submission
+        $attachments = $dvRequest->tupadAttachments()
+            ->where('modality', $modality)
+            ->get();
 
-        $notification = Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => $status,
-            'action'         => $action,
-            'remarks'        => $remarks,
-        ]);
-
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => $status,
-            'remarks'       => $remarks,
-            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-      
-            $this->logAction(
-                $dvRequest->id,
-                'IMSD',
-                'Approved',
-                $request->remarks ?? 'Request verified by IMSD'
-            );
-            
-        return redirect()->route('RegionalOffices.IMSD.index')
-            ->with('success', 'DV Request has been verified successfully.');
+        foreach ($attachments as $attachment) {
+            $isPresent = isset($request->attachments[$attachment->name]);
+            $attachment->update(['is_present' => $isPresent]);
+        }
     }
 
+    // Handle GIP attachments (existing code)
+    if ($dvRequest->program->prcode === 'GIP') {
+        $checklistItems = [
+            'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
+            'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
+            'Birth Certificate', 'Internship Agreement', 'Evaluation Form-GIP',
+        ];
+
+        foreach ($checklistItems as $item) {
+            $isPresent = isset($request->attachments[$item]);
+            $attachment = $dvRequest->gipAttachments()->firstOrCreate(['name' => $item]);
+            $attachment->update(['is_present' => $isPresent]);
+        }
+    }
+
+    $dvRequest->update([
+        'status' => 'IMSD_verified',
+        'locked_by' => null,
+        'locked_at' => null,
+    ]);
+    
+    $focalId = $dvRequest->focalperson_id;
+    $status = 'IMSD_verified';
+    $action = 'Approved';
+    $remarks = $request->remarks ?? 'Request verified by IMSD';
+
+    Notification::create([
+        'focalperson_id' => $focalId,
+        'dv_request_id'  => $dvRequest->id,
+        'status'         => $status,
+        'action'         => $action,
+        'remarks'        => $remarks,
+    ]);
+
+    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+        'dv_request_id' => $dvRequest->id,
+        'status'        => $status,
+        'isRejected'    => false,
+        'remarks'       => $remarks,
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+  
+    $this->logAction(
+        $dvRequest->id,
+        'IMSD',
+        'Approved',
+        $request->remarks ?? 'Request verified by IMSD'
+    );
+        
+    return redirect()->route('RegionalOffices.IMSD.index')
+        ->with('success', 'DV Request has been verified successfully.');
+}
         // Redirect to first pending DV request
     public function redirectToFirstPending()
 {
@@ -496,4 +545,7 @@ class DvRequestProcessingController extends Controller
     }
 
 
+
+
+    
 }

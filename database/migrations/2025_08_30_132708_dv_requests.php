@@ -40,6 +40,7 @@ return new class extends Migration
             $table->string('particulars');
             $table->decimal('amount', 15, 2);
             $table->string('status')->default('submitted');
+            $table->string('tupad_modality')->nullable();
             $table->unsignedBigInteger('locked_by')->nullable();
             $table->timestamp('locked_at')->nullable();
             $table->timestamps();
@@ -61,6 +62,7 @@ return new class extends Migration
          $table->dropForeign(['accountingunit_id']);
         $table->dropColumn('accountingunit_id');
            $table->dropColumn('reference_number');
+              $table->dropColumn('tupad_modality');
 
     });
     }

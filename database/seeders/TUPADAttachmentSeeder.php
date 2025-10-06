@@ -535,7 +535,7 @@ class TUPADAttachmentSeeder extends Seeder
             foreach ($checklistItems as $item) {
                 $exists = DB::table('tupad_attachments')
                     ->where('dv_request_id', $dvRequestId)
-                    ->where('name', $item->name)
+                    ->where('name', $item->name)    
                     ->exists();
 
                 if (!$exists) {

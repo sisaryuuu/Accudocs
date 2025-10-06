@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Models\OrsRequest;
 use App\Models\DvRequest;
 use App\Services\PusherService;
+use App\Models\GIPAttachment;
+use App\Models\TUPADAttachment;
 use App\Models\Notification;
 use App\Models\DvRequestLog;
 use Illuminate\Support\Facades\DB;
@@ -78,7 +80,7 @@ class OutgoingDvController extends Controller
     
        public function show($id)
 {
-    $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','logs'])
+    $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','tupadAttachments','logs'])
         ->findOrFail($id);
 
     $currentUserId = auth()->id();
@@ -100,10 +102,22 @@ class OutgoingDvController extends Controller
         ]);
     }
 
+     $selectedModality = $dvRequest->tupad_modality;
+    
+   $attachments = collect();
+    if ($selectedModality) {
+        $attachments = $dvRequest->tupadAttachments()
+            ->where('modality', $selectedModality)
+            ->orderBy('sort_order')
+            ->get();
+    }
+
+
     $lastLog  = $dvRequest->logs()->latest()->first();
     $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
 
-    return view('Outgoing.finalizedv', compact('dvRequest', 'lastStep'));
+    return view('Outgoing.finalizedv', compact('dvRequest', 'lastStep' ,'attachments',
+        'selectedModality'));
 }
 
 public function receive(Request $request, $id)
@@ -124,6 +138,7 @@ public function receive(Request $request, $id)
         // Update DV request
         $dvRequest->update([
             'status'      => 'Outgoing_received',
+             'accountingunit_id'=> auth()->id(),
             'received_by' => auth()->id(),
             'received_at' => $receivedAt,
             'locked_by'   => auth()->id(),
@@ -301,7 +316,6 @@ public function startProcessing(Request $request, $id)
                      ->with('info', 'All pending GIP DV requests are currently locked by other users.');
 }
 
-
     public function finalize(Request $request, $id)
     {
         $request->validate([
@@ -365,7 +379,7 @@ public function startProcessing(Request $request, $id)
         $this->logAction(
             $dvRequest->id,
             'Outgoing',
-            'Finalized',
+            'Outgoing_finalized',
             ($request->remarks ?? 'DV finalized by Outgoing') . " | DV Number: {$dvNumber}"
         );
 

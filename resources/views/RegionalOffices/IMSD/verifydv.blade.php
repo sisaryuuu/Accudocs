@@ -103,30 +103,70 @@
                     <textarea id="remarks" name="remarks" rows="3" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" placeholder="Enter remarks or notes..."></textarea>
                 </div>
 
-               
-                <div>
-                  @if($dvRequest->program->prcode === 'GIP') 
-                <label class="block text-sm font-medium text-gray-700 mb-2">Attachments Checklist</label>
-                 
-                <div class="grid grid-cols-6 gap-4">
-                    @foreach($checklistItems as $item)
-                        @php
-                            $attachment = $dvRequest->gipAttachments->firstWhere('name', $item);
-                        @endphp
-                        <div class="flex items-center space-x-2">
-                            <input 
-                                type="checkbox" 
-                                name="attachments[{{ $item }}]" 
-                                value="1" 
-                                @if($attachment?->is_present) checked @endif
-                                class="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                            >
-                            <label class="text-gray-700 font-medium text-sm">{{ $item }}</label>
-                        </div>
-                    @endforeach
+              <div>
+    <!-- GIP Attachments Section -->
+    @if($dvRequest->program->prcode === 'GIP') 
+        <label class="block text-sm font-medium text-gray-700 mb-2">GIP Attachments Checklist</label>
+        
+        <div class="grid grid-cols-6 gap-4 mb-6">
+            @foreach($checklistItems as $item)
+                @php
+                    $attachment = $dvRequest->gipAttachments->firstWhere('name', $item);
+                @endphp
+                <div class="flex items-center space-x-2">
+                    <input 
+                        type="checkbox" 
+                        name="attachments[{{ $item }}]" 
+                        value="1" 
+                        @if($attachment?->is_present) checked @endif
+                        class="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                    >
+                    <label class="text-gray-700 font-medium text-sm">{{ $item }}</label>
                 </div>
-                @endif
+            @endforeach
+        </div>
+    @endif
+
+    <!-- TUPAD Attachments Section -->
+    @if($dvRequest->program->prcode === 'TUPAD')
+        <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">TUPAD Attachments Checklist</h3>
+    
+    <!-- Modality Dropdown -->
+    <div class="mb-6">
+        <label for="modality_select" class="block text-sm font-medium text-gray-700 mb-2">
+            Select Modality
+        </label>
+        <select 
+            id="modality_select" 
+            name="modality"
+            class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+        >
+            <option value="">-- Select Modality --</option>
+            <option value="rpmt">RPMT (Direct Administration)</option>
+            <option value="lgu">Local Government Unit (LGU)</option>
+            <option value="ngo_po">Non-Government Organizations (NGO) / People's Organizations (POs)</option>
+            <option value="money_remittance">Money Remittance</option>
+            <option value="individual_beneficiaries">Individual Beneficiaries</option>
+            <option value="group_beneficiaries">Group Beneficiaries</option>
+        </select>
+    </div>
+
+    <!-- Attachments Checklist (dynamically shown based on modality) -->
+    <div id="attachments_container" class="hidden">
+        <h4 class="text-md font-medium text-gray-800 mb-3">Required Attachments</h4>
+        <div id="attachments_list" class="space-y-2 max-h-96 overflow-y-auto">
+            <!-- Checkboxes will be populated here via JavaScript -->
+        </div>
+    </div>
+
+            <!-- No Selection Message -->
+            <div id="no_selection_message" class="text-sm text-gray-500 italic">
+                Please select a modality to view required attachments.
             </div>
+        </div>
+    @endif
+</div>
                 <!-- Buttons -->
                 <div class="flex justify-end space-x-3" id="button-container">
 
@@ -381,11 +421,168 @@ async function loadRecentRequests() {
 setInterval(loadRecentRequests, 5000);
 loadRecentRequests();
 
-// Add CSRF token to head if not present
-if (!document.querySelector('meta[name="csrf-token"]')) {
-    const meta = document.createElement('meta');
-    meta.name = 'csrf-token';
-    meta.content = document.querySelector('input[name="_token"]').value;
-    document.head.appendChild(meta);
-}
+document.addEventListener('DOMContentLoaded', function() {
+    if (!document.querySelector('meta[name="csrf-token"]')) {
+        const tokenInput = document.querySelector('input[name="_token"]');
+        if (tokenInput) {
+            const meta = document.createElement('meta');
+            meta.name = 'csrf-token';
+            meta.content = tokenInput.value;
+            document.head.appendChild(meta);
+        }
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modalitySelect = document.getElementById('modality_select');
+    
+    // Only run if the element exists (TUPAD program)
+    if (!modalitySelect) {
+        return;
+    }
+    
+    const attachmentsContainer = document.getElementById('attachments_container');
+    const attachmentsList = document.getElementById('attachments_list');
+    const noSelectionMessage = document.getElementById('no_selection_message');
+    const dvRequestId = {{ $dvRequest->id }};
+    
+       // Fetch attachments from database for this DV request
+    async function fetchAttachmentsForModality(modality) {
+        try {
+            const response = await fetch(`/RegionalOffices/IMSD/dvrequests/${dvRequestId}/tupad-attachments/${modality}`);
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error fetching attachments:', error);
+            return [];
+        }
+    }
+
+    // Fallback attachments data (in case fetch fails)
+    const attachmentsByModality = {
+        'rpmt': [
+            'RPMT',
+            'TUPAD Work Program (Annex B)',
+            'Profile of TUPAD Beneficiaries (Annex D)',
+            'Contract of Service (Annex E-2)',
+            'Payroll',
+            'Notice to Proceed',
+            'Photocopy of Valid IDs'
+        ],
+        'lgu': [
+            'Letter of Intent (Annex F)',
+            'RPMT',
+            'TUPAD Work Program (Annex B)',
+            'Profile of TUPAD Beneficiaries (Annex D)',
+            'Contract of Service (Annex E-2)',
+            'Notice to Proceed',
+            'Photocopy of Valid IDs',
+            'Local Development Plan',
+            'Sangguniang Bayan (SB) or Board Resolution',
+            'Memorandum of Agreement (Annex G)'
+        ],
+        'ngo_po': [
+            'Letter of Intent (Annex F)',
+            'RPMT',
+            'TUPAD Work Program (Annex B)',
+            'Profile of TUPAD Beneficiaries (Annex D)',
+            'Contract of Service (Annex E-2)',
+            'Notice to Proceed',
+            'Photocopy of Valid IDs',
+            'Local Development Plan',
+            'Sangguniang Bayan (SB) or Board Resolution',
+            'Memorandum of Agreement (Annex G)',
+            'Audited Financial Reports for the past three (3) years',
+            'Work and Financial Plan',
+            'List of photographs of similar implemented projects',
+            'Sworn Affidavit',
+            'Copy of Accredited as Co-Partner (ACP) Certificate',
+            'Constitution and By-Laws Authenticated (if registered with DOLE)',
+            'Updated list of officers and members (if registered with DOLE)'
+        ],
+        'money_remittance': [
+            'RPMT',
+            'TUPAD Work Program (Annex B)',
+            'Profile of TUPAD Beneficiaries (Annex D)',
+            'Contract of Service (Annex E-2)',
+            'TUPAD Payroll',
+            'Money Remittance Payroll',
+            'Notice to Proceed',
+            'Photocopy of Valid IDs',
+            'Daily Time Records (DTRs) / Attendance Sheets',
+            'TUPAD Completion Report'
+        ],
+        'individual_beneficiaries': [
+            'Letter Of Intent (Annex F)',
+            'RPMT',
+            'Business Plan',
+            'Beneficiary Profile Form (Annex O)',
+            'Photocopy of Valid IDs',
+            'Proof of Project Readiness'
+        ],
+        'group_beneficiaries': [
+            'RPMT',
+            'Beneficiary Profile Form (Annex O)',
+            'Notice to Proceed',
+            'Project Proposal',
+            'Local Development Plan',
+            'Sangguiniang Bayan (SB) or Board Resolution',
+            'Memorandum of Agreement (Annex G)',
+            'Audited Financial Reports for the past three (3) years',
+            'Work and Financial Plan',
+            'List or photographs of similar implemented projects',
+            'Sworn Affidavit',
+            'Copy of Accredited as Co-Partner (ACP) Certificate',
+            'Constitution and By-Laws Authenticated (if registered from DOLE)',
+            'Updated list of officers and members (if registered from DOLE)',
+            'Masterlist',
+            'Photocopy of Valid IDs'
+        ]
+    };
+
+    // Handle modality selection change
+    modalitySelect.addEventListener('change', function() {
+        const selectedModality = this.value;
+        
+        if (!selectedModality) {
+    
+            return;
+        }
+
+        // Show attachments container
+        noSelectionMessage.classList.add('hidden');
+        attachmentsContainer.classList.remove('hidden');
+
+        // Get attachments for selected modality
+        const attachments = attachmentsByModality[selectedModality] || [];
+
+        // Clear previous checkboxes
+        attachmentsList.innerHTML = '';
+
+        // Generate checkboxes
+        attachments.forEach((attachment, index) => {
+            const checkboxId = `attachment_${selectedModality}_${index}`;
+            const checkboxDiv = document.createElement('div');
+            checkboxDiv.className = 'flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition';
+            
+            checkboxDiv.innerHTML = `
+                <input 
+                    type="checkbox" 
+                    id="${checkboxId}"
+                    name="attachments[${attachment}]"
+                    value="1"
+                    class="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                >
+                <label 
+                    for="${checkboxId}" 
+                    class="ml-3 text-sm text-gray-700 cursor-pointer select-none flex-1"
+                >
+                    ${attachment}
+                </label>
+            `;
+            
+            attachmentsList.appendChild(checkboxDiv);
+        });
+    });
+});
 </script>

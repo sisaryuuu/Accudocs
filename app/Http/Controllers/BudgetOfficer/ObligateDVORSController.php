@@ -151,6 +151,7 @@ public function receive(Request $request, $id)
             $dvRequest->orsRequest->update([
                 'status'      => 'ORS_received',
                  'gross' => $request->input('amount', $dvRequest->amount), // 🔹 update if sent
+                  'accountingunit_id'=> auth()->id(),
                 'received_by' => auth()->id(),
                 'received_at' => $receivedAt,
             ]);
@@ -160,6 +161,7 @@ public function receive(Request $request, $id)
         $dvRequest->update([
             'status'      => 'ORS_received',
             'gross' => $request->input('amount', $dvRequest->amount), // 🔹 update if sent
+             'accountingunit_id'=> auth()->id(),
             'received_by' => auth()->id(),
             'received_at' => $receivedAt,
             'locked_by'   => auth()->id(),
@@ -170,7 +172,7 @@ public function receive(Request $request, $id)
         $this->logAction(
             $dvRequest->id,
             'Budget_Officer',
-            'ORS_received',
+            $dvRequest->status,
             'ORS request received by Budget Officer for processing'
         );
 
@@ -181,7 +183,7 @@ public function receive(Request $request, $id)
         Notification::create([
             'focalperson_id' => $focalId,
             'dv_request_id'  => $dvRequest->id,
-            'status'         => 'ORS_received',
+            'status'         => $dvRequest->status,
             'action'         => 'Received',
             'remarks'        => $remarks,
         ]);
@@ -189,7 +191,7 @@ public function receive(Request $request, $id)
         // Real-time push
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
-            'status'        => 'ORS_received',
+            'status'        => $dvRequest->status,
             'remarks'       => $remarks,
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
@@ -201,7 +203,7 @@ public function receive(Request $request, $id)
                 'message' => 'Document has been received by Budget Officer (ORS).',
                 'data' => [
                     'id'          => $dvRequest->id,
-                    'status'      => 'ORS_received',
+                    'status'      => $dvRequest->status,
                     'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
                 ]
             ]);
@@ -256,13 +258,13 @@ public function startProcessing(Request $request, $id)
         $this->logAction(
             $dvRequest->id,
             'Budget_Officer',
-            'ORS_in_process',
+            $dvRequest->status,
             'Processing started by Budget Officer'
         );
 
         // Notify focal person
         $focalId = $dvRequest->focalperson_id;
-        $status  = 'ORS_in_process';
+        $status  =  $dvRequest->status;
         $action  = 'Processing Started';
         $remarks = $request->remarks ?? 'Request is now being processed by Budget Officer';
 
@@ -475,7 +477,7 @@ public function store(Request $request, $dvRequestId)
     'contcurrent_id'     => $request->contcurrent_id,
     'gross'              => $dvRequest->amount, // ✅ always equal to DV
     'remarks'            => $request->remarks,
-    'status'             => 'ORS_obligated',
+    'status'             => $dvRequest->status,
     'obligated_by'       => auth()->id(),
     'obligated_at'       => now(),
 ]);
@@ -504,7 +506,7 @@ public function store(Request $request, $dvRequestId)
     $this->logAction(
         $dvRequest->id,
         'Budget_Officer',
-        'ORS_obligated',
+        $dvRequest->status,
         'ORS Number ' . $orsNumber . ' assigned.'
     );
     return redirect()->route('BudgetOfficer.dvrequests.index')
@@ -655,6 +657,9 @@ public function store(Request $request, $dvRequestId)
 }
  protected function logAction($dvRequestId, $action, $status, $remarks = null)
     {
+
+         $stepAction = 'Budget_Officer';
+
         $logData = [
             'dv_request_id' => $dvRequestId,
             'action'        => $action,

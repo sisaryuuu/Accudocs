@@ -168,7 +168,7 @@
                                         </button>
                                     </form>
                                     @endif
-                                     @if($request->status === 'ORS_for_revision')
+                                     @if($request->status === 'ORS_for_revision' || $request->status === 'submitted')
                                             <a href="{{ route('FocalPerson.dvrequest.edit', $request->id) }}"
                                             class="inline-flex items-center px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 text-xs font-medium rounded-md transition-colors duration-200">
                                                 Edit
