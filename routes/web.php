@@ -21,6 +21,17 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\FocalPerson\NotificationController;
 use App\Http\Controllers\AccountingUnitProfileController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AnalyticsController;
+
+
+
+
+
+
+Route::get('/test-chart', function () {
+    return view('test-chart');
+});
+
 
 Route::get('/', function () {
     return redirect()->route('login');
