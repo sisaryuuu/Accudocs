@@ -8,7 +8,7 @@ use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Models\Notification;
 use App\Services\PusherService;
-use App\Models\GIPAttachment;
+use App\Models\TEVAttachment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -57,10 +57,21 @@ class TEVDvRequestProcessingController extends Controller
     
     public function show($id)
 {
-    $dvRequest = DvRequest::with(['accountingUnit','program','logs'])
+    $dvRequest = DvRequest::with([
+        'accountingUnit',
+        'program',
+        'logs',
+        'focalPerson',
+        'respocenter',
+        'modeOfPayments',
+        'paymentDetails', // This will use your hasManyThrough relationship
+        'tevAttachments',
+        'logs'])
                         ->whereHas('program', fn($q) => 
                             $q->where('prcode', 'TEV')) 
                         ->findOrFail($id);
+
+
     $lockDuration = now()->subMinutes(10);
     $currentUserId = auth()->id();
 
@@ -75,10 +86,22 @@ class TEVDvRequestProcessingController extends Controller
             'locked_at' => now(),
         ]);
     }
+
+    $tevSelectedModality= $dvRequest->tev_modality;
+
+    $tevAttachments = collect();
+    if($tevSelectedModality){
+        $tevAttachments = $dvRequest->tevAttachments()
+        ->where('modality', $tevSelectedModality)
+        ->orderBy('sort_order')
+        ->get();
+    }
+
+
     $lastLog = $dvRequest->logs()->latest()->first();
     $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
 
-    return view('Incoming.TEV.verifytevdv', compact('dvRequest', 'lastStep'));
+    return view('Incoming.TEV.verifytevdv', compact('dvRequest', 'lastStep','tevAttachments'));
 }
  public function receive(Request $request, $id)
 {
@@ -126,6 +149,13 @@ class TEVDvRequestProcessingController extends Controller
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
         
+         // ✅ NEW: Broadcast to Incoming-GIP channel for real-time table updates
+        $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-received', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'Incoming-TEV_received',
+            'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
        
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -205,6 +235,11 @@ public function startProcessing(Request $request, $id)
             'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
+        $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-processing', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
         // JSON response for AJAX
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -292,7 +327,7 @@ public function startProcessing(Request $request, $id)
 
         $result = $dvRequests->map(fn($request) => [
             'id'           => $request->id,
-             'accounting_control_number' => $request->accounting_control_number,
+            'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 5, '0', STR_PAD_LEFT): '—',
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
@@ -330,95 +365,196 @@ public function startProcessing(Request $request, $id)
     }
 
     public function verify(Request $request, $id)
-    {
-        $request->validate([
-            'remarks' => 'nullable|string|max:1000',
-        ]);
+{
+    $request->validate([
+        'remarks' => 'nullable|string|max:1000',
+        'tev_attachments' => 'array',
+    ]);
 
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TEV')) 
-                              ->findOrFail($id);
+    $dvRequest = DvRequest::with('tevAttachments')
+        ->whereHas('program', fn($q) => $q->where('prcode', 'TEV')) 
+        ->findOrFail($id);
 
-                              
-         DvRequest::where('id', $dvRequest->id)->update([
+   
+    if ($dvRequest->tev_modality) {
+        // Get all submitted attachment IDs
+        $submittedIds = $request->has('tev_attachments') 
+            ? array_keys($request->tev_attachments) 
+            : [];
+
+        // Update all attachments for this modality
+        $dvRequest->tevAttachments()
+            ->where('modality', $dvRequest->tev_modality)
+            ->get()
+            ->each(function($attachment) use ($submittedIds) {
+                $attachment->update([
+                    'is_present' => in_array($attachment->id, $submittedIds)
+                ]);
+            });
+    }
+                        
+    // Update DV request status
+    $dvRequest->update([
         'status'     => 'Incoming-TEV_verified',
         'locked_by'  => null,
         'locked_at'  => null,
-      ]);
-         $focalId = $dvRequest->focalperson_id;
-                $status = 'Incoming-TEV_verified';
-                $action = 'Approved';
-                $remarks = $request->remarks ?? 'DV Request approved forwarded to Budget Officer.';
+    ]);
 
-                $notification = Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $status,
-                    'action'         => $action,
-                    'remarks'        => $remarks,
-                ]);
+    // Trigger Pusher notification to Budget Officer
+    $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
+        'dv_request_id' => $dvRequest->id,
+        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+        'program'       => $dvRequest->program->prcode ?? 'N/A',
+        'status'        => 'Incoming-TEV_verified',
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
 
-        if ($dvRequest->focalperson_id) {
-            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        =>  $status,
-                'remarks'       => 'Request approved by Incoming-TEV',
-                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-        }
-     $this->logAction(
-            $dvRequest->id,
-            'Incoming',
-            'Approved',
-            $request->remarks ?? 'DV Request approved forwarded to Budget Officer.'
-        );
+    // Create notification for focal person
+    $focalId = $dvRequest->focalperson_id;
+    $status = 'Incoming-TEV_verified';
+    $action = 'Approved';
+    $remarks = $request->remarks ?? 'DV Request approved and forwarded to Budget Officer.';
 
-        return redirect()->route('Incoming.TEV.index', $dvRequest->id)
-                         ->with('success', 'DV Request Approved.');
+    Notification::create([
+        'focalperson_id' => $focalId,
+        'dv_request_id'  => $dvRequest->id,
+        'status'         => $status,
+        'action'         => $action,
+        'remarks'        => $remarks,
+    ]);
+
+    // Trigger Pusher notification to focal person
+    if ($dvRequest->focalperson_id) {
+        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'isRejected'    => false,
+            'remarks'       => $remarks,
+            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
     }
+
+    // Trigger Pusher notification to Incoming-TEV channel
+    $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-verified', [
+        'dv_request_id' => $dvRequest->id,
+        'status'        => $status,
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
+    // Log the action
+    $this->logAction(
+        $dvRequest->id,
+        'Incoming-TEV',
+        'Approved',
+        $remarks
+    );
+
+    return redirect()->route('Incoming.TEV.index')
+        ->with('success', 'DV Request has been verified and forwarded to Budget Officer.');
+}
+    
         public function reject(Request $request, $id)
-    {
+{
+    try {
+        // Validate input
         $request->validate([
-            'remarks' => 'nullable|string|max:1000',
+            'remarks' => 'required|string|max:1000|min:10',
         ]);
 
+        // Find the DV request
         $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
-                            ->findOrFail($id);
+                              ->findOrFail($id);
 
-        // Update status to rejected
-        $dvRequest->status = 'Incoming-TEV_rejected';
-        $dvRequest->save();
-        $focalId = $dvRequest->focalperson_id;
-                $status = 'Incoming-TEV_rejected';
-                $action = 'Rejected';
-                $remarks = $request->remarks ?? 'Request rejected by Incoming-TEV';
-
-                $notification = Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $status,
-                    'action'         => $action,
-                    'remarks'        => $remarks,
-                ]);
-
-        if ($dvRequest->focalperson_id) {
-            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        =>  $status,
-                'remarks'       =>  $remarks,
-                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
+        // ✅ Only allow rejection if status is currently in Incoming-TEV stage
+        if (!in_array($dvRequest->status, ['Incoming-TEV_received', 'Incoming-TEV_in_process'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This DV request cannot be rejected at its current stage.'
+            ], 422);
         }
-        // Log the rejection
+
+        $rejectedAt = now();
+        $focalId = $dvRequest->focalperson_id;
+        $remarks = trim($request->remarks);
+
+        // ✅ Update DV request
+        $dvRequest->update([
+            'status'     => 'Incoming-TEV_rejected',
+            'locked_by'  => null,
+            'locked_at'  => null,
+        ]);
+
+        // ✅ Log rejection
         $this->logAction(
             $dvRequest->id,
-            'Incoming',
-            'Rejected',
-            $request->remarks ?? 'Request rejected by Incoming-TEV'
+            'Incoming-TEV',
+            'Incoming-TEV_rejected',
+            "Rejected by Incoming-TEV: {$remarks}"
         );
 
-        return redirect()->route('Incoming.TEV.index')
-                        ->with('error', 'DV Request has been rejected.');
+        // ✅ Notify focal person
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => 'Incoming-TEV_rejected',
+            'action'         => 'Rejected',
+            'remarks'        => $remarks,
+        ]);
+
+        // ✅ Real-time push to focal person
+        if (isset($this->pusher)) {
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Incoming-TEV_rejected',
+                'remarks'       => $remarks,
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            // ✅ Real-time push to Incoming-TEV dashboard
+            $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-rejected', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Incoming-TEV_rejected',
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
+
+        // ✅ Always return JSON
+        return response()->json([
+            'success' => true,
+            'message' => 'DV request has been rejected successfully.',
+            'data' => [
+                'id'         => $dvRequest->id,
+                'status'     => 'Incoming-TEV_rejected',
+                'remarks'    => $remarks,
+            ]
+        ], 200);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        \Log::error('DV Request not found: ' . $e->getMessage());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'DV request not found.'
+        ], 404);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        \Log::error('Validation error: ' . json_encode($e->errors()));
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed: ' . implode(', ', $e->errors()['remarks'] ?? ['Invalid input'])
+        ], 422);
+
+    } catch (\Exception $e) {
+        \Log::error('Error rejecting TEV DV request: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred while rejecting the DV request: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     
     public function redirectToFirstPending()

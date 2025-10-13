@@ -13,7 +13,6 @@ class OrsRequest extends Model
         'dv_request_id',
         'accountingunit_id',
         'focalperson_id',
-        'uacscode_id',
         'adlcode_id',
         'allotmentclass_id',
         'mfopap_id',
@@ -23,6 +22,15 @@ class OrsRequest extends Model
         'obligated_at',
     ];
 
+
+
+     public function uacsCodes()
+    {
+        return $this->belongsToMany(UacsCode::class, 'ors_request_uacscode', 'ors_request_id', 'uacscode_id')
+                    ->withPivot('order')
+                    ->withTimestamps()
+                    ->orderBy('order');
+    }
 
     public function DvRequest()
     {
@@ -40,11 +48,6 @@ class OrsRequest extends Model
     {
         return $this->belongsTo(FocalPerson::class, 'focalperson_id');
     }
-    public function UacsCode()
-    {
-        return $this->belongsTo(UacsCode::class, 'uacscode_id');
-    }
-
     public function AdlCode()
     {
         return $this->belongsTo(AdlCode::class, 'adlcode_id');

@@ -36,7 +36,18 @@
                     <p class="text-gray-400">N/A</p>
                     @endif
                 </div>
-
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">DV Number</label>
+                        <input type="text" value="{{ $dvRequest->dv_number ?? 'Not assigned' }}" 
+                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm bg-gray-50" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">ORS Number</label>
+                        <input type="text" value="{{ $dvRequest->orsRequest->ors_number ?? 'Not assigned' }}" 
+                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm bg-gray-50" readonly>
+                    </div>
+                </div>
                 <!-- Basic Info -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -56,78 +67,7 @@
                         </p>
                     </div>
                 </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Particulars</label>
-                    <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
-                </div>
-                 @if($dvRequest->program->prcode === 'GIP')
-
-                        <h2 class="text-md font-semibold text-gray-800 mb-3">Attachments Checklist</h2>
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                @foreach($dvRequest->gipAttachments as $attachment)
-                <div class="flex items-center space-x-2">
-                    <input 
-                        type="checkbox" 
-                        name="attachments[{{ $attachment->name }}]"
-                        id="attachment_{{ $loop->index }}"
-                        class="h-4 w-4 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                        style="accent-color: #16a34a;"
-                         {{ $attachment->is_present ? 'checked' : '' }} disabled
-                        @if($dvRequest->status !== 'Incoming-GIP_in_process') @endif>
-                    <label 
-                        for="attachment_{{ $loop->index }}"
-                        class="text-sm cursor-pointer {{ $attachment->is_present ? 'text-green-600 font-semibold' : 'text-gray-700' }}"
-                    >
-                        {{ $attachment->name }}
-                    </label>
-                </div>
-                @endforeach
-            </div>
-                @endif
-
-                  @if($dvRequest->program->prcode === 'TUPAD')
-                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                        TUPAD Attachments Checklist
-                        @if($selectedModality)
-                            <span class="text-sm font-normal text-blue-600">
-                                (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
-                            </span>
-                        @endif
-                    </h3>
-                 
-                    @if($selectedModality && $attachments && $attachments->count() > 0)
-                        <ul class="space-y-2">
-                            @foreach($attachments as $item)
-                                <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition">
-                                    <input type="checkbox" 
-                                        name="attachments[{{ $item->id }}]" 
-                                        value="1"
-                                        id="attachment_{{ $item->id }}"
-                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
-                                        {{ $item->is_present ? 'checked' : '' }} disabled>
-                                    <label for="attachment_{{ $item->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
-                                        {{ $item->name }}
-                                    </label>
-                                    @if($item->is_present)
-                                        <span class="text-xs text-green-600 font-medium">✓ Present</span>
-                                    @endif
-                                </li>
-                            @endforeach
-                        </ul>
-                        
-                        <p class="text-xs text-gray-500 mt-4">
-                            <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
-                        </p>
-                    @elseif(!$selectedModality)
-                        <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
-                    @else
-                        <p class="text-gray-400">No attachments found for the selected modality.</p>
-                    @endif
-                </div>
-                @endif
-                <!-- Enhanced Amounts Section for RANCA -->
+             <!-- Enhanced Amounts Section for RANCA -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Gross Amount</label>
                     
@@ -167,20 +107,121 @@
                         <p class="text-xs text-gray-500 mt-1">Amount cannot be edited in current status</p>
                     @endif
                 </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Particulars</label>
+                    <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
+                </div>
+                 @if($dvRequest->program->prcode === 'GIP')
+
+                        <h2 class="text-md font-semibold text-gray-800 mb-3">Attachments Checklist</h2>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                @foreach($dvRequest->gipAttachments as $attachment)
+                <div class="flex items-center space-x-2">
+                    <input 
+                        type="checkbox" 
+                        name="attachments[{{ $attachment->name }}]"
+                        id="attachment_{{ $loop->index }}"
+                        class="h-4 w-4 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                        style="accent-color: #16a34a;"
+                         {{ $attachment->is_present ? 'checked' : '' }} disabled
+                        @if($dvRequest->status !== 'Incoming-GIP_in_process') @endif>
+                    <label 
+                        for="attachment_{{ $loop->index }}"
+                        class="text-sm cursor-pointer {{ $attachment->is_present ? 'text-green-600 font-semibold' : 'text-gray-700' }}"
+                    >
+                        {{ $attachment->name }}
+                    </label>
+                </div>
+                @endforeach
+            </div>
+                @endif
+                @if($dvRequest->program->prcode === 'TUPAD' && $attachments->count() > 0)
+                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                            TUPAD Attachments Checklist
+                            @if($selectedModality)
+                                <span class="text-sm text-blue-600">
+                                    (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
+                                </span>
+                            @endif
+                        </h3>
+
+                        <ul class="space-y-2">
+                            @foreach($attachments as $item)
+                                <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition">
+                                    <input type="checkbox" 
+                                        id="attachment_{{ $item->id }}"
+                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                                        {{ $item->is_present ? 'checked' : '' }} disabled>
+                                    <label for="attachment_{{ $item->id }}" class="text-sm text-gray-900 flex-1">
+                                        {{ $item->name }}
+                                    </label>
+                                    @if($item->is_present)
+                                        <span class="text-xs text-green-600 font-medium">✓ Present</span>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                 @if($dvRequest->program->prcode === 'TEV')
+                   {{-- TEV Attachments Section --}}
+        <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <label class="block text-sm font-medium text-gray-700 mb-3">
+                TEV Attachments 
+                @if($dvRequest->tev_modality)
+                    <span class="text-blue-600">({{ ucfirst($dvRequest->tev_modality) }})</span>
+                @endif
+            </label>
+
+            @if($dvRequest->tev_modality && $tevAttachments && $tevAttachments->count() > 0)
+                <ul class="space-y-2">
+                    @foreach($tevAttachments as $item)
+                        <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition border border-gray-200">
+                            <input type="checkbox" 
+                                name="tev_attachments[{{ $item->id }}]" 
+                                value="1"
+                                id="tev_attachment_{{ $item->id }}"
+                                class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                                {{ $item->is_present ? 'checked' : '' }} disabled>
+                            <label for="tev_attachment_{{ $item->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
+                                {{ $item->name }}
+                            </label>
+                            @if($item->is_present)
+                                <span class="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded">✓ Present</span>
+                            @else
+                                <span class="text-xs text-gray-400 font-medium">Not Present</span>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+                
+                <div class="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
+                    <p class="text-xs text-blue-700">
+                        <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
+                    </p>
+                </div>
+            @elseif(!$dvRequest->tev_modality)
+                <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p class="text-sm text-yellow-800">
+                        <strong>⚠️ No Modality Selected</strong><br>
+                        No modality was selected by IMSD for this request. Please contact IMSD to select a modality first.
+                    </p>
+                </div>
+            @else
+                <div class="p-4 bg-gray-100 border border-gray-300 rounded-lg">
+                    <p class="text-sm text-gray-600">
+                        No attachments found for the selected modality ({{ $dvRequest->tev_modality }}).
+                    </p>
+                </div>
+            @endif
+        </div>    
+        @endif
+               
 
                 <!-- DV and ORS Numbers -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">DV Number</label>
-                        <input type="text" value="{{ $dvRequest->dv_number ?? 'Not assigned' }}" 
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm bg-gray-50" readonly>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">ORS Number</label>
-                        <input type="text" value="{{ $dvRequest->orsRequest->ors_number ?? 'Not assigned' }}" 
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm bg-gray-50" readonly>
-                    </div>
-                </div>
+                
 
                 <!-- Payment Details Section -->
                 @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
@@ -220,12 +261,12 @@
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-blue-700">ADL Code</label>
-                            <input type="text" value="{{ $dvRequest->orsRequest->adlcode_id ?? 'N/A' }}" 
+                            <input type="text" value="{{ $dvRequest->orsRequest->adlcode_id->adlcode ?? 'N/A' }}" 
                                    class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-blue-700">Allotment Class</label>
-                            <input type="text" value="{{ $dvRequest->orsRequest->allotment_class_id ?? 'N/A' }}" 
+                            <input type="text" value="{{ $dvRequest->orsRequest->allotment_class_id->allotcode ?? 'N/A' }}" 
                                    class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
                         </div>
                         <div>
@@ -243,17 +284,6 @@
                         <label class="block text-sm font-medium text-gray-700">Processed By</label>
                         <input type="text" value="{{ auth()->user()->fname ?? '' }} {{ auth()->user()->lname ?? '' }}" 
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Current Status</label>
-                        <span class="mt-1 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
-                            @if($dvRequest->status === 'Outgoing_finalized') bg-blue-100 text-blue-800
-                            @elseif($dvRequest->status === 'RANCA_received') bg-yellow-100 text-yellow-800
-                            @elseif($dvRequest->status === 'RANCA_in_process') bg-orange-100 text-orange-800
-                            @elseif($dvRequest->status === 'RANCA_validated') bg-green-100 text-green-800
-                            @else bg-gray-100 text-gray-800 @endif">
-                            {{ str_replace('_', ' ', $dvRequest->status) }}
-                        </span>
                     </div>
                 </div>
   

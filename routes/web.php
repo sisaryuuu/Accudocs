@@ -3,6 +3,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DVORS\VoucherController;
 use App\Http\Controllers\FocalPerson\DvRequestController;
 use App\Http\Controllers\BudgetOfficer\ObligateDVORSController;
+use App\Http\Controllers\BudgetOfficer\ADLController;
 use App\Http\Controllers\Outgoing\OutgoingDvController;
 use App\Http\Controllers\AccountingIII\RANCAController;
 use App\Http\Controllers\IMSD\DvRequestProcessingController;
@@ -71,7 +72,14 @@ Route::middleware(['auth','role:Admin'])->group(function () {
     Route::get('admin/settings', [SettingsController::class, 'edit'])->name('admin.settings.edit');
     Route::post('admin/settings', [SettingsController::class, 'update'])->name('admin.settings.update');
 });
+
+
+
     Route::middleware(['auth:focal', 'role:Focal_Person'])->group(function () {
+         Route::get('/dvrequest/history', [DvRequestController::class, 'history'])
+        ->name('FocalPerson.dvrequest.history');
+         Route::get('/dvrequest/history/search', [DvRequestController::class, 'searchHistory'])  
+        ->name('FocalPerson.dvrequest.history.search');
         Route::get('/FocalPerson/dvrequest/index', [DvRequestController::class, 'index'])
         ->middleware('permission:focalperson.view')
         ->name('FocalPerson.dvrequest.index');
@@ -94,9 +102,16 @@ Route::middleware(['auth','role:Admin'])->group(function () {
         Route::get('/search', [DvRequestController::class, 'search'])
          ->middleware('permission:focalperson.view')
         ->name('FocalPerson.dvrequest.search');
+         Route::get('/{id}/preview', [DvRequestController::class, 'preview'])
+        ->name('preview');
+        Route::get('/{id}/generate-pdf', [DvRequestController::class, 'generatePDF'])
+        ->name('generatePDF');
         Route::get('/{dvRequest}/logs', [DvRequestController::class, 'logs'])
          ->middleware('permission:focalperson.view')
-        ->name('logs'); 
+        ->name('logs');
+       
+    
+       
         Route::delete('/{dvRequest}', [DvRequestController::class, 'destroy'])
         ->middleware('permission:focalperson.delete')
         ->name('destroy');
@@ -127,7 +142,7 @@ Route::middleware(['auth','role:Admin'])->group(function () {
 });
 
 
-Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->group(function () {
+Route::middleware(['auth:web', 'role:Admin|IMSD'])->prefix('RegionalOffices/IMSD')->group(function () {
 
     // Index page — list all DV requests for IMSD
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
@@ -145,6 +160,8 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
 
     Route::post('/dvrequests/{id}/verify', [DvRequestProcessingController::class, 'verify'])
     ->name('IMSD.dvrequests.verify');
+    Route::post('/dvrequests/{id}/reject', [DvRequestProcessingController::class, 'reject'])
+    ->name('IMSD.dvrequests.reject');
     Route::get('/history', [DvRequestProcessingController::class, 'history'])
     ->name('history');
     Route::get('/RegionalOffices/IMSD/load-form/{id}',[DvRequestProcessingController::class, 'loadForm'])
@@ -165,7 +182,7 @@ Route::middleware(['auth:web', 'role:IMSD'])->prefix('RegionalOffices/IMSD')->gr
 });
 
 
-Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->group(function () {
+Route::middleware(['auth:web', 'role:Admin|Incoming-GIP'])->prefix('Incoming/GIP')->group(function () {
      Route::get('/index', [GIPDvRequestProcessingController::class, 'index'])
     ->middleware('permission:gip.view')
     ->name('Incoming.GIP.index');
@@ -202,13 +219,12 @@ Route::middleware(['auth:web', 'role:Incoming-GIP'])->prefix('Incoming/GIP')->gr
     ->name('Incoming.GIP.updateAttachments');
     Route::post('/dvrequests/{id}/refresh-lock', [GIPDvRequestProcessingController::class, 'refreshLock'])
     ->name('Incoming.GIP.dvrequests.refreshLock');
-
     Route::post('/dvrequests/{id}/release-lock', [GIPDvRequestProcessingController::class, 'releaseLock'])
     ->name('Incoming.GIP.dvrequests.releaseLock');
 
 });
 
-Route::middleware(['auth:web', 'role:Incoming-TUPAD'])->prefix('Incoming/TUPAD')->group(function () {
+Route::middleware(['auth:web', 'role:Admin|Incoming-TUPAD'])->prefix('Incoming/TUPAD')->group(function () {
     Route::get('/index', [TupadDvRequestProcessingController::class, 'index'])
     ->middleware('permission:tupad.view')
     ->name('Incoming.TUPAD.index');
@@ -252,7 +268,7 @@ Route::middleware(['auth:web', 'role:Incoming-TUPAD'])->prefix('Incoming/TUPAD')
 
   
 });
-Route::middleware(['auth:web', 'role:Incoming-TEV'])->prefix('Incoming/TEV')->group(function () {
+Route::middleware(['auth:web', 'role:Admin|Incoming-TEV'])->prefix('Incoming/TEV')->group(function () {
     Route::get('/index', [TEVDvRequestProcessingController::class, 'index'])
     ->name('Incoming.TEV.index');
     Route::get('/dvrequests/verify', [TEVDvRequestProcessingController::class, 'redirectToFirstPending'])
@@ -282,51 +298,93 @@ Route::middleware(['auth:web', 'role:Incoming-TEV'])->prefix('Incoming/TEV')->gr
 
   
 });
-//Budget Officer
-Route::middleware(['auth:web', 'role:Budget_Officer'])->prefix('/BudgetOfficer')->name('BudgetOfficer.')->group(function () {
-        
+Route::middleware(['auth:web', 'role:Admin|Budget_Officer'])->prefix('/BudgetOfficer')->name('BudgetOfficer.')->group(function () {
+    
+    // ====================================
+    // DV REQUESTS ROUTES
+    // ====================================
+    
     Route::get('/dvrequests', [ObligateDVORSController::class, 'index'])
-    ->middleware('permission:budget.view')
-    ->name('dvrequests.index');
-     Route::get('/dvrequests/fetch', [ObligateDVORSController::class, 'fetchDvRequests'])
-      ->middleware('permission:budget.view')
-    ->name('dvrequests.fetch');
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.index');
+        
+    Route::get('/dvrequests/fetch', [ObligateDVORSController::class, 'fetchDvRequests'])
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.fetch');
+        
     Route::get('/dvrequests/recent', [ObligateDVORSController::class, 'fetchRecent'])
-     ->middleware('permission:budget.view')
-    ->name('dvrequests.recent');  
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.recent');
+        
     Route::get('/dvrequests/verify', [ObligateDVORSController::class, 'redirectToFirstPending'])
-    ->middleware('permission:budget.view')
-    ->name('dvrequests.verifyors');      
-    Route::get('/dvrequests/{id}', [ObligateDVORSController::class, 'show'])
-    ->middleware('permission:budget.view')
-    ->name('dvrequests.withid');
-     Route::post('/dvrequests/{id}/receive', [ObligateDVORSController::class, 'receive'])
-    ->name('dvrequests.receive');
-    Route::post('/dvrequests/{id}/start-processing', [ObligateDVORSController::class, 'startProcessing'])
-    ->name('dvrequests.startProcessing');
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.verifyors');
+        
     Route::get('/history', [ObligateDVORSController::class, 'history'])
-    ->middleware('permission:budget.view')
-    ->name('dvrequests.loghistory');
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.loghistory');
+        
+    // View specific DV request (this should be LAST among GET routes)
+    Route::get('/dvrequests/{id}', [ObligateDVORSController::class, 'show'])
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.withid');
+    
+    // ====================================
+    // DV REQUEST ACTIONS (POST/PUT)
+    // ====================================
+    
+    Route::post('/dvrequests/{id}/receive', [ObligateDVORSController::class, 'receive'])
+        ->middleware('permission:budget.edit')
+        ->name('dvrequests.receive');
+        
+    Route::post('/dvrequests/{id}/start-processing', [ObligateDVORSController::class, 'startProcessing'])
+        ->middleware('permission:budget.edit')
+        ->name('dvrequests.startProcessing');
+        
     Route::put('/dvrequests/{id}/update-amount', [ObligateDVORSController::class, 'updateAmount'])
-     ->middleware('permission:budget.edit')
-    ->name('dvrequests.updateAmount');
+        ->middleware('permission:budget.edit')
+        ->name('dvrequests.updateAmount');
+        
     Route::post('/dvrequests/{id}/obligate', [ObligateDVORSController::class, 'store'])
-    ->middleware('permission:budget.approve')
-    ->name('dvrequests.store');
+        ->middleware('permission:budget.approve')
+        ->name('dvrequests.store');
+        
     Route::post('/dvrequests/{id}/onhold', [ObligateDVORSController::class, 'onhold'])
-    ->middleware('permission:budget.onhold')
-    ->name('dvrequests.onhold');
+        ->middleware('permission:budget.onhold')
+        ->name('dvrequests.onhold');
+        
     Route::post('/dvrequests/{id}/revise', [ObligateDVORSController::class, 'revise'])
-    ->name('dvrequests.revise');
-
- 
-     Route::post('/dvrequests/{id}/refresh-lock', [ObligateDVORSController::class, 'refreshLock'])
-    ->name('dvrequests.refreshLock');
+        ->middleware('permission:budget.edit')
+        ->name('dvrequests.revise');
+    
+    // ====================================
+    // LOCK MANAGEMENT
+    // ====================================
+    
+    Route::post('/dvrequests/{id}/refresh-lock', [ObligateDVORSController::class, 'refreshLock'])
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.refreshLock');
+        
     Route::post('/dvrequests/{id}/release-lock', [ObligateDVORSController::class, 'releaseLock'])
-    ->name('dvrequests.releaseLock');
-    });
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.releaseLock');
+    
+    // ====================================
+    // ADL CODE ROUTES (NEW)
+    // ====================================
+    
+    // Store new ADL Code
+    Route::post('/adl/store', [ObligateDVORSController::class, 'storeADLCode'])
+        ->middleware('permission:budget.edit')
+        ->name('adl.store');
+    
+    // Check if ADL Code exists (GET method is better for checking)
+    Route::get('/adl/check', [ObligateDVORSController::class, 'checkADLCode'])
+        ->middleware('permission:budget.view')
+        ->name('adl.check');
+});
                     
-Route::middleware(['auth:web','role:Outgoing'])->prefix('/Outgoing')->name('Outgoing.')->group(function () {
+Route::middleware(['auth:web','role:Admin|Outgoing'])->prefix('/Outgoing')->name('Outgoing.')->group(function () {
         Route::get('/dvrequests', [OutgoingDvController::class, 'index'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.index');
@@ -336,6 +394,9 @@ Route::middleware(['auth:web','role:Outgoing'])->prefix('/Outgoing')->name('Outg
         Route::get('/dvrequests/recent', [OutgoingDvController::class, 'fetchDvRecent'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.recent');
+        Route::get('/dvrequests/{id}/preview', [OutgoingDvController::class, 'previewDv'])->name('dvrequests.preview');
+        Route::get('/dvrequests/{id}/print', [OutgoingDvController::class, 'printOfficialDv'])->name('dvrequests.print');
+        Route::get('/dvrequests/{id}/generate-pdf', [OutgoingDvController::class, 'generatePdf'])->name('dvrequests.generate-pdf');
         Route::get('/dvrequests/dvloghistory', [OutgoingDvController::class, 'history'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.dvloghistory');
@@ -354,6 +415,9 @@ Route::middleware(['auth:web','role:Outgoing'])->prefix('/Outgoing')->name('Outg
         Route::post('/dvrequests/{id}/finalize', [OutgoingDvController::class, 'finalize'])
          ->middleware('permission:outgoing.approve')
          ->name('dvrequests.finalize');
+        Route::post('/dvrequests/{id}/reject', [OutgoingDvController::class, 'reject'])
+        ->middleware('permission:outgoing.reject')
+        ->name('dvrequests.reject');
          Route::put('/dvrequests/{id}/attachments', [OutgoingDvController::class, 'updateAttachments'])
         ->name('dvrequests.updateAttachments');
         Route::post('/dvrequests/{id}/refresh-lock', [OutgoingDvController::class, 'refreshLock'])
@@ -363,9 +427,15 @@ Route::middleware(['auth:web','role:Outgoing'])->prefix('/Outgoing')->name('Outg
     });
 
 //Accountant III
-Route::middleware(['auth:web','role:Accounting_III'])->prefix('Accounting')->name('Accounting.')->group(function () {
+//Accountant III
+Route::middleware(['auth:web','role:Admin|Accounting_III'])->prefix('Accounting')->name('Accounting.')->group(function () {
+    // Fix the history route - remove duplicate prefix
+    Route::get('/history', [RANCAController::class, 'history'])->name('history');
+    
+    // Your existing routes
     Route::get('/dvrequests', [RANCAController::class, 'index'])
     ->name('dvrequests.index');
+    
     Route::get('/dvrequests/fetch', [RANCAController::class, 'fetchDvRequests'])
     ->name('dvrequests.fetch');
     Route::get('/dvrequests/recent', [RANCAController::class, 'fetchDvRecent'])
@@ -384,10 +454,8 @@ Route::middleware(['auth:web','role:Accounting_III'])->prefix('Accounting')->nam
     Route::post('/dvrequests/{id}/validate', [RANCAController::class, 'validateDV'])
     ->name('dvrequests.validate');
 
-    Route::post('/dvrequests/{id}/release-lock', [RANCAController::class, 'releaseLock'])
+    Route::post('/dvrequests/{id}/release-lock', [RANCAController::class, 'releaseLock'])   
     ->name('dvrequests.releaseLock');
     Route::post('/dvrequests/{id}/refresh-lock', [RANCAController::class, 'refreshLock'])
     ->name('dvrequests.refreshLock');
-
-    Route::get('/history', [RANCAController::class, 'history'])->name('dvrequests.rancahistory');
 });

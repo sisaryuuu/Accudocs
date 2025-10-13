@@ -5,10 +5,14 @@ namespace App\Http\Controllers\AccountingIII;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\OrsRequest;
+use App\Models\AdlCode;
+use App\Models\UacsCode;
+use App\Models\Mfopap;
 use App\Models\DvRequest;
 use App\Services\PusherService;
 use App\Models\TUPADAttachment;
 use App\Models\GIPAttachment;
+use App\Models\TEVAttachment;
 use App\Models\Notification;
 use App\Models\DvRequestLog;
 use Illuminate\Support\Facades\DB;
@@ -31,45 +35,87 @@ class RANCAController extends Controller
 
     /** Fetch DV requests for RANCA */
     public function fetchDvRequests()
-    {
-        try {
-            $currentUserId = auth()->id();
-            $lockDuration  = now()->subMinutes(10);
+{
+    try {
+        $currentUserId = auth()->id();
+        $lockDuration  = now()->subMinutes(10);
 
-            $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'orsRequest'])
-                ->whereIn('status', ['Outgoing_finalized','RANCA_received','RANCA_in_process'])
-                ->where(function ($q) use ($currentUserId, $lockDuration) {
-                    $q->whereNull('locked_by')
-                      ->orWhere('locked_by', $currentUserId)
-                      ->orWhere('locked_at', '<=', $lockDuration);
-                })
-                ->latest()
-                ->get();
+        $dvRequests = DvRequest::with([
+                'program', 
+                'focalPerson', 
+                'respocenter',
+                'orsRequest',
+                'orsRequest.uacsCodes',
+                'orsRequest.AdlCode',
+                'orsRequest.Mfopap'
+            ])
+            ->whereIn('status', [
+                'Incoming-TUPAD_verified', 
+                'Incoming-GIP_verified',
+                'Incoming-TEV_verified',
+                'ORS_received',
+                'ORS_onhold'
+            ])
+            ->where(function ($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by')
+                  ->orWhere('locked_by', $currentUserId)
+                  ->orWhere('locked_at', '<=', $lockDuration);
+            })
+            ->latest()
+            ->get();
 
-            return response()->json($dvRequests->map(function ($req) {
-                return [
-                    'id'           => $req->id,
-                    'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                    'program'      => $req->program->prcode ?? 'N/A',
-                    'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                    'amount'       => number_format($req->amount, 2),
-                    'status'       => $req->status,
-                    'date'         => $req->created_at->format('M d, Y'),
-                    'ors_number'   => $req->orsRequest->ors_number ?? null,
-                    'dv_number'    => $req->dv_number ?? null,
+        return response()->json($dvRequests->map(function ($req) {
+            // ✅ SAFE: Check if orsRequest exists first
+            $orsRequest = $req->orsRequest;
 
-                     'uacscode_id'    => $req->orsRequest->uacscode_id ?? null,
-                     'adlcode_id'     => $req->orsRequest->adlcode_id ?? null,
-                     'mfopap_id'      => $req->orsRequest->mfopap_id ?? null,
-                ];
-            }));
+            // ✅ SAFE: Handle UACS codes
+            $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
+            $uacsDisplay = $uacsCodes->isNotEmpty() 
+                ? $uacsCodes->map(function($uacs) {
+                    return $uacs->uacscode . ' - ' . $uacs->description;
+                })->implode('<br>') 
+                : '—';
+
+            // ✅ SAFE: Get ADL code - check if orsRequest AND adlCode exist
+            $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
+                $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
+                '—';
             
-        } catch (\Exception $e) {
-            \Log::error('Error in RANCA fetchDvRequests: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to fetch requests'], 500);
-        }
-    }
+            // ✅ SAFE: Get MFO/PAP code - check if orsRequest AND mfopap exist
+            $mfopapCode = ($orsRequest && $orsRequest->Mfopap) ? 
+                $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription : 
+                '—';
 
+            // ✅ SAFE: Get ORS number
+            $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
+
+            return [
+                'id'           => $req->id,
+                'control_no'   => $req->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 5, '0', STR_PAD_LEFT) : 
+                    '—',
+                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                'program'      => $req->program->prcode ?? 'N/A',
+                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                'amount'       => number_format($req->amount, 2),
+                'status'       => $req->status,
+                'date'         => $req->created_at->format('M d, Y'),
+                'ors_number'   => $orsNumber,
+                'uacs_codes'   => $uacsDisplay,
+                'adl_code'     => $adlCode,
+                'mfopap_code'  => $mfopapCode,
+            ];
+        }));
+
+    } catch (\Exception $e) {
+        \Log::error('Error in fetchDvRequests: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+        ], 500);
+    }
+}
     /** Fetch recent DV requests */
     public function fetchDvRecent()
     {
@@ -100,7 +146,7 @@ class RANCAController extends Controller
     /** Show DV for processing */
     public function show($id)
     {
-        $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','tupadAttachments','logs'])
+        $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','tupadAttachments','tevAttachments','logs'])
             ->findOrFail($id);
 
         $currentUserId = auth()->id();
@@ -113,16 +159,15 @@ class RANCAController extends Controller
                 ->with('error', 'This DV Request is currently locked by another user.');
         }
 
-         $selectedModality = $dvRequest->tupad_modality;
+        $selectedModality = $dvRequest->tupad_modality;
     
-   $attachments = collect();
-    if ($selectedModality) {
-        $attachments = $dvRequest->tupadAttachments()
-            ->where('modality', $selectedModality)
-            ->orderBy('sort_order')
-            ->get();
-    }
-
+        $attachments = collect();
+        if ($selectedModality) {
+            $attachments = $dvRequest->tupadAttachments()
+                ->where('modality', $selectedModality)
+                ->orderBy('sort_order')
+                ->get();
+        }
 
         $dvRequest->update([
             'locked_by' => $currentUserId,
@@ -132,7 +177,21 @@ class RANCAController extends Controller
         $lastLog  = $dvRequest->logs()->latest()->first();
         $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
 
-        return view('Accounting.validatedv', compact('dvRequest', 'lastStep','selectedModality','attachments'));
+
+          $tevSelectedModality= $dvRequest->tev_modality;
+
+    $tevAttachments = collect();
+    if($tevSelectedModality){
+        $tevAttachments = $dvRequest->tevAttachments()
+        ->where('modality', $tevSelectedModality)
+        ->orderBy('sort_order')
+        ->get();
+    }
+
+    $lastLog  = $dvRequest->logs()->latest()->first();
+    $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
+
+        return view('Accounting.validatedv', compact('dvRequest', 'lastStep','selectedModality','attachments','tevSelectedModality','tevAttachments'));
     }
 
     /** Receive DV */
@@ -147,48 +206,69 @@ class RANCAController extends Controller
 
             $receivedAt = now();
             $dvRequest->update([
-                'status'      => 'RANCA_received',
-                 'accountingunit_id'=> auth()->id(),
-                'received_by' => auth()->id(),
-                'received_at' => $receivedAt,
-                'locked_by'   => auth()->id(),
-                'locked_at'   => $receivedAt,
+                'status'            => 'RANCA_received',
+                'accountingunit_id' => auth()->id(),
+                'received_by'       => auth()->id(),
+                'received_at'       => $receivedAt,
+                'locked_by'         => auth()->id(),
+                'locked_at'         => $receivedAt,
             ]);
 
-            $this->logAction($dvRequest->id, 'Accounting_III', $dvRequest->status, 'Received by RANCA');
+            $this->logAction($dvRequest->id, 'Accounting_III', 'RANCA_received', 'Received by RANCA');
 
             // Notify focal person
-            if ($dvRequest->focalperson_id) {
+            $focalId = $dvRequest->focalperson_id;
+            $remarks = 'DV Request received by RANCA for processing';
+
+            if ($focalId) {
                 Notification::create([
-                    'focalperson_id' => $dvRequest->focalperson_id,
+                    'focalperson_id' => $focalId,
                     'dv_request_id'  => $dvRequest->id,
-                    'status'         => $dvRequest->status,
-                    'action'         => 'Accounting_III',
-                    'remarks'        => 'DV Request received by RANCA for processing',
+                    'status'         => 'RANCA_received',
+                    'action'         => 'Received',
+                    'remarks'        => $remarks,
                 ]);
 
-                // Real-time notification
-                $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                // Real-time notification to focal person
+                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
-                    'status'        => $dvRequest->status,
-                    'remarks'       => 'DV Request received by RANCA for processing',
+                    'status'        => 'RANCA_received',
+                    'remarks'       => $remarks,
                     'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);
             }
 
-            return response()->json([
-                'success' => true, 
-                'message' => 'Document has been received by RANCA.',
-                'data' => [
-                    'id' => $dvRequest->id,
-                    'status' => $dvRequest->status,
-                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                ]
+            // Real-time notification to RANCA channel for table update
+            $this->pusher->trigger('dv-requests-ranca', 'dv-request-received', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'RANCA_received',
+                'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
+
+            // JSON response
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true, 
+                    'message' => 'Document has been received by RANCA.',
+                    'data' => [
+                        'id' => $dvRequest->id,
+                        'status' => 'RANCA_received',
+                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                    ]
+                ]);
+            }
+
+            return redirect()->route('Accounting.dvrequests.index')
+                ->with('success', 'Document has been received by RANCA.');
 
         } catch (\Exception $e) {
             \Log::error('Error receiving DV in RANCA: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
+            
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
+            }
+
+            return redirect()->back()->with('error', 'An error occurred while processing the request.');
         }
     }
 
@@ -209,43 +289,63 @@ class RANCAController extends Controller
                 'locked_at' => $startedAt,
             ]);
 
-            $this->logAction($dvRequest->id, 'Accounting_III', $dvRequest->status, 'Processing started by RANCA');
+            $this->logAction($dvRequest->id, 'Accounting_III', 'RANCA_in_process', 'Processing started by RANCA');
 
             // Notify focal person
-            if ($dvRequest->focalperson_id) {
+            $focalId = $dvRequest->focalperson_id;
+            $remarks = 'DV Request is now being processed by RANCA';
+
+            if ($focalId) {
                 Notification::create([
-                    'focalperson_id' => $dvRequest->focalperson_id,
+                    'focalperson_id' => $focalId,
                     'dv_request_id'  => $dvRequest->id,
-                    'status'         => $dvRequest->status,
-                    'action'         => 'Accounting_III',
-                    'remarks'        => 'DV Request is now being processed by RANCA',
+                    'status'         => 'RANCA_in_process',
+                    'action'         => 'Processing Started',
+                    'remarks'        => $remarks,
                 ]);
 
-                $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
-                    'status'        => $dvRequest->status,
-                    'remarks'       => 'DV Request is now being processed by RANCA',
+                    'status'        => 'RANCA_in_process',
+                    'remarks'       => $remarks,
                     'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);
             }
 
-            return response()->json([
-                'success' => true, 
-                'message' => 'Processing started.',
-                'data' => [
-                    'id' => $dvRequest->id,
-                    'status' => 'RANCA_in_process',
-                    'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                ]
+            // Real-time notification to RANCA channel
+            $this->pusher->trigger('dv-requests-ranca', 'dv-request-processing', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'RANCA_in_process',
+                'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true, 
+                    'message' => 'Processing started.',
+                    'data' => [
+                        'id' => $dvRequest->id,
+                        'status' => 'RANCA_in_process',
+                        'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                    ]
+                ]);
+            }
+
+            return redirect()->route('Accounting.dvrequests.index')
+                ->with('success', 'Processing started.');
 
         } catch (\Exception $e) {
             \Log::error('Error starting RANCA processing: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
+            }
+
+            return redirect()->back()->with('error', 'An error occurred while starting processing.');
         }
     }
 
-    /** Enhanced Update amount during processing */
+    /** Update amount during processing */
     public function updateAmount(Request $request, $id)
     {
         $request->validate([
@@ -256,7 +356,6 @@ class RANCAController extends Controller
         try {
             $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
 
-            // Check if user has permission to edit
             $currentUserId = auth()->id();
             $lockDuration = now()->subMinutes(10);
             
@@ -269,7 +368,6 @@ class RANCAController extends Controller
                 ], 422);
             }
 
-            // Only allow editing during certain statuses
             if (!in_array($dvRequest->status, ['RANCA_received', 'RANCA_in_process'])) {
                 return response()->json([
                     'success' => false,
@@ -282,21 +380,18 @@ class RANCAController extends Controller
 
             DB::beginTransaction();
 
-            // Update DV amount
             $dvRequest->update([
                 'amount' => $newAmount,
                 'locked_by' => $currentUserId,
                 'locked_at' => now(),
             ]);
 
-            // Sync ORS gross if exists
             if ($dvRequest->orsRequest) {
                 $dvRequest->orsRequest->update([
                     'gross' => $newAmount,
                 ]);
             }
 
-            // Log the change with detailed information
             $this->logAction(
                 $dvRequest->id,
                 'Accounting_III',
@@ -306,7 +401,6 @@ class RANCAController extends Controller
                 ($request->remarks ? " - Reason: " . $request->remarks : "")
             );
 
-            // Notify focal person of change
             if ($dvRequest->focalperson_id) {
                 Notification::create([
                     'focalperson_id' => $dvRequest->focalperson_id,
@@ -316,7 +410,6 @@ class RANCAController extends Controller
                     'remarks'        => $request->remarks ?? "RANCA updated the DV amount from ₱" . number_format($oldAmount, 2) . " to ₱" . number_format($newAmount, 2),
                 ]);
 
-                // Real-time notification
                 $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'amount-updated', [
                     'dv_request_id' => $dvRequest->id,
                     'old_amount' => number_format($oldAmount, 2),
@@ -351,12 +444,12 @@ class RANCAController extends Controller
         }
     }
 
+    /** Redirect to first pending */
     public function redirectToFirstPending()
     {
         $currentUserId = auth()->id();
         $lockDuration = now()->subMinutes(10);
 
-        // Get all pending RANCA requests
         $pendingRequests = DvRequest::whereIn('status', ['Outgoing_finalized', 'RANCA_received'])
                                 ->orderBy('created_at', 'asc')
                                 ->get();
@@ -366,7 +459,6 @@ class RANCAController extends Controller
                              ->with('info', 'No DV requests pending RANCA processing.');
         }
 
-        // Check for one you can work on (unlocked or locked by you, or expired lock)
         $available = $pendingRequests->first(function ($req) use ($currentUserId, $lockDuration) {
             return !$req->locked_by 
                 || $req->locked_by == $currentUserId 
@@ -377,11 +469,11 @@ class RANCAController extends Controller
             return redirect()->route('Accounting.dvrequests.show', $available->id);
         }
 
-        // If all are locked by others
         return redirect()->route('Accounting.dvrequests.index')
                          ->with('info', 'All pending DV requests are currently locked by other users.');
     }
-    /** Finalize DV */
+
+    /** Validate/Finalize DV */
     public function validateDV(Request $request, $id)
     {
         $request->validate([
@@ -392,7 +484,7 @@ class RANCAController extends Controller
             $dvRequest = DvRequest::findOrFail($id);
 
             if (!in_array($dvRequest->status, ['RANCA_received', 'RANCA_in_process'])) {
-                return back()->with('error', 'This DV request cannot be finalized.');
+                return redirect()->back()->with('error', 'This DV request cannot be finalized.');
             }
 
             $finalizedAt = now();
@@ -404,28 +496,50 @@ class RANCAController extends Controller
                 'locked_at'    => null,
             ]);
 
+            $remarks = $request->remarks ?? 'DV Request finalized by RANCA';
+
             $this->logAction(
                 $dvRequest->id, 
                 'Accounting_III', 
-               $dvRequest->status, 
-                $request->remarks ?? 'DV Request finalized by RANCA'
+                'RANCA_validated', 
+                $remarks
             );
 
             // Notify focal person
-            if ($dvRequest->focalperson_id) {
+            $focalId = $dvRequest->focalperson_id;
+
+            if ($focalId) {
                 Notification::create([
-                    'focalperson_id' => $dvRequest->focalperson_id,
+                    'focalperson_id' => $focalId,
                     'dv_request_id'  => $dvRequest->id,
-                    'status'         => $dvRequest->status,
-                    'action'         => 'Accounting_III',
-                    'remarks'        => $request->remarks ?? 'DV Request has been finalized by RANCA',
+                    'status'         => 'RANCA_validated',
+                    'action'         => 'Finalized',
+                    'remarks'        => $remarks,
                 ]);
 
-                $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
-                    'status'        => $dvRequest->status,
-                    'remarks'       => $request->remarks ?? 'DV Request has been finalized by RANCA',
+                    'status'        => 'RANCA_validated',
+                    'remarks'       => $remarks,
                     'timestamp'     => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                ]);
+            }
+
+            // Real-time notification to RANCA channel
+            $this->pusher->trigger('dv-requests-ranca', 'dv-request-finalized', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'RANCA_validated',
+                'timestamp'     => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'DV Request has been finalized by RANCA.',
+                    'data' => [
+                        'id' => $dvRequest->id,
+                        'status' => 'RANCA_validated',
+                    ]
                 ]);
             }
 
@@ -434,7 +548,98 @@ class RANCAController extends Controller
 
         } catch (\Exception $e) {
             \Log::error('Error finalizing DV in RANCA: ' . $e->getMessage());
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
+            }
+
             return back()->with('error', 'An error occurred while finalizing the request.');
+        }
+    }
+
+    /** Reject DV */
+    public function reject(Request $request, $id)
+    {
+        $request->validate([
+            'remarks' => 'required|string|max:1000',
+        ]);
+
+        try {
+            $dvRequest = DvRequest::findOrFail($id);
+
+            if (!in_array($dvRequest->status, ['RANCA_in_process'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This DV request cannot be rejected at its current stage.'
+                ], 422);
+            }
+
+            $rejectedAt = now();
+            $focalId = $dvRequest->focalperson_id;
+            $remarks = trim($request->remarks);
+
+            $dvRequest->update([
+                'status'     => 'RANCA_rejected',
+                'locked_by'  => null,
+                'locked_at'  => null,
+            ]);
+
+            $this->logAction(
+                $dvRequest->id,
+                'Accounting_III',
+                'RANCA_rejected',
+                $remarks
+            );
+
+            if ($focalId) {
+                Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => 'RANCA_rejected',
+                    'action'         => 'Rejected',
+                    'remarks'        => $remarks,
+                ]);
+
+                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                    'dv_request_id' => $dvRequest->id,
+                    'status'        => 'RANCA_rejected',
+                    'remarks'       => $remarks,
+                    'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                ]);
+            }
+
+            $this->pusher->trigger('dv-requests-ranca', 'dv-request-rejected', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'RANCA_rejected',
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'DV request has been rejected successfully.',
+                    'data' => [
+                        'id'         => $dvRequest->id,
+                        'status'     => 'RANCA_rejected',
+                        'remarks'    => $remarks,
+                    ]
+                ]);
+            }
+
+            return redirect()->route('Accounting.dvrequests.index')
+                             ->with('error', 'DV request has been rejected.');
+
+        } catch (\Exception $e) {
+            \Log::error('Error rejecting DV request: ' . $e->getMessage());
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while rejecting the DV request.'
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'An error occurred while rejecting the DV request.');
         }
     }
 
@@ -470,12 +675,23 @@ class RANCAController extends Controller
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
 
-    /** History logs */
+        /** History logs */
     public function history()
     {
-        $dvRequests = DvRequest::with(['program','focalPerson','respocenter','accountingUnit','orsRequest','logs'])
-            ->where('status', 'RANCA_validated')
-            ->orderBy('updated_at', 'desc')
+        // For Accounting history, you might want to show different data
+        // Here are a few options depending on what you want to show:
+
+        // Option 1: Show all DV requests processed by Accounting
+        $dvRequests = DvRequest::with([
+                'program', 
+                'focalPerson', 
+                'respocenter',
+                'orsRequest.uacsCodes',
+                'orsRequest.AdlCode',
+                'orsRequest.Mfopap'
+            ])
+            ->whereIn('status', ['RANCA_received', 'RANCA_in_process', 'RANCA_validated', 'Outgoing_finalized'])
+            ->orderBy('created_at', 'desc')
             ->get();
 
         return view('Accounting.loghistory', compact('dvRequests'));

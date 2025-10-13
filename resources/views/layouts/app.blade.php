@@ -4,14 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-
-  <!-- ✅ Tailwind CDN (fine for development only) -->
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-
-  <!-- ✅ SweetAlert2 -->
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  
+  <!-- SweetAlert2 -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-  <!-- ✅ AlpineJS + Collapse Plugin (jsDelivr is reliable) -->
+  
+  <!-- Alpine.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
@@ -103,7 +104,12 @@
                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('FocalPerson.dvrequest.submitdvors') ? 'bg-gray-200 font-semibold' : '' }}">
                     Submit Document
                 </a>
+                  <a href="{{ route('FocalPerson.dvrequest.history') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('FocalPerson.dvrequest.history') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Request History
+                </a>
             </div>
+
             @endrole
                 @role('IMSD')
         <div class="flex justify-center space-x-6 w-full">
@@ -179,8 +185,8 @@
                     </a>
 
                     <!-- Request History -->
-                    <a href="{{ route('dvrequests.tev') }}" 
-                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.tevhistory') ? 'bg-gray-200 font-semibold' : '' }}">
+                    <a href="" 
+                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('') ? 'bg-gray-200 font-semibold' : '' }}">
                         Request History
                     </a>
                 </div>
@@ -231,8 +237,8 @@
                 class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.dvrequest.redirectFirstPending') ? 'bg-gray-200 font-semibold' : '' }}">
                     Finalize DV Documents
                 </a>
-                <a href="{{ route('Accounting.dvrequests.rancahistory') }}" 
-                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.dvrequests.rancahistory') ? 'bg-gray-200 font-semibold' : '' }}">
+                <a href="{{ route('Accounting.history') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.history') ? 'bg-gray-200 font-semibold' : '' }}">
                     DV Log History
                 </a>
             @endrole
@@ -310,6 +316,19 @@
                class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Admin.dashboard') ? 'bg-gray-200 font-semibold' : '' }}">
                 Dashboard
             </a>
+             <a href="{{ route('Accounting.dvrequests.index') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.dvrequests.index') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Pending DV Documents
+                </a>
+            <a href="{{ route('Accounting.dvrequest.redirectFirstPending') }}"
+                class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.dvrequest.redirectFirstPending') ? 'bg-gray-200 font-semibold' : '' }}">
+                    Finalize DV Documents
+                </a>
+                <a href="{{ route('Accounting.history') }}" 
+                   class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('Accounting.dvrequests.rancahistory') ? 'bg-gray-200 font-semibold' : '' }}">
+                    DV Log History
+                </a>
+        
 
             <button @click="userMgmtOpen = !userMgmtOpen" 
                     class="w-full flex justify-between items-center py-2 px-4 rounded hover:bg-gray-200 focus:outline-none">
@@ -318,6 +337,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                 </svg>
             </button>
+            
             <div x-show="userMgmtOpen" x-transition class="pl-6 mt-1 space-y-1">
                 <a href="{{ route('admin.accountingunits.index') }}" 
                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('admin.accountingunits.*') ? 'bg-gray-200 font-semibold' : '' }}">
@@ -355,6 +375,7 @@
     </main>
 </div>
 
+  @stack('scripts')
 
 </body>
 </html>

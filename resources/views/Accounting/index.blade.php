@@ -3,47 +3,56 @@
 @section('title', 'RANCA - DV Requests')
 
 @section('content')
-<div class="min-h-screen bg-gray-50 py-8">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-
-        <!-- Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+<div class="min-h-screen bg-gray-50 pt-24 pb-8">
+    <div class="max-w-[110rem] mx-auto px-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">DV Requests for RANCA</h1>
-                <p class="mt-2 text-sm text-gray-600">
-                    Manage DV requests received from Outgoing for cash availability validation.
-                </p>
+                <h1 class="text-3xl font-bold text-gray-900">RANCA DV Requests</h1>
+                <p class="mt-2 text-sm text-gray-600">Manage DV requests received from Outgoing for cash availability validation</p>
+            </div>
+            <div class="mt-4 sm:mt-0">
+                <span id="connection-status" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    <span class="w-2 h-2 mr-2 rounded-full bg-gray-400 animate-pulse"></span>
+                    Connecting...
+                </span>
             </div>
         </div>
 
+        <!-- Toast Container -->
+        <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
         <!-- Search -->
         <div class="mb-4">
-            <input type="text" id="searchInput" 
+            <input type="text" id="search-input" 
                    placeholder="🔍 Search DV Requests (Control No, ORS No, Program, Respocenter, Submitted By)..."
                    class="w-full md:w-1/2 px-4 py-2 border rounded-lg shadow-sm focus:ring focus:ring-blue-200 focus:outline-none">
         </div>
 
         <!-- Table -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div id="dv-table-container" class="overflow-x-auto">
-                <!-- Table will be injected by JS -->
+            <div id="dv-table-container">
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </div>
+                    <p class="text-gray-500">Loading requests...</p>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const tableContainer = document.getElementById('dv-table-container');
-    const searchInput = document.getElementById('searchInput');
-    let toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) {
-        toastContainer = document.createElement('div');
-        toastContainer.id = 'toast-container';
-        toastContainer.className = 'fixed top-5 right-5 z-50 flex flex-col space-y-2';
-        document.body.appendChild(toastContainer);
-    }
+    const searchInput = document.getElementById('search-input');
+    const toastContainer = document.getElementById('toast-container');
+    const connectionStatus = document.getElementById('connection-status');
     let allRequests = [];
+    let searchTerm = "";
 
     const statusColors = {
         'Outgoing_finalized': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
@@ -51,7 +60,77 @@ document.addEventListener('DOMContentLoaded', function() {
         'RANCA_in_process': ['bg-blue-100 text-blue-800','bg-blue-400','In Process'],
         'RANCA_validated': ['bg-green-100 text-green-800','bg-green-400','Validated'],
     };
- function showToast(message, type = 'success') {
+
+    // Initialize Pusher
+    const pusher = new Pusher('{{ config('broadcasting.connections.pusher.key') }}', {
+        cluster: '{{ config('broadcasting.connections.pusher.options.cluster') }}',
+        encrypted: true
+    });
+
+    // Update connection status
+    function updateConnectionStatus(state) {
+        const statusMap = {
+            'connecting': { text: 'Connecting...', color: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400 animate-pulse' },
+            'connected': { text: 'Live', color: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+            'unavailable': { text: 'Disconnected', color: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+            'failed': { text: 'Connection Failed', color: 'bg-red-100 text-red-600', dot: 'bg-red-500' }
+        };
+
+        const status = statusMap[state] || statusMap.connecting;
+        connectionStatus.innerHTML = `
+            <span class="w-2 h-2 mr-2 rounded-full ${status.dot}"></span>
+            ${status.text}
+        `;
+        connectionStatus.className = `inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${status.color}`;
+    }
+
+    // Bind connection state changes
+    pusher.connection.bind('state_change', function(states) {
+        updateConnectionStatus(states.current);
+    });
+
+    // Subscribe to RANCA channel
+    const rancaChannel = pusher.subscribe('dv-requests-ranca');
+
+    // Listen for new requests
+    rancaChannel.bind('dv-request-submitted', function(data) {
+        console.log('New DV request submitted:', data);
+        showToast(`New request from ${data.submitted_by}`, 'success');
+        fetchDvRequests();
+    });
+
+    // Listen for status updates
+    rancaChannel.bind('status-updated', function(data) {
+        console.log('DV request status updated:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for request received events
+    rancaChannel.bind('dv-request-received', function(data) {
+        console.log('DV request received:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for processing started events
+    rancaChannel.bind('dv-request-processing', function(data) {
+        console.log('DV request processing started:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for finalized events
+    rancaChannel.bind('dv-request-finalized', function(data) {
+        console.log('DV request finalized:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for rejected events
+    rancaChannel.bind('dv-request-rejected', function(data) {
+        console.log('DV request rejected:', data);
+        fetchDvRequests();
+    });
+
+    // Toast notification function
+    function showToast(message, type = 'success') {
         const toastId = 'toast-' + Date.now();
         const isSuccess = type === 'success';
         
@@ -73,16 +152,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         `;
-      toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+        
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
         const toast = document.getElementById(toastId);
         
-        // Trigger animation
         setTimeout(() => {
             toast.classList.remove('translate-x-full', 'opacity-0');
             toast.classList.add('translate-x-0', 'opacity-100');
         }, 100);
         
-        // Auto dismiss after 4 seconds
         setTimeout(() => {
             dismissToast(toastId);
         }, 4000);
@@ -99,7 +177,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 300);
         }
     }
- // Define globally
+
+    // Handle receive action
     window.handleReceiveAction = async function(requestId, button) {
         const originalText = button.innerHTML;
         button.innerHTML = 'Processing...';
@@ -118,8 +197,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
 
             if (response.ok && result.success) {
-                showToast(result.message || 'Document has been received by Outgoing.', 'success');
-                await fetchDvRequests(); // refresh
+                showToast(result.message || 'Document has been received by RANCA.', 'success');
+                await fetchDvRequests();
             } else {
                 showToast(result.message || 'Failed to receive document.', 'error');
                 button.innerHTML = originalText;
@@ -132,109 +211,116 @@ document.addEventListener('DOMContentLoaded', function() {
             button.disabled = false;
         }
     }
-    // Render Table
+
+    // Render table
     function renderTable(dvRequests) {
         if (!dvRequests.length) {
-            tableContainer.innerHTML = `<div class="text-center py-10 text-gray-500">No DV requests found</div>`;
+            tableContainer.innerHTML = `
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                    <p class="text-gray-500">Try adjusting your search filter.</p>
+                </div>
+            `;
             return;
         }
 
-      let html = `
-    <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Control No.</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">DV Number</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ORS Number</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted By</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Respocenter</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">UACS Code</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ADL Code</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">MFO/PAP</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Submitted</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-`;
+        let html = `
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Control No.</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">DV Number</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ORS Number</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted By</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Respocenter</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">UACS Code</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ADL Code</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">MFO/PAP</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Submitted</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+        `;
 
-    dvRequests.forEach(req => {
-        const [bgClass, dotClass, label] = statusColors[req.status] || ['bg-gray-100 text-gray-800','bg-gray-400', req.status];
-        html += `
-            <tr class="hover:bg-gray-50 transition">
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">#${req.id}</td>
-                <td class="px-6 py-4 text-sm">${req.dv_number ?? '—'}</td>
-                <td class="px-6 py-4 text-sm">${req.ors_number ?? '—'}</td>
-                <td class="px-6 py-4 text-sm">${req.submitted_by}</td>
-                <td class="px-6 py-4 text-sm">${req.program}</td>
-                <td class="px-6 py-4 text-sm">${req.respocenter}</td>
-                <td class="px-6 py-4 text-sm">${req.uacscode_id ?? '—'}</td>
-                <td class="px-6 py-4 text-sm">${req.adlcode_id ?? '—'}</td>
-                <td class="px-6 py-4 text-sm">${req.mfopap_id ?? '—'}</td>
-                <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${req.amount}</td>
-                <td class="px-6 py-4">
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
-                        <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>
-                        ${label}
-                    </span>
-                </td>
-                <td class="px-6 py-4 text-sm">${req.date}</td>
-                ${
-                    req.status === 'Outgoing_finalized' 
-                    ? `<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button type="button" 
-                            onclick="handleReceiveAction(${req.id}, this)"
-                            class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium rounded-md transition-colors duration-200">
-                            Receive
-                        </button>
-                    </td>`
-                    : `<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <a href="/Accounting/dvrequests/${req.id}" 
-                            class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md">
-                            View / Process
-                        </a>
-                    </td>`
-                }
-            </tr>`;
-    });
-
+        dvRequests.forEach(req => {
+            const [bgClass, dotClass, label] = statusColors[req.status] || ['bg-gray-100 text-gray-800','bg-gray-400', req.status];
+            html += `
+                <tr class="hover:bg-gray-50 transition-colors duration-150">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">#${req.id}</td>
+                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">${req.dv_number ?? '—'}</td>
+                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">${req.ors_number ?? '—'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${req.submitted_by}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${req.program}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${req.respocenter}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${req.uacs_codes ?? '—'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${req.adl_code ?? '—'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${req.mfopap_code?? '—'}</td>
+                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${req.amount}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
+                            <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>
+                            ${label}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${req.date}</td>
+                    ${
+                        req.status === 'Outgoing_finalized' 
+                        ? `<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button type="button" 
+                                onclick="handleReceiveAction(${req.id}, this)"
+                                class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium rounded-md transition-colors duration-200">
+                                Receive
+                            </button>
+                        </td>`
+                        : `<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <a href="/Accounting/dvrequests/${req.id}" 
+                                class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md">
+                                View / Process
+                            </a>
+                        </td>`
+                    }
+                </tr>`;
+        });
 
         html += `</tbody></table>`;
         tableContainer.innerHTML = html;
     }
 
-    // Fetch DV Requests
+    // Fetch DV requests
     async function fetchDvRequests() {
         try {
-            const res = await fetch("{{ route('Accounting.dvrequests.fetch') }}");
+            const res = await fetch("{{ route('Accounting.dvrequests.fetch') }}?search=" + encodeURIComponent(searchTerm));
             const data = await res.json();
             allRequests = data;
             renderTable(allRequests);
         } catch (err) {
-            console.error('Failed to fetch DV requests:', err);
+            console.error('Failed to fetch DV requests', err);
+            tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
         }
     }
 
-    // Search
-    searchInput.addEventListener('input', () => {
-        const query = searchInput.value.toLowerCase();
-        const filtered = allRequests.filter(r =>
-            r.id.toString().includes(query) ||
-            (r.ors_number ?? '').toLowerCase().includes(query) ||
-            (r.dv_number ?? '').toLowerCase().includes(query) ||
-            r.submitted_by.toLowerCase().includes(query) ||
-            r.program.toLowerCase().includes(query) ||
-            r.respocenter.toLowerCase().includes(query)
-        );
-        renderTable(filtered);
+    // Search functionality
+    let searchTimeout;
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            searchTerm = this.value;
+            fetchDvRequests();
+        }, 300);
     });
 
-    // Initial fetch and poll every 5s
+    // Initial fetch
     fetchDvRequests();
-    setInterval(fetchDvRequests, 5000);
 });
 </script>
 @endsection

@@ -98,10 +98,7 @@
                 @endif
                  </div>
                 <!-- Remarks -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Remarks / Lacking</label>
-                    <textarea id="remarks" name="remarks" rows="3" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" placeholder="Enter remarks or notes..."></textarea>
-                </div>
+               
 
               <div>
     <!-- GIP Attachments Section -->
@@ -167,61 +164,120 @@
         </div>
     @endif
 </div>
-                <!-- Buttons -->
-                <div class="flex justify-end space-x-3" id="button-container">
 
-                    @if($dvRequest->status === 'IMSD_received')
-                    <button type="button"
-                        onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
-                        class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                        id="start-btn">
-                        <span class="button-text">Start Processing</span>
-                        <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    </button>
-                     <a href="{{ route('RegionalOffices.IMSD.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                            Back
-                        </a>
-                     @elseif($dvRequest->status === 'IMSD_in_process')
-                        {{-- Verify + Back --}}
-                        <button type="submit"
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                            Verify
-                        </button>
-                        <a href="{{ route('RegionalOffices.IMSD.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                            Back
-                        </a>
-                    @elseif($dvRequest->status === 'submitted')
-                        <button type="button"
-                            onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                            id="receive-btn">
-                            <span class="button-text">Receive</span>
-                            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </button>
-                         <a href="{{ route('RegionalOffices.IMSD.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                            Back
-                        </a>
-                    @else
-                        <a href="{{ route('RegionalOffices.IMSD.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                            Back
-                        </a>
-                    @endif
-                </div>
 
-              
-            </form>
+<!-- TEV Attachments Section -->
+@if($dvRequest->program->prcode === 'TEV')
+    <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">TEV Attachments Checklist</h3>
+
+        <!-- Modality Dropdown -->
+        <div class="mb-6">
+            <label for="tev_modality_select" class="block text-sm font-medium text-gray-700 mb-2">
+                Select Modality
+            </label>
+            <select 
+                id="tev_modality_select" 
+                name="tev_modality"
+                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            >
+                <option value="">-- Select Modality --</option>
+                <option value="Cash Advance for Local Travel" {{ $dvRequest->tev_modality === 'Cash Advance for Local Travel' ? 'selected' : '' }}>
+                    Cash Advance for Local Travel
+                </option>
+                <option value="Liquidation of Cash Advances" {{ $dvRequest->tev_modality === 'Liquidation of Cash Advances' ? 'selected' : '' }}>
+                    Liquidation of Cash Advances
+                </option>
+            </select>
         </div>
 
+        <!-- Attachments Checklist (dynamically shown based on modality) -->
+        <div id="tev_attachments_container" class="hidden">
+            <h4 class="text-md font-medium text-gray-800 mb-3">Required Attachments</h4>
+            <div id="tev_attachments_list" class="space-y-2 max-h-96 overflow-y-auto">
+                <!-- Checkboxes will be populated here via JavaScript -->
+            </div>
+        </div>
+
+        <!-- No Selection Message -->
+        <div id="tev_no_selection_message" class="text-sm text-gray-500 italic">
+            Please select a modality to view required attachments.
+        </div>
+    </div>
+@endif
+
+ <div>
+                    <label class="block text-sm font-medium text-gray-700">Remarks / Lacking</label>
+                    <textarea id="remarks" name="remarks" rows="3" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" placeholder="Enter remarks or notes..."></textarea>
+                </div>
+                <!-- Buttons -->
+<div class="flex justify-end space-x-3" id="button-container">
+    @if($dvRequest->status === 'IMSD_received')
+        <button type="button"
+            onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
+            class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+            id="start-btn">
+            <span class="button-text">Start Processing</span>
+            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </button>
+        <a href="{{ route('RegionalOffices.IMSD.index') }}"
+            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Back
+        </a>
+        </div>
+        </form> <!-- Close form here -->
+    @elseif($dvRequest->status === 'IMSD_in_process')
+    <td>
+     <div id="button-container" class="flex justify-end space-x-3">
+        <button type="submit"
+            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Verify
+        </button>
+    </div>
+    </form> 
+<div class="flex justify-end space-x-3 mt-3" id="outside-form-buttons">
+    <button type="button"
+        onclick="openRejectModal()"
+        class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+        Reject
+    </button>
+    <a href="{{ route('RegionalOffices.IMSD.index') }}"
+        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+        Back
+    </a>
+</div>
+</td>
+
+    @elseif($dvRequest->status === 'submitted')
+       <div id="button-container" class="flex justify-end space-x-3">
+        <button type="button"
+            onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
+            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+            id="receive-btn">
+            <span class="button-text">Receive</span>
+            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </button>
+        <a href="{{ route('RegionalOffices.IMSD.index') }}"
+            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Back
+        </a>
+        </div>
+    </form> <!-- Close form here -->
+    @else
+        <a href="{{ route('RegionalOffices.IMSD.index') }}"
+            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Back
+        </a>
+        </form>
+    @endif
+</div>
+</div>
 
           <!-- Sidebar -->
         <div class="lg:col-span-1">
@@ -231,15 +287,250 @@
                     </ul>
             </div>
         </div>
+
+    </div>
+
+<!-- Reject Modal -->
+<div id="rejectModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-lg bg-white">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-3 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Reject DV Request</h3>
+            <button type="button" onclick="closeRejectModal()" class="text-gray-400 hover:text-gray-600 transition">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <form id="rejectForm" class="mt-4">
+            <div class="mb-4">
+                <label for="rejectRemarks" class="block text-sm font-medium text-gray-700 mb-2">
+                    Reason for Rejection <span class="text-red-500">*</span>
+                </label>
+                <textarea 
+                    id="rejectRemarks" 
+                    name="remarks" 
+                    rows="4" 
+                    required
+                    minlength="10"
+                    maxlength="1000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+                    placeholder="Please provide a detailed reason for rejection (minimum 10 characters)..."
+                    oninput="updateCharCount()"></textarea>
+                <div class="flex justify-between items-center mt-1">
+                    <p class="text-xs text-gray-500">This message will be sent to the focal person.</p>
+                    <p id="char-count" class="text-xs text-gray-400">0 / 1000</p>
+                </div>
+                <p id="remarksError" class="text-xs text-red-600 mt-1 hidden">Remarks must be at least 10 characters long</p>
+            </div>
+
+            <!-- Warning Message -->
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700">
+                            This action cannot be undone. The focal person will be notified immediately.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex justify-end space-x-3 pt-4 border-t">
+                <button 
+                    type="button" 
+                    onclick="closeRejectModal()"
+                    class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition duration-200">
+                    Cancel
+                </button>
+                <button 
+                    type="submit"
+                    id="confirmRejectBtn"
+                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition duration-200 flex items-center">
+                    <span id="rejectBtnText">Reject Request</span>
+                    <svg id="rejectSpinner" class="animate-spin ml-2 h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
+<style>
+/* Smooth transitions */
+#rejectModal {
+    transition: opacity 0.3s ease-in-out;
+}
+
+#rejectModal > div {
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+</style>
 <!-- Success/Error Messages -->
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
 
 @endsection
-
 <script>
+let currentRejectId = null;
+
+// Update character count
+function updateCharCount() {
+    const textarea = document.getElementById('rejectRemarks');
+    const charCount = document.getElementById('char-count');
+    const remarksError = document.getElementById('remarksError');
+    const length = textarea.value.length;
+    
+    charCount.textContent = `${length} / 1000`;
+    
+    if (length < 10) {
+        charCount.classList.add('text-red-500');
+        charCount.classList.remove('text-gray-400', 'text-green-600', 'text-yellow-600');
+        if (length > 0) {
+            remarksError.classList.remove('hidden');
+        }
+    } else if (length > 900) {
+        charCount.classList.add('text-yellow-600');
+        charCount.classList.remove('text-gray-400', 'text-green-600', 'text-red-500');
+        remarksError.classList.add('hidden');
+    } else {
+        charCount.classList.add('text-green-600');
+        charCount.classList.remove('text-gray-400', 'text-red-500', 'text-yellow-600');
+        remarksError.classList.add('hidden');
+    }
+}
+
+// Open reject modal
+function openRejectModal() {
+    console.log('🔴 openRejectModal called for IMSD');
+    
+    currentRejectId = {{ $dvRequest->id }};
+    const modal = document.getElementById('rejectModal');
+    
+    modal.classList.remove('hidden');
+    document.getElementById('rejectRemarks').value = '';
+    document.getElementById('remarksError').classList.add('hidden');
+    document.body.style.overflow = 'hidden';
+    updateCharCount();
+    
+    console.log('🔴 Modal opened for DV Request ID:', currentRejectId);
+}
+
+// Close reject modal
+function closeRejectModal() {
+    console.log('🟢 closeRejectModal called');
+    document.getElementById('rejectModal').classList.add('hidden');
+    document.getElementById('rejectRemarks').value = '';
+    document.getElementById('remarksError').classList.add('hidden');
+    currentRejectId = null;
+    document.body.style.overflow = 'auto';
+}
+
+// Handle reject form submission
+document.addEventListener('DOMContentLoaded', () => {
+    const rejectForm = document.getElementById('rejectForm');
+    
+    if (rejectForm) {
+        rejectForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            console.log('🟡 Reject form submitted for IMSD');
+            
+            const remarks = document.getElementById('rejectRemarks').value.trim();
+            const remarksError = document.getElementById('remarksError');
+            
+            // Validation
+            if (!remarks || remarks.length < 10) {
+                remarksError.classList.remove('hidden');
+                document.getElementById('rejectRemarks').focus();
+                return;
+            }
+            
+            remarksError.classList.add('hidden');
+            
+            // Show loading state
+            const confirmBtn = document.getElementById('confirmRejectBtn');
+            const btnText = document.getElementById('rejectBtnText');
+            const spinner = document.getElementById('rejectSpinner');
+            
+            confirmBtn.disabled = true;
+            btnText.textContent = 'Rejecting...';
+            spinner.classList.remove('hidden');
+            
+            try {
+                console.log('🟡 Sending reject request for ID:', currentRejectId);
+                const response = await fetch(`/RegionalOffices/IMSD/dvrequests/${currentRejectId}/reject`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ remarks })
+                });
+                
+                const data = await response.json();
+                console.log('🟡 Reject response:', data);
+                
+                if (data.success) {
+                    showMessage(data.message || 'DV request has been rejected successfully.', 'success');
+                    closeRejectModal();
+                    
+                    // Redirect to index after short delay
+                    setTimeout(() => {
+                        window.location.href = "{{ route('RegionalOffices.IMSD.index') }}";
+                    }, 1500);
+                } else {
+                    showMessage(data.message || 'Failed to reject the request.', 'error');
+                    confirmBtn.disabled = false;
+                    btnText.textContent = 'Reject Request';
+                    spinner.classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('❌ Reject error:', error);
+                showMessage('An error occurred while rejecting the request.', 'error');
+                confirmBtn.disabled = false;
+                btnText.textContent = 'Reject Request';
+                spinner.classList.add('hidden');
+            }
+        });
+    }
+
+    // Close modal when clicking outside
+    const rejectModal = document.getElementById('rejectModal');
+    if (rejectModal) {
+        rejectModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeRejectModal();
+            }
+        });
+    }
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && rejectModal && !rejectModal.classList.contains('hidden')) {
+            closeRejectModal();
+        }
+    });
+});
 // Function to show toast messages
 function showMessage(message, type = 'success') {
     const container = document.getElementById('message-container');
@@ -372,16 +663,63 @@ function updateButtonsToStartProcessingMode(dvRequestId) {
 
 function updateButtonsToVerifyMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
-    buttonContainer.innerHTML = `
-        <button type="submit"
-            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-            Verify
-        </button>
-        <a href="{{ route('RegionalOffices.IMSD.index') }}"
-           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-            Back
-        </a>
-    `;
+    const form = buttonContainer.closest('form');
+    
+    // Clear existing button container content
+    buttonContainer.innerHTML = '';
+    
+    // Create Verify button container (inside form)
+    const verifyContainer = document.createElement('div');
+    verifyContainer.className = 'flex justify-end space-x-3';
+    
+    const verifyBtn = document.createElement('button');
+    verifyBtn.type = 'submit';
+    verifyBtn.className = 'inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
+    verifyBtn.textContent = 'Verify';
+    
+    verifyContainer.appendChild(verifyBtn);
+    buttonContainer.appendChild(verifyContainer);
+    
+    // Create Reject and Back buttons container (outside form)
+    const outsideButtonsContainer = document.createElement('div');
+    outsideButtonsContainer.className = 'flex justify-end space-x-3 mt-3';
+    outsideButtonsContainer.id = 'outside-form-buttons';
+    
+    // Create Reject button
+    const rejectBtn = document.createElement('button');
+    rejectBtn.type = 'button';
+    rejectBtn.id = 'reject-button';
+    rejectBtn.className = 'inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
+    rejectBtn.textContent = 'Reject';
+    
+    // Add event listener directly
+    rejectBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🔴 Reject button clicked for IMSD');
+        openRejectModal();
+    });
+    
+    // Create Back link
+    const backLink = document.createElement('a');
+    backLink.href = "{{ route('RegionalOffices.IMSD.index') }}";
+    backLink.className = 'inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
+    backLink.textContent = 'Back';
+    
+    // Add buttons to container
+    outsideButtonsContainer.appendChild(rejectBtn);
+    outsideButtonsContainer.appendChild(backLink);
+    
+    // Remove any existing outside buttons first
+    const existingOutsideButtons = form.parentNode.querySelector('#outside-form-buttons');
+    if (existingOutsideButtons) {
+        existingOutsideButtons.remove();
+    }
+    
+    // Insert outside buttons after the form
+    form.parentNode.insertBefore(outsideButtonsContainer, form.nextSibling);
+    
+    console.log('✅ Buttons updated to verify mode for IMSD with Reject option');
 }
 
 // Recent requests loading function
@@ -584,5 +922,93 @@ document.addEventListener('DOMContentLoaded', function() {
             attachmentsList.appendChild(checkboxDiv);
         });
     });
+});
+document.addEventListener('DOMContentLoaded', function() {
+    const tevModalitySelect = document.getElementById('tev_modality_select');
+    
+    // Only run if the element exists (TEV program)
+    if (!tevModalitySelect) {
+        return;
+    }
+    
+    const tevAttachmentsContainer = document.getElementById('tev_attachments_container');
+    const tevAttachmentsList = document.getElementById('tev_attachments_list');
+    const tevNoSelectionMessage = document.getElementById('tev_no_selection_message');
+    const dvRequestId = {{ $dvRequest->id }};
+    
+    // TEV attachments data
+    const tevAttachmentsByModality = {
+        'Cash Advance for Local Travel': [
+            '2 Copies of Obligation Request and Status (ORS)',
+            '3 copies of Disbursement Vouchers (DVs)',
+            '2 copies of Approved Itinerary of Travel',
+            'Approved Office Order or Travel Order',
+            'Certification from the Accountant that previous cash advance has been liquidated and accounted for in the books'
+        ],
+        'Liquidation of Cash Advances': [
+            '2 copies of Liquidation Report (Appendix 44, GAM)',
+            '2 copies of Revised Itinerary of Travel, if the previously approved itinerary was not followed',
+            'Certificate of Appearance or Attendance',
+            'Copy of previously approved Itinerary of Travel',
+            'Approved Travel Order or Notice of Inspection or Approved Official Business or equivalent',
+            'Paper or electronic plane, boat, or bus tickets; boarding pass; terminal fee receipts',
+            'Official invoices/receipts (e.g., hotel bills, Grab or taxi receipts)',
+            'Certification by the Head of Agency as to the absolute necessity of the expenses, with corresponding bills/receipts',
+            'Certificate of Expense Not Requiring Receipts (CENRR) or Reimbursable Expense Receipt (RER), as applicable (per Memorandum No. ROXI-2025-August-603 dated August 1, 2025)',
+            'Other supporting documents necessary to justify travel and reimbursement',
+            'Official Receipt (OR) in case of refund'
+        ]
+    };
+
+    // Handle modality selection change
+    tevModalitySelect.addEventListener('change', function() {
+        const selectedModality = this.value;
+        
+        if (!selectedModality) {
+            tevAttachmentsContainer.classList.add('hidden');
+            tevNoSelectionMessage.classList.remove('hidden');
+            return;
+        }
+
+        // Show attachments container
+        tevNoSelectionMessage.classList.add('hidden');
+        tevAttachmentsContainer.classList.remove('hidden');
+
+        // Get attachments for selected modality
+        const attachments = tevAttachmentsByModality[selectedModality] || [];
+
+        // Clear previous checkboxes
+        tevAttachmentsList.innerHTML = '';
+
+        // Generate checkboxes
+        attachments.forEach((attachment, index) => {
+            const checkboxId = `tev_attachment_${index}`;
+            const checkboxDiv = document.createElement('div');
+            checkboxDiv.className = 'flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition';
+            
+            checkboxDiv.innerHTML = `
+                <input 
+                    type="checkbox" 
+                    id="${checkboxId}"
+                    name="tev_attachments[${attachment}]"
+                    value="1"
+                    class="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                >
+                <label 
+                    for="${checkboxId}" 
+                    class="ml-3 text-sm text-gray-700 cursor-pointer select-none flex-1"
+                >
+                    ${attachment}
+                </label>
+            `;
+            
+            tevAttachmentsList.appendChild(checkboxDiv);
+        });
+    });
+
+    // Trigger change event if there's a pre-selected modality
+    if (tevModalitySelect.value) {
+        tevModalitySelect.dispatchEvent(new Event('change'));
+    }
 });
 </script>

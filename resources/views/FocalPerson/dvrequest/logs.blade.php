@@ -18,6 +18,7 @@
         'IMSD_received' => 'IMSD',
         'IMSD_in_process' => 'IMSD',
         'IMSD_verified' => 'IMSD',
+        'IMSD_rejected' => 'IMSD',
         
         // Incoming statuses (TUPAD)
         'Incoming-TUPAD_received' => 'Incoming',
@@ -48,6 +49,7 @@
         'Outgoing_received' => 'Outgoing',
         'Outgoing_in_process' => 'Outgoing',
         'Outgoing_finalized' => 'Outgoing',
+        'Outgoing_rejected' => 'Outgoing',
         
         // RANCA (Accounting_III) statuses
         'RANCA_received' => 'Accounting_III',
@@ -57,19 +59,45 @@
     ];
     
     // Determine last step from either status or action
+    $lastStep = 'Submitted';
+    
     if (isset($statusToStepMap[$dvRequest->status])) {
         $lastStep = $statusToStepMap[$dvRequest->status];
     } elseif (isset($statusToStepMap[$lastLogAction])) {
         $lastStep = $statusToStepMap[$lastLogAction];
     } elseif (in_array($lastLogAction, $steps)) {
         $lastStep = $lastLogAction;
-    } else {
-        $lastStep = 'Submitted';
     }
     
+    // Check for completion statuses
+    $isStepCompleted = stripos($dvRequest->status, '_verified') !== false ||
+                      stripos($dvRequest->status, '_obligated') !== false ||
+                      stripos($dvRequest->status, '_finalized') !== false ||
+                      stripos($dvRequest->status, '_validated') !== false;
+    
     // Check for rejection
-    $isRejected = stripos($dvRequest->status, 'rejected') !== false || 
-                  stripos($lastStep, 'rejected') !== false;
+  $isRejected = stripos($dvRequest->status, 'rejected') !== false || 
+              stripos($lastLogAction, 'rejected') !== false;
+
+    $logsForJs = $logs->map(function($log) {
+        return [
+            'id' => $log->id,
+            'action' => strtolower($log->action),
+            'remarks' => $log->remarks,
+            'external_actor' => $log->external_actor,
+            'created_at_human' => $log->created_at->diffForHumans(),
+            'focal_person' => $log->focalPerson ? [
+                'fname' => $log->focalPerson->fname,
+                'lname' => $log->focalPerson->lname,
+                'profile_image' => $log->focalPerson->profile_image
+            ] : null,
+            'accounting_unit' => $log->accountingUnit ? [
+                'fname' => $log->accountingUnit->fname,
+                'lname' => $log->accountingUnit->lname,
+                'profile_image' => $log->accountingUnit->profile_image
+            ] : null,
+        ];
+    });
 @endphp
 
 <style>
@@ -478,35 +506,28 @@
                                                     
                                                     <!-- Status Badge -->
                                                     <div>
-                                                        <span x-show="!isRejected && stepIdx < steps.indexOf(currentStep)"
+                                                        <span x-show="getStepStatus(stepIdx) === 'completed'"
                                                               class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                                                             <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
                                                             </svg>
                                                             Completed
                                                         </span>
-                                                        <span x-show="isRejected && stepIdx < steps.indexOf(currentStep)"
-                                                              class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                                                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                                                            </svg>
-                                                            Processed
-                                                        </span>
-                                                        <span x-show="stepIdx === steps.indexOf(currentStep) && !isRejected"
-                                                              class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                                            <svg class="w-3 h-3 mr-1 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                                                                <circle cx="10" cy="10" r="3"/>
-                                                            </svg>
-                                                            In Progress
-                                                        </span>
-                                                        <span x-show="stepIdx === steps.indexOf(currentStep) && isRejected"
+                                                        <span x-show="getStepStatus(stepIdx) === 'rejected'"
                                                               class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
                                                             <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                                                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
                                                             </svg>
                                                             Rejected
                                                         </span>
-                                                        <span x-show="stepIdx > steps.indexOf(currentStep)"
+                                                        <span x-show="getStepStatus(stepIdx) === 'in-progress'"
+                                                              class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                            <svg class="w-3 h-3 mr-1 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                                                                <circle cx="10" cy="10" r="3"/>
+                                                            </svg>
+                                                            In Progress
+                                                        </span>
+                                                        <span x-show="getStepStatus(stepIdx) === 'pending'"
                                                               class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
                                                             Pending
                                                         </span>
@@ -521,91 +542,68 @@
                                                 </svg>
                                             </button>
 
-                                            <!-- Module Body - Activities (Collapsible) -->
-                                            <div x-show="stepExpanded" 
-                                                 x-transition:enter="transition ease-out duration-300"
-                                                 x-transition:enter-start="opacity-0 max-h-0"
-                                                 x-transition:enter-end="opacity-100 max-h-screen"
-                                                 x-transition:leave="transition ease-in duration-200"
-                                                 x-transition:leave-start="opacity-100 max-h-screen"
-                                                 x-transition:leave-end="opacity-0 max-h-0"
-                                                 x-cloak>
-                                                <template x-if="stepIdx <= steps.indexOf(currentStep)">
-                                                    <div class="p-4 space-y-3 bg-gray-50">
-                                                        @foreach($logs as $log)
-                                                            @php
-                                                                $logAction = strtolower($log->action);
-                                                            @endphp
-                                                            <template x-if="'{{ $logAction }}' === step.toLowerCase() || 
-                                                                            (step === 'IMSD' && '{{ $logAction }}'.includes('imsd'))">
+                                           <div x-show="stepExpanded" 
+                                                    x-transition:enter="transition ease-out duration-300"
+                                                    x-transition:enter-start="opacity-0 max-h-0"
+                                                    x-transition:enter-end="opacity-100 max-h-screen"
+                                                    x-transition:leave="transition ease-in duration-200"
+                                                    x-transition:leave-start="opacity-100 max-h-screen"
+                                                    x-transition:leave-end="opacity-0 max-h-0"
+                                                    x-cloak>
+                                                    <template x-if="stepIdx <= steps.indexOf(currentStep)">
+                                                        <div class="p-4 space-y-3 bg-gray-50">
+                                                            <!-- Use Alpine.js loop instead of PHP foreach -->
+                                                            <template x-for="log in getLogsForStep(step)" :key="log.id">
                                                                 <div class="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-shadow">
                                                                     <!-- Small Avatar -->
                                                                     <div class="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-white">
-                                                                        @if($log->focalPerson)
-                                                                            <img src="{{ $log->focalPerson->profile_image 
-                                                                                ? asset('storage/profiles/' . $log->focalPerson->profile_image) 
-                                                                                : asset('storage/profiles/default.png') }}" 
-                                                                                class="w-full h-full object-cover">
-                                                                        @elseif($log->accountingUnit)
-                                                                            <img src="{{ $log->accountingUnit->profile_image 
-                                                                                ? asset('storage/profiles/' . $log->accountingUnit->profile_image) 
-                                                                                : asset('storage/profiles/default.png') }}" 
-                                                                                class="w-full h-full object-cover">
-                                                                        @else
-                                                                            <div class="w-full h-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
-                                                                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                                                                                </svg>
-                                                                            </div>
-                                                                        @endif
+                                                                        <img :src="log.focal_person?.profile_image 
+                                                                                    ? '/storage/profiles/' + log.focal_person.profile_image 
+                                                                                    : (log.accounting_unit?.profile_image 
+                                                                                        ? '/storage/profiles/' + log.accounting_unit.profile_image 
+                                                                                        : '/storage/profiles/default.png')" 
+                                                                            class="w-full h-full object-cover"
+                                                                            onerror="this.src='/storage/profiles/default.png'">
                                                                     </div>
                                                                     
                                                                     <!-- Activity Details -->
                                                                     <div class="flex-1 min-w-0">
                                                                         <p class="text-xs text-gray-600 mb-1">
-                                                                            <span class="font-semibold text-gray-800">
-                                                                                @if($log->focalperson)
-                                                                                    {{ trim($log->focalperson->fname . ' ' . $log->focalperson->lname) }}
-                                                                                @elseif($log->accountingUnit)
-                                                                                    {{ $log->accountingUnit->fname }} {{ $log->accountingUnit->lname }}
-                                                                                @elseif($log->external_actor)
-                                                                                    {{ $log->external_actor }}
-                                                                                @else
-                                                                                    System
-                                                                                @endif
+                                                                            <span class="font-semibold text-gray-800" x-text="log.focal_person ? 
+                                                                                (log.focal_person.fname + ' ' + log.focal_person.lname).trim() : 
+                                                                                (log.accounting_unit ? 
+                                                                                    log.accounting_unit.fname + ' ' + log.accounting_unit.lname : 
+                                                                                    (log.external_actor || 'System'))">
                                                                             </span>
                                                                         </p>
-                                                                        @if($log->remarks)
-                                                                            <p class="text-sm text-gray-700 mb-1">{{ $log->remarks }}</p>
-                                                                        @else
-                                                                            <p class="text-sm text-gray-500 italic mb-1">No remarks provided</p>
-                                                                        @endif
+                                                                        <p class="text-sm mb-1" 
+                                                                        :class="log.remarks ? 'text-gray-700' : 'text-gray-500 italic'"
+                                                                        x-text="log.remarks || 'No remarks provided'">
+                                                                        </p>
                                                                         <div class="flex items-center text-xs text-gray-400 mt-1">
                                                                             <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                                                             </svg>
-                                                                            {{ $log->created_at->diffForHumans() }}
+                                                                            <span x-text="log.created_at_human || 'Just now'"></span>
                                                                         </div>
                                                                     </div>
                                                                 </div>
                                                             </template>
-                                                        @endforeach
-                                                        
-                                                        <!-- Empty state when no activities -->
-                                                        <div x-show="!hasActivitiesForStep(step)" class="text-center py-4 text-gray-400 text-sm italic">
-                                    
-                                                    </div>
+                                                            
+                                                            <!-- Empty state when no activities -->
+                                                            <div x-show="!hasActivitiesForStep(step)" class="text-center py-4 text-gray-400 text-sm italic">
+                                                                No activities yet
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </template>
+                                                    </template>
 
-                                                <!-- Collapsed state for future steps -->
-                                                <template x-if="stepIdx > steps.indexOf(currentStep)">
-                                                    <div class="p-4 text-center text-gray-400 text-sm italic">
-                                                        Awaiting processing...
-                                                    </div>
-                                                </template>
-                                            </div>
+                                                    <!-- Collapsed state for future steps -->
+                                                    <template x-if="stepIdx > steps.indexOf(currentStep)">
+                                                        <div class="p-4 text-center text-gray-400 text-sm italic">
+                                                            Awaiting processing...
+                                                        </div>
+                                                    </template>
+                                                </div>
                                         </div>
                                     </div>
                                 </div>
@@ -625,18 +623,21 @@
 function stepper() {
     return {
         steps: @json($steps),
-        currentStep: 'Submitted',
+        currentStep: '{{ $lastStep }}',
         lastStep: '{{ $lastStep }}',
         nextStep: '{{ $lastStep }}',
         isRejected: {{ $isRejected ? 'true' : 'false' }},
+        isStepCompleted: {{ $isStepCompleted ? 'true' : 'false' }},
         sidebarExpanded: true,
         lastKnownStatus: '{{ $dvRequest->status }}',
-        
+        logsData: @json($logsForJs),
+
         statusToStepMap: {
             'submitted': 'Submitted',
             'IMSD_received': 'IMSD',
             'IMSD_in_process': 'IMSD',
             'IMSD_verified': 'IMSD',
+            'IMSD_rejected': 'IMSD',
             'Incoming-TUPAD_received': 'Incoming',
             'Incoming-TUPAD_in_process': 'Incoming',
             'Incoming-TUPAD_verified': 'Incoming',
@@ -657,6 +658,7 @@ function stepper() {
             'Outgoing_received': 'Outgoing',
             'Outgoing_in_process': 'Outgoing',
             'Outgoing_finalized': 'Outgoing',
+            'Outgoing_rejected': 'Outgoing',
             'RANCA_received': 'Accounting_III',
             'RANCA_in_process': 'Accounting_III',
             'RANCA_validated': 'Accounting_III',
@@ -670,19 +672,35 @@ function stepper() {
             return step.replace(/_/g, ' ');
         },
         
-        hasActivitiesForStep(step) {
-            const logs = @json($logs->pluck('action')->map(function($action) { return strtolower($action); }));
+        getLogsForStep(step) {
+            if (!this.logsData || !Array.isArray(this.logsData)) return [];
+            
             const stepLower = step.toLowerCase();
             
-            return logs.some(log => {
-                if (log === stepLower) return true;
-                if (step === 'IMSD' && log.includes('imsd')) return true;
-                if (step === 'Incoming' && log.includes('incoming')) return true;
-                if (step === 'Budget_Officer' && (log.includes('budget') || log.includes('ors'))) return true;
-                if (step === 'Outgoing' && log.includes('outgoing')) return true;
-                if (step === 'Accounting_III' && (log.includes('accounting') || log.includes('ranca'))) return true;
+            return this.logsData.filter(log => {
+                const logAction = log.action.toLowerCase();
+                
+                // Direct match
+                if (logAction === stepLower) return true;
+                
+                // Special cases
+                if (step === 'IMSD' && logAction.includes('imsd')) return true;
+                if (step === 'Incoming' && logAction.includes('incoming')) return true;
+                if (step === 'Budget_Officer' && (logAction.includes('budget') || logAction.includes('ors'))) return true;
+                if (step === 'Outgoing' && logAction.includes('outgoing')) return true;
+                if (step === 'Accounting_III' && (logAction.includes('accounting') || logAction.includes('ranca'))) return true;
+                
                 return false;
             });
+        },
+        
+        hasActivitiesForStep(step) {
+            return this.getLogsForStep(step).length > 0;
+        },
+        
+        updateSidebarActivities(newLogs) {
+            console.log('📝 Updating sidebar activities with', newLogs.length, 'new logs');
+            this.logsData = newLogs;
         },
         
         mapStatusToStep(status) {
@@ -695,38 +713,81 @@ function stepper() {
             return 'Submitted';
         },
         
-            updateStep(newStep, newIsRejected) {
-            if (!newStep) return;
-
-            // Normalize incoming step for comparison
-            const normalizedStep = newStep.replace(/\s/g, '_');
-
-            // Find the step in the steps array
-            let targetIndex = this.steps.findIndex(s => s.toLowerCase() === normalizedStep.toLowerCase());
-
-            if (targetIndex === -1) {
-                console.warn(`⚠️ Step '${newStep}' not found in steps array`);
-                return;
+        isStepComplete(stepIndex) {
+            // If current step is completed (verified, obligated, finalized, validated)
+            if (this.isStepCompleted && stepIndex === this.steps.indexOf(this.currentStep)) {
+                return true;
             }
-
-            // Skip if already at this step
-            if (this.currentStep === this.steps[targetIndex]) return;
-
-            const previousStep = this.currentStep;
-            this.currentStep = this.steps[targetIndex];
-
-            if (newIsRejected !== undefined) {
-                this.isRejected = newIsRejected;
-            }
-
-            console.log(`Advancing from step ${previousStep} to ${this.currentStep}`);
-
-            // Animate stepper if needed
-            const currentIndex = this.steps.indexOf(previousStep);
-            if (targetIndex > currentIndex) {
-                this.advanceStep(currentIndex, targetIndex);
-            }
+            
+            // Previous steps are always complete
+            return stepIndex < this.steps.indexOf(this.currentStep);
         },
+        
+        getStepStatus(stepIndex) {
+            if (this.isRejected && stepIndex === this.steps.indexOf(this.currentStep)) {
+                return 'rejected';
+            }
+            
+            if (this.isStepComplete(stepIndex)) {
+                return 'completed';
+            }
+            
+            if (stepIndex === this.steps.indexOf(this.currentStep)) {
+                return 'in-progress';
+            }
+            
+            return 'pending';
+        },
+        
+        updateStep(newStep, newIsRejected, newIsStepCompleted) {
+        if (!newStep) return;
+
+        console.log('🔄 updateStep called with:', { newStep, newIsRejected, newIsStepCompleted });
+
+        // Extract the step portion from status (e.g., "Incoming-TUPAD" → "Incoming")
+        let stepToUse = newStep;
+        if (newStep.includes('-')) {
+            stepToUse = newStep.split('-')[0];
+        }
+
+        // Normalize incoming step for comparison
+        const normalizedStep = stepToUse.replace(/\s/g, '_');
+
+        // Find the step in the steps array
+        let targetIndex = this.steps.findIndex(s => s.toLowerCase() === normalizedStep.toLowerCase());
+
+        if (targetIndex === -1) {
+            console.warn(`⚠️ Step '${stepToUse}' (from '${newStep}') not found in steps array`);
+            return;
+        }
+
+        // Skip if already at this step and no status change
+        if (this.currentStep === this.steps[targetIndex] && 
+            this.isRejected === newIsRejected && 
+            this.isStepCompleted === newIsStepCompleted) {
+            console.log('⏭️ No change needed - same step and status');
+            return;
+        }
+
+        const previousStep = this.currentStep;
+        this.currentStep = this.steps[targetIndex];
+
+        if (newIsRejected !== undefined) {
+            this.isRejected = newIsRejected;
+        }
+        
+        if (newIsStepCompleted !== undefined) {
+            this.isStepCompleted = newIsStepCompleted;
+        }
+
+        console.log(`✅ Advancing from step ${previousStep} to ${this.currentStep}, completed: ${this.isStepCompleted}, rejected: ${this.isRejected}`);
+
+        // Animate stepper if needed
+        const currentIndex = this.steps.indexOf(previousStep);
+        if (targetIndex > currentIndex) {
+            this.advanceStep(currentIndex, targetIndex);
+        }
+    },
         
         init() {
             console.log('Stepper initialized');
@@ -738,7 +799,7 @@ function stepper() {
                 fetch('{{ route("FocalPerson.dvrequest.latestStep", $dvRequest) }}')
                     .then(res => res.json())
                     .then(data => {
-                        this.updateStep(data.lastStep, data.isRejected);
+                        this.updateStep(data.lastStep, data.isRejected, data.isStepCompleted);
                     });
             }, 10000);
             
@@ -840,7 +901,14 @@ const LogUpdateManager = {
     // If stepper exists and we have status, update it
     if (window.stepperComponent && data.status) {
         const mappedStep = window.stepperComponent.mapStatusToStep(data.status);
-        window.stepperComponent.updateStep(mappedStep, data.isRejected);
+        
+        // Determine if step should be marked as completed
+        const isStepCompleted = data.status.includes('_verified') || 
+                               data.status.includes('_obligated') || 
+                               data.status.includes('_finalized') || 
+                               data.status.includes('_validated');
+        
+        window.stepperComponent.updateStep(mappedStep, data.isRejected, isStepCompleted);
     }
     
     // Show feedback
@@ -892,37 +960,41 @@ const LogUpdateManager = {
         }
     },
 
-    async pollForUpdates() {
-        try {
-            const response = await fetch(`{{ route('FocalPerson.dvrequest.latestStep', $dvRequest) }}`, {
-                headers: { 
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                }
-            });
-
-            if (!response.ok) throw new Error('Polling request failed');
-
-            const data = await response.json();
-            
-            // Update stepper if status changed
-           if (window.stepperComponent && data.lastStep) {
-                const mappedStep = window.stepperComponent.mapStatusToStep(data.lastStep);
-
-                // Only update if the step has actually changed
-                if (mappedStep !== window.stepperComponent.currentStep) {
-                    window.stepperComponent.updateStep(mappedStep, data.isRejected || false);
-                    console.log('✅ Stepper updated from polling');
-                    await this.refreshLogs();
-                }
+   async pollForUpdates() {
+    try {
+        const response = await fetch(`{{ route('FocalPerson.dvrequest.latestStep', $dvRequest) }}`, {
+            headers: { 
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
             }
+        });
+
+        if (!response.ok) throw new Error('Polling request failed');
+
+        const data = await response.json();
+        console.log('📊 Full polling response:', data);
+        
+        // Update stepper if status changed
+        if (window.stepperComponent && data.lastStep) {
+            const mappedStep = window.stepperComponent.mapStatusToStep(data.lastStep);
+
+            window.stepperComponent.updateStep(
+                mappedStep, 
+                data.isRejected !== undefined ? data.isRejected : false,
+                data.isStepCompleted !== undefined ? data.isStepCompleted : false
+            );
             
-            this.lastPollingCheck = Date.now();
-            
-        } catch (error) {
-            console.error('❌ Polling failed:', error);
+            if (data.debug) {
+                console.log('🐛 Backend Debug:', data.debug);
+            }
         }
-    },
+        
+        this.lastPollingCheck = Date.now();
+        
+    } catch (error) {
+        console.error('❌ Polling failed:', error);
+    }
+},
 
     async refreshLogs() {
         try {
@@ -951,6 +1023,11 @@ const LogUpdateManager = {
                 if (lastUpdatedSpan && data.lastUpdated) {
                     lastUpdatedSpan.textContent = `Last updated: ${data.lastUpdated}`;
                 }
+            }
+
+            // Update sidebar activities in real-time
+            if (data.logs && window.stepperComponent) {
+                window.stepperComponent.updateSidebarActivities(data.logs);
             }
 
             // Reload on mobile for full experience

@@ -5,14 +5,19 @@ namespace App\Http\Controllers\Outgoing;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\OrsRequest;
+use App\Models\AdlCode;
+use App\Models\UacsCode;
+use App\Models\Mfopap;
 use App\Models\DvRequest;
 use App\Services\PusherService;
 use App\Models\GIPAttachment;
 use App\Models\TUPADAttachment;
+use App\Models\TEVAttachment;
 use App\Models\Notification;
 use App\Models\DvRequestLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class OutgoingDvController extends Controller
 {
@@ -34,7 +39,7 @@ class OutgoingDvController extends Controller
          $currentUserId = auth()->id();
          $lockDuration  = now()->subMinutes(10);
         $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'orsRequest'])
-            ->whereIn('status', ['ORS_obligated','Outgoing_received','Outgoing_finalized'])
+            ->whereIn('status', ['ORS_obligated','Outgoing_received','Outgoing_finalized','Outgoing_in_process'])
             ->where(function ($q) use ($currentUserId, $lockDuration) {
             $q->whereNull('locked_by')              
               ->orWhere('locked_by', $currentUserId)  
@@ -46,6 +51,7 @@ class OutgoingDvController extends Controller
         return response()->json($dvRequests->map(function ($req) {
             return [
                 'id'           => $req->id,
+                'control_no' => $req->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 5, '0', STR_PAD_LEFT): '—',
                 'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
                 'program'      => $req->program->prcode ?? 'N/A',
                 'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
@@ -80,7 +86,7 @@ class OutgoingDvController extends Controller
     
        public function show($id)
 {
-    $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','tupadAttachments','logs'])
+    $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','tupadAttachments','tevAttachments','logs'])
         ->findOrFail($id);
 
     $currentUserId = auth()->id();
@@ -111,13 +117,21 @@ class OutgoingDvController extends Controller
             ->orderBy('sort_order')
             ->get();
     }
+    $tevSelectedModality= $dvRequest->tev_modality;
 
+    $tevAttachments = collect();
+    if($tevSelectedModality){
+        $tevAttachments = $dvRequest->tevAttachments()
+        ->where('modality', $tevSelectedModality)
+        ->orderBy('sort_order')
+        ->get();
+    }
 
     $lastLog  = $dvRequest->logs()->latest()->first();
     $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
 
     return view('Outgoing.finalizedv', compact('dvRequest', 'lastStep' ,'attachments',
-        'selectedModality'));
+        'selectedModality','tevSelectedModality','tevAttachments'));
 }
 
 public function receive(Request $request, $id)
@@ -170,6 +184,13 @@ public function receive(Request $request, $id)
             'dv_request_id' => $dvRequest->id,
             'status'        => 'Outgoing_received',
             'remarks'       => $remarks,
+            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        // ✅ To Budget Officer channel (for real-time table update)
+        $this->pusher->trigger('dv-requests-outgoing', 'dv-request-received', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $dvRequest->status,
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
@@ -253,6 +274,12 @@ public function startProcessing(Request $request, $id)
             'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
+         $this->pusher->trigger('dv-requests-outgoing', 'dv-request-processing', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => $status,
+                'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
         // JSON response for AJAX
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -315,78 +342,399 @@ public function startProcessing(Request $request, $id)
     return redirect()->route('Outgoing.dvrequests.index')
                      ->with('info', 'All pending GIP DV requests are currently locked by other users.');
 }
+public function finalize(Request $request, $id)
+{
+    $request->validate([
+        'remarks' => 'nullable|string|max:1000',
+        'gip_attachments' => 'nullable|array',
+        'gip_attachments.*' => 'nullable',
+        'attachments' => 'nullable|array',
+        'attachments.*' => 'nullable',
+        'tev_attachments' => 'nullable|array',
+        'tev_attachments.*' => 'nullable',
+    ]);
 
-    public function finalize(Request $request, $id)
-    {
-        $request->validate([
-            'remarks' => 'nullable|string|max:1000',
-        ]);
+    $dvRequest = DvRequest::with(['gipAttachments', 'tupadAttachments', 'tevAttachments'])->findOrFail($id);
 
-        $dvRequest = DvRequest::findOrFail($id);
+    if ($dvRequest->status !== 'Outgoing_in_process') {
+        return redirect()->back()->with('error', 'This DV request cannot be finalized yet.');
+    }
 
-        if ($dvRequest->status !== 'Outgoing_in_process') {
-            return redirect()->back()->with('error', 'This DV request cannot be finalized yet.');
+    // Generate DV Number
+    $year  = date('Y');
+    $month = date('m');
+    $series = $dvRequest->id;
+    $seriesFormatted = str_pad($series, 4, '0', STR_PAD_LEFT);
+    $dvNumber = "{$year}-{$month}-{$seriesFormatted}";
+
+    // ✅ Handle GIP Attachments
+    if ($dvRequest->program->prcode === 'GIP' && $request->has('gip_attachments')) {
+        foreach ($request->input('gip_attachments', []) as $attachmentId => $value) {
+            $attachment = $dvRequest->gipAttachments()->find($attachmentId);
+            if ($attachment) {
+                $attachment->update(['is_present' => true]);
+            }
         }
+        
+        // Mark unchecked as not present
+        $checkedIds = array_keys($request->input('gip_attachments', []));
+        $dvRequest->gipAttachments()
+            ->whereNotIn('id', $checkedIds)
+            ->update(['is_present' => false]);
+    }
 
-        // Generate DV Number (YYYY-MM-XXXX)
-        $year  = date('Y');
-        $month = date('m');
+    // ✅ Handle TUPAD Attachments
+    if ($dvRequest->program->prcode === 'TUPAD' && $dvRequest->tupad_modality && $request->has('attachments')) {
+        foreach ($request->input('attachments', []) as $attachmentId => $value) {
+            $attachment = $dvRequest->tupadAttachments()->find($attachmentId);
+            if ($attachment) {
+                $attachment->update(['is_present' => true]);
+            }
+        }
+        
+        // Mark unchecked as not present
+        $checkedIds = array_keys($request->input('attachments', []));
+        $dvRequest->tupadAttachments()
+            ->where('modality', $dvRequest->tupad_modality)
+            ->whereNotIn('id', $checkedIds)
+            ->update(['is_present' => false]);
+    }
 
-        $latestDv = DvRequest::whereYear('created_at', $year)
-            ->whereMonth('created_at', $month)
-            ->whereNotNull('dv_number')
-            ->orderBy('dv_number', 'desc')
-            ->first();
+    // ✅ Handle TEV Attachments
+    if ($dvRequest->program->prcode === 'TEV' && $dvRequest->tev_modality && $request->has('tev_attachments')) {
+        foreach ($request->input('tev_attachments', []) as $attachmentId => $value) {
+            $attachment = $dvRequest->tevAttachments()->find($attachmentId);
+            if ($attachment) {
+                $attachment->update(['is_present' => true]);
+            }
+        }
+        
+        // Mark unchecked as not present
+        $checkedIds = array_keys($request->input('tev_attachments', []));
+        $dvRequest->tevAttachments()
+            ->where('modality', $dvRequest->tev_modality)
+            ->whereNotIn('id', $checkedIds)
+            ->update(['is_present' => false]);
+    }
 
-        $series = $dvRequest->id;
-        $seriesFormatted = str_pad($series, 4, '0', STR_PAD_LEFT);
-        $dvNumber = "{$year}-{$month}-{$seriesFormatted}";
-
-
-      DvRequest::where('id', $dvRequest->id)
-        ->update([
+    // Update DV Request
+    DvRequest::where('id', $dvRequest->id)->update([
         'status'     => 'Outgoing_finalized',
         'dv_number'  => $dvNumber,
         'locked_by'  => null,
         'locked_at'  => null,
     ]);
 
-        if ($dvRequest->focalPerson) {
-            $dvRequest->focalPerson->update([
-                'dv_number' => $dvNumber
-            ]);
-        }
-            $focalId = $dvRequest->focalperson_id;
-            $status = 'Outgoing_finalized';
-            $action = 'Finalized'; // or something meaningful for your workflow
-            $remarks = ($request->remarks ?? 'DV finalized by Outgoing') . " | DV Number: {$dvNumber}";
-
-            $notification = Notification::create([
-                'focalperson_id' => $focalId,
-                'dv_request_id'  => $dvRequest->id,
-                'status'         => $status,
-                'action'         => $action,
-                'remarks'        => $remarks,
-            ]);
-            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => $dvRequest->status,
-            'dv_number'     => $dvRequest->dv_number,
-            'remarks'       => $remarks,
-            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    if ($dvRequest->focalPerson) {
+        $dvRequest->focalPerson->update([
+            'dv_number' => $dvNumber
         ]);
-            
+    }
+
+    $focalId = $dvRequest->focalperson_id;
+    $status = 'Outgoing_finalized';
+    $action = 'Finalized';
+    $remarks = ($request->remarks ?? 'DV finalized by Outgoing') . " | DV Number: {$dvNumber}";
+
+    Notification::create([
+        'focalperson_id' => $focalId,
+        'dv_request_id'  => $dvRequest->id,
+        'status'         => $status,
+        'action'         => $action,
+        'remarks'        => $remarks,
+    ]);
+
+    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+        'dv_request_id' => $dvRequest->id,
+        'status'        => $dvRequest->status,
+        'dv_number'     => $dvRequest->dv_number,
+        'remarks'       => $remarks,
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
+    $this->pusher->trigger('dv-requests-outgoing', 'dv-request-finalized', [
+        'dv_request_id' => $dvRequest->id,
+        'dv_number'     => $dvRequest->dv_number,
+        'status'        => $status,
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
+    $this->logAction(
+        $dvRequest->id,
+        'Outgoing',
+        'Outgoing_finalized',
+        $remarks
+    );
+
+     return redirect()->route('Outgoing.dvrequests.preview', $dvRequest->id)
+        ->with('success', "DV Request finalized with DV Number: {$dvNumber}")
+        ->with('print_modal', true);
+}
+    public function reject(Request $request, $id)
+{
+    $request->validate([
+        'remarks' => 'required|string|max:1000',
+    ]);
+
+    try {
+        $dvRequest = DvRequest::findOrFail($id);
+
+        // ✅ Only allow rejection if status is currently in Outgoing stage
+        if (!in_array($dvRequest->status, ['Outgoing_in_process'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This DV request cannot be rejected at its current stage.'
+            ], 422);
+        }
+
+        $rejectedAt = now();
+        $focalId = $dvRequest->focalperson_id;
+        $remarks = trim($request->remarks);
+
+        // ✅ Update DV request
+        $dvRequest->update([
+            'status'     => 'Outgoing_rejected',
+            'locked_by'  => null,
+            'locked_at'  => null,
+        ]);
+
+        // ✅ Log rejection - REMOVE the prefix, just use remarks
         $this->logAction(
             $dvRequest->id,
             'Outgoing',
-            'Outgoing_finalized',
-            ($request->remarks ?? 'DV finalized by Outgoing') . " | DV Number: {$dvNumber}"
+            'Outgoing_rejected',
+            $remarks  // ✅ Changed from "Rejected by Outgoing: {$remarks}"
         );
 
+        // ✅ Notify focal person
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => 'Outgoing_rejected',
+            'action'         => 'Rejected',
+            'remarks'        => $remarks,
+        ]);
+
+        // ✅ Real-time push to focal person
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'Outgoing_rejected',
+            'remarks'       => $remarks,
+            'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        // ✅ Real-time push to Outgoing dashboard
+        $this->pusher->trigger('dv-requests-outgoing', 'dv-request-rejected', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'Outgoing_rejected',
+            'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        // ✅ Return JSON if AJAX
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'DV request has been rejected successfully.',
+                'data' => [
+                    'id'         => $dvRequest->id,
+                    'status'     => 'Outgoing_rejected',
+                    'remarks'    => $remarks,
+                ]
+            ]);
+        }
+
+        // ✅ Fallback redirect
         return redirect()->route('Outgoing.dvrequests.index')
-                        ->with('success', "DV Request finalized with DV Number: {$dvNumber}");
+                         ->with('error', 'DV request has been rejected.');
+
+    } catch (\Exception $e) {
+        \Log::error('Error rejecting DV request: ' . $e->getMessage());
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while rejecting the DV request.'
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while rejecting the DV request.');
+    }
+}
+ public function printOfficialDv($id)
+{
+    $dvRequest = DvRequest::with([
+        'program',
+        'focalPerson',
+        'respocenter',
+        'orsRequest.uacsCodes', // ✅ Load through orsRequest
+    ])->findOrFail($id);
+
+    if ($dvRequest->status !== 'Outgoing_finalized') {
+        return redirect()->back()->with('error', 'This DV has not been finalized yet.');
     }
 
+    if (!$dvRequest->dv_number) {
+        return redirect()->back()->with('error', 'DV Number has not been assigned yet.');
+    }
+
+    return view('Outgoing.print-official-dv', compact('dvRequest'));
+}
+
+public function generatePdf($id)
+{
+    try {
+        $dvRequest = DvRequest::with([
+            'program',
+            'focalPerson', 
+            'respocenter',
+            'orsRequest.uacsCodes', // ✅ Load through orsRequest
+        ])->findOrFail($id);
+
+        if ($dvRequest->status !== 'Outgoing_finalized') {
+            return redirect()->back()->with('error', 'This DV has not been finalized yet.');
+        }
+
+        if (!$dvRequest->dv_number) {
+            return redirect()->back()->with('error', 'DV Number has not been assigned yet.');
+        }
+
+        $data = $this->prepareDvData($dvRequest);
+        
+        $pdf = Pdf::loadView('Outgoing.pdf.dv-document', $data);
+        $pdf->setPaper('legal', 'portrait');
+        $pdf->setOptions([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled' => true,
+            'defaultFont' => 'times',
+            'dpi' => 150,
+        ]);
+
+        $filename = 'DV_' . str_replace('-', '_', $dvRequest->dv_number) . '_' . date('Ymd') . '.pdf';
+        
+        return $pdf->download($filename);
+
+    } catch (\Exception $e) {
+        return redirect()->back()->with('error', 'Error generating PDF: ' . $e->getMessage());
+    }
+}
+
+public function previewDv($id)
+{
+    $dvRequest = DvRequest::with([
+        'program',
+        'focalPerson',
+        'respocenter',
+        'modeOfPayments',
+        'orsRequest.uacsCodes',
+        'orsRequest.Mfopap' // ✅ Load through orsRequest
+    ])->findOrFail($id);
+    $dvRequest->modeOfPayments->each(fn($mop) => $mop->pivot->load('paymentDetail'));
+    if ($dvRequest->status !== 'Outgoing_finalized') {
+        return redirect()->back()->with('error', 'This DV has not been finalized yet.');
+    }
+    
+    
+    $modeOfPayment = $dvRequest->modeOfPayments->first();
+    $paymentDetail = $modeOfPayment?->pivot?->paymentDetail;
+    $orsRequest = $dvRequest->orsRequest;
+    $uacsCodes = $orsRequest && $orsRequest->uacsCodes ? $orsRequest->uacsCodes : collect();
+    $totalAmount = $uacsCodes->count() > 0 ? $uacsCodes->sum('amount') : $dvRequest->amount;
+    
+    $data = [
+        'dvRequest' => $dvRequest,
+        'date' => $dvRequest->created_at->format('m/d/Y'),
+        'dv_no' => $dvRequest->dv_number,
+        'mode_of_payment' => $modeOfPayment?->mopname ?? 'Not specified',
+        'payee' => $dvRequest->payee_name ?? ($dvRequest->focalPerson ? 
+                trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')) : 'N/A'),
+        'tin' => $dvRequest->focalPerson->TIN_number ?? $dvRequest->focalPerson->tin_number ?? '___________',
+        'amount' => number_format($dvRequest->amount, 2),
+        'address' => $dvRequest->Address ?? $dvRequest->payee_address ?? 'DAVAO CITY',
+        'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
+        'respocenter_code' => $dvRequest->respocenter->code ?? '',
+        'respocenter_desc' => $dvRequest->respocenter->description ?? '',
+        'mfocode' => $orsRequest && $orsRequest->mfopap ? ($orsRequest->mfopap->mfocode ?? '') : '',
+        'mfodescription' => $orsRequest && $orsRequest->mfopap ? ($orsRequest->mfopap->mfodescription ?? '') : '',
+        'amount' => number_format($totalAmount, 2),
+        'uacsCodes' => $uacsCodes,
+        'imsd_head' => 'Name of IMSD Head',
+        'accountant_name' => 'Name of Accountant',
+        'regional_director' => 'Name of Regional Director',
+        'bank_name' => $paymentDetail?->bank_name ?? '',
+        'bank_accnum' => $paymentDetail?->bank_accnum ?? '',
+        'bank_address' => $paymentDetail?->bank_address ?? '',
+        'ors_number' => $orsRequest->ors_number ?? '___________',
+        'imsd_head' => \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD'),
+        'accountant_name' => \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT'),
+        'regional_director' => \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR'),
+    ];
+
+    // ✅ Return view with prepared data
+    return view('Outgoing.previewdv', [
+    'data' => $data,
+    'dvRequest' => $dvRequest,
+    'orsRequest' => $orsRequest,
+    'uacsCodes' => $uacsCodes,
+    
+]);
+}
+
+private function getValidatedDvRequest($id)
+{
+    $dvRequest = DvRequest::with([
+        'program',
+        'focalPerson', 
+        'respocenter',
+        'orsRequest.uacsCodes', // ✅ Load through orsRequest
+        'orsRequest.Mfopap' // ✅ Load through orsRequest
+    ])->findOrFail($id);
+
+    if ($dvRequest->status !== 'Outgoing_finalized') {
+        throw new \Exception('This DV has not been finalized yet.');
+    }
+
+    if (!$dvRequest->dv_number) {
+        throw new \Exception('DV Number has not been assigned yet.');
+    }
+
+    return $dvRequest;
+}
+
+    private function prepareDvData($dvRequest)
+{
+    // Get the ORS request data with UACS codes
+    $orsRequest = $dvRequest->orsRequest;
+    
+    // Get UACS codes from ORS request (not from DV request)
+    $uacsCodes = $orsRequest && $orsRequest->uacsCodes ? $orsRequest->uacsCodes : collect();
+    
+    // Calculate total amount from UACS codes if available, otherwise use DV amount
+    $totalAmount = $uacsCodes->count() > 0 ? $uacsCodes->sum('amount') : $dvRequest->amount;
+    
+    return [
+        'dvRequest' => $dvRequest,
+        'date' => $dvRequest->created_at->format('m/d/Y'),
+        'dv_no' => $dvRequest->dv_number,
+        'mode_of_payment' => $dvRequest->mode_of_payment ?? 'MDS Check',
+        'payee' => $dvRequest->payee_name ?? ($dvRequest->focalPerson ? 
+                trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')) : 'N/A'),
+        'tin' => $dvRequest->TIN_number ?? $dvRequest->tin_number ?? '___________',
+        'address' => $dvRequest->Address ?? $dvRequest->payee_address ?? 'DAVAO CITY',
+        'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
+        'respocenter_code' => $dvRequest->respocenter->code ?? '',
+        'respocenter_desc' => $dvRequest->respocenter->description ?? '',
+        'mfocode' => $dvRequest->program->code ?? $dvRequest->program->prcode ?? '',
+        'mfodescription' => $dvRequest->program->name ?? '',
+        'amount' => number_format($totalAmount, 2),
+        'uacsCodes' => $uacsCodes,
+        'imsd_head' => 'Name of IMSD Head',
+        'accountant_name' => 'Name of Accountant',
+        'regional_director' => 'Name of Regional Director',
+        'bank_name' => $dvRequest->bank_name ?? '___________',
+        'bank_accnum' => $dvRequest->bank_account_number ?? $dvRequest->bank_accnum ?? '___________',
+        'ors_number' => $orsRequest->ors_number ?? '___________',
+    ];
+}
     public function releaseLock($id)
     {
         $dvRequest = DvRequest::findOrFail($id);

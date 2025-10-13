@@ -95,7 +95,7 @@ class GIPDvRequestProcessingController extends Controller
     return view('Incoming.GIP.verifygipdv', compact('dvRequest', 'recentDvRequests', 'lastStep'));
 }
 
- public function receive(Request $request, $id)
+public function receive(Request $request, $id)
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
@@ -117,6 +117,7 @@ class GIPDvRequestProcessingController extends Controller
             'locked_by'        => auth()->id(),
             'locked_at'        => $receivedAt,
         ]);
+        
         $this->logAction(
             $dvRequest->id,
             'Incoming',
@@ -124,7 +125,7 @@ class GIPDvRequestProcessingController extends Controller
             'Request officially received by Incoming-GIP'
         );
         
-       
+        // Notify focal person
         $focalId = $dvRequest->focalperson_id;
         Notification::create([
             'focalperson_id' => $focalId,
@@ -141,11 +142,18 @@ class GIPDvRequestProcessingController extends Controller
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
         
-       
+        // ✅ NEW: Broadcast to Incoming-GIP channel for real-time table updates
+        $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-received', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'Incoming-GIP_received',
+            'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+        
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Document has been received by  Incoming-GIP.',
+                'message' => 'Document has been received by Incoming-GIP.',
                 'data' => [
                     'id' => $dvRequest->id,
                     'status' => 'Incoming-GIP_received',
@@ -154,12 +162,10 @@ class GIPDvRequestProcessingController extends Controller
             ]);
         }
         
-        // Fallback for non-AJAX requests (if needed)
         return redirect()->route('Incoming.GIP.index')
             ->with('success', 'Document has been received by Incoming-GIP.');
             
     } catch (\Exception $e) {
-        // Log the error
         \Log::error('Error receiving DV request: ' . $e->getMessage());
         
         if ($request->expectsJson() || $request->ajax()) {
@@ -173,7 +179,7 @@ class GIPDvRequestProcessingController extends Controller
     }
 }
 
- public function startProcessing(Request $request, $id)
+public function startProcessing(Request $request, $id)
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
@@ -193,7 +199,6 @@ class GIPDvRequestProcessingController extends Controller
             'locked_at' => $startedAt,
         ]);
 
-        // Log
         $this->logAction(
             $dvRequest->id,
             'Incoming',
@@ -215,7 +220,6 @@ class GIPDvRequestProcessingController extends Controller
             'remarks'        => $remarks,
         ]);
 
-        // Trigger real-time event
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
@@ -223,7 +227,13 @@ class GIPDvRequestProcessingController extends Controller
             'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
-        // JSON response for AJAX
+        // ✅ NEW: Broadcast to Incoming-GIP channel
+        $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-processing', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
@@ -236,7 +246,6 @@ class GIPDvRequestProcessingController extends Controller
             ]);
         }
 
-        // Fallback redirect
         return redirect()->route('Incoming.GIP.index')
             ->with('success', 'Processing started.');
 
@@ -253,6 +262,7 @@ class GIPDvRequestProcessingController extends Controller
         return redirect()->back()->with('error', 'An error occurred while starting processing.');
     }
 }
+
 
 
  public function fetchgipRecent()
@@ -311,7 +321,7 @@ class GIPDvRequestProcessingController extends Controller
 
         $result = $dvRequests->map(fn($request) => [
             'id'           => $request->id,
-            'accounting_control_number' => $request->accounting_control_number,
+            'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 5, '0', STR_PAD_LEFT): '—',
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
@@ -405,88 +415,173 @@ class GIPDvRequestProcessingController extends Controller
         }
     }
    public function verify(Request $request, $id)
-    {
-        $request->validate([
-            'remarks' => 'nullable|string|max:1000',
-        ]);
+{
+    $request->validate([
+        'remarks' => 'nullable|string|max:1000',
+    ]);
 
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP')) 
-                              ->findOrFail($id);
+    $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP')) 
+                          ->findOrFail($id);
 
-        $dvRequest->update([
-            'status' => 'Incoming-GIP_verified',
-            'locked_by'=> null,
-            'locked_at'=> null,
-        ]);
-
-        // FIX: Use the correct form field name 'gip_attachments'
-        $checkedAttachments = $request->input('gip_attachments', []);
-        
-        foreach ($dvRequest->gipAttachments as $attachment) {
-            // Check if this attachment ID exists in the checked array
-            $attachment->is_present = isset($checkedAttachments[$attachment->id]);
-            $attachment->save();
-        }
-
-        $focalId = $dvRequest->focalperson_id;
-        $status = 'Incoming-GIP_verified';
-        $action = 'Approved';
-        $remarks = $request->remarks ?? 'Request verified by Incoming-GIP';
-
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => 'Incoming-GIP_verified',
-            'remarks'       => $request->remarks ?? 'Request verified by Incoming-GIP',
-            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-
-        $notification = Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => $status,
-            'action'         => $action,
-            'remarks'        => $remarks,
-        ]);
-        
-        $this->logAction(
-            $dvRequest->id,
-            'Incoming',
-            'Approved',
-            $request->remarks ?? 'Request verified by Incoming-GIP'
-        );
-
-        return redirect()->route('Incoming.GIP.index')
-                         ->with('success', 'DV Request has been verified successfully.');
-    }
-
-        public function reject(Request $request, $id)
-    {
-        $request->validate([
-            'remarks' => 'nullable|string|max:1000',
-        ]);
-
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
-                            ->findOrFail($id);
-
-        // Update status to rejected
-         $dvRequest->update([
-        'status' => 'Incoming-GIP_rejected',
+    $dvRequest->update([
+        'status' => 'Incoming-GIP_verified',
         'locked_by'=> null,
         'locked_at'=> null,
+    ]);
+    $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
+        'dv_request_id' => $dvRequest->id,
+        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+        'program'       => $dvRequest->program->prcode ?? 'N/A',
+        'status'        => 'Incoming-GIP_verified',
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+    $checkedAttachments = $request->input('gip_attachments', []);
+    
+    foreach ($dvRequest->gipAttachments as $attachment) {
+        $attachment->is_present = isset($checkedAttachments[$attachment->id]);
+        $attachment->save();
+    }
+
+    $focalId = $dvRequest->focalperson_id;
+    $status = 'Incoming-GIP_verified';
+    $action = 'Approved';
+    $remarks = $request->remarks ?? 'Request verified by Incoming-GIP';
+
+    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+        'dv_request_id' => $dvRequest->id,
+        'status'        => 'Incoming-GIP_verified',
+        'remarks'       => $request->remarks ?? 'Request verified by Incoming-GIP',
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
+    // ✅ NEW: Broadcast to Incoming-GIP channel
+    $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-verified', [
+        'dv_request_id' => $dvRequest->id,
+        'status'        => $status,
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
+    Notification::create([
+        'focalperson_id' => $focalId,
+        'dv_request_id'  => $dvRequest->id,
+        'status'         => $status,
+        'action'         => $action,
+        'remarks'        => $remarks,
+    ]);
+    
+    $this->logAction(
+        $dvRequest->id,
+        'Incoming',
+        'Approved',
+        $request->remarks ?? 'Request verified by Incoming-GIP'
+    );
+
+    return redirect()->route('Incoming.GIP.index')
+                     ->with('success', 'DV Request has been verified successfully.');
+}
+
+       public function reject(Request $request, $id)
+{
+    try {
+        // Validate input
+        $request->validate([
+            'remarks' => 'required|string|max:1000|min:10',
         ]);
 
+        // Find the DV request
+        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
+                              ->findOrFail($id);
 
-        // Log the rejection
+        // ✅ Only allow rejection if status is currently in Incoming-GIP stage
+        if (!in_array($dvRequest->status, ['Incoming-GIP_received', 'Incoming-GIP_in_process'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This DV request cannot be rejected at its current stage.'
+            ], 422);
+        }
+
+        $rejectedAt = now();
+        $focalId = $dvRequest->focalperson_id;
+        $remarks = trim($request->remarks);
+
+        // ✅ Update DV request
+        $dvRequest->update([
+            'status'     => 'Incoming-GIP_rejected',
+            'locked_by'  => null,
+            'locked_at'  => null,
+        ]);
+
+        // ✅ Log rejection
         $this->logAction(
             $dvRequest->id,
-            'Incoming',
-            'Rejected',
-            $request->remarks ?? 'Request rejected by Incoming-GIP'
+            'Incoming-GIP',
+            'Incoming-GIP_rejected',
+            "Rejected by Incoming-GIP: {$remarks}"
         );
 
-        return redirect()->route('Incoming.GIP.index')
-                        ->with('error', 'DV Request has been rejected.');
+        // ✅ Notify focal person
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => 'Incoming-GIP_rejected',
+            'action'         => 'Rejected',
+            'remarks'        => $remarks,
+        ]);
+
+        // ✅ Real-time push to focal person
+        if (isset($this->pusher)) {
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Incoming-GIP_rejected',
+                'remarks'       => $remarks,
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            // ✅ Real-time push to Incoming-GIP dashboard
+            $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-rejected', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Incoming-GIP_rejected',
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
+
+        // ✅ Always return JSON
+        return response()->json([
+            'success' => true,
+            'message' => 'DV request has been rejected successfully.',
+            'data' => [
+                'id'         => $dvRequest->id,
+                'status'     => 'Incoming-GIP_rejected',
+                'remarks'    => $remarks,
+            ]
+        ], 200);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        \Log::error('DV Request not found: ' . $e->getMessage());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'DV request not found.'
+        ], 404);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        \Log::error('Validation error: ' . json_encode($e->errors()));
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed: ' . implode(', ', $e->errors()['remarks'] ?? ['Invalid input'])
+        ], 422);
+
+    } catch (\Exception $e) {
+        \Log::error('Error rejecting GIP DV request: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred while rejecting the DV request: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     
    public function redirectToFirstPending()

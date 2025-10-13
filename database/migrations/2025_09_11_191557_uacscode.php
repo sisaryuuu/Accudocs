@@ -6,27 +6,25 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('uacscodes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('parent_id')->nullable()->constrained('uacscodes')->nullOnDelete();
+            $table->foreignId('parent_id')
+                  ->nullable()
+                  ->constrained('uacscodes')
+                  ->nullOnDelete();
             $table->string('uacscode');
-            $table->string('description');
+            $table->text('description');
+            $table->integer('level')->default(0); // 0=root, 1=category, 2=item, etc.
+            $table->boolean('is_selectable')->default(true); // Only leaf nodes selectable
+            $table->integer('sort_order')->default(0); // For custom ordering
             $table->timestamps();
-            
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-       Schema::dropIfExists('uacscodes');
-       
+        Schema::dropIfExists('uacscodes');
     }
 };

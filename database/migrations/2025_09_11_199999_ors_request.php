@@ -13,14 +13,30 @@ return new class extends Migration
 
             $table->unsignedBigInteger('dv_request_id');
             $table->unsignedBigInteger('focalperson_id')->nullable();
-            $table->unsignedBigInteger('accountingunit_id')->nullable();
+              $table->foreignId('accountingunit_id')
+                    ->nullable()
+                    ->constrained('accountingunits')
+                    ->restrictOnDelete();
 
-            // For testing, all code columns are strings
-            $table->string('uacscode_id')->nullable();
-            $table->string('adlcode_id')->nullable();
-            $table->string('allotment_class_id')->nullable();
-            $table->string('mfopap_id')->nullable();
-            $table->string('contcurrent_id')->nullable();
+              $table->foreignId('adlcode_id')
+                    ->nullable()
+                    ->constrained('adlcodes')
+                    ->restrictOnDelete();
+
+              $table->foreignId('allotment_class_id')
+                    ->nullable()
+                    ->constrained('allotment_classes')
+                    ->restrictOnDelete();
+
+              $table->foreignId('mfopap_id')
+                    ->nullable()
+                    ->constrained('mfopaps')
+                    ->restrictOnDelete();
+
+              $table->foreignId('contcurrent_id')
+                    ->nullable()
+                    ->constrained('contcurrents')
+                    ->restrictOnDelete();
 
             $table->decimal('gross', 15,2)->nullable();
             $table->decimal('net', 15,2)->nullable();

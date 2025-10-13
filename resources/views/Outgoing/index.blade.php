@@ -3,53 +3,127 @@
 @section('title', 'Outgoing - DV Requests')
 
 @section('content')
-<div class="min-h-screen bg-gray-50 py-8">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-
-        <!-- Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+<div class="min-h-screen bg-gray-50 pt-24 pb-8"> 
+    <div class="max-w-[95rem] mx-auto px-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">DV Requests for Outgoing</h1>
-                <p class="mt-2 text-sm text-gray-600">
-                    Manage DV requests received from Budget Officer for finalization and DV number assignment.
-                </p>
+                <h1 class="text-3xl font-bold text-gray-900">Received DV Requests</h1>
+                <p class="mt-2 text-sm text-gray-600">Manage and verify submitted disbursement voucher requests</p>
+            </div>
+            <div class="mt-4 sm:mt-0">
+                <span id="connection-status" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    <span class="w-2 h-2 mr-2 rounded-full bg-gray-400 animate-pulse"></span>
+                    Connecting...
+                </span>
             </div>
         </div>
 
-        <!-- Search -->
+        <!-- Toast Container -->
+        <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+<!-- Search -->
         <div class="mb-4">
-            <input type="text" id="searchInput" 
+            <input type="text" id="search-input" 
                    placeholder="🔍 Search DV Requests (Control No, ORS No, Program, Respocenter, Submitted By)..."
                    class="w-full md:w-1/2 px-4 py-2 border rounded-lg shadow-sm focus:ring focus:ring-blue-200 focus:outline-none">
         </div>
 
-        <!-- Table -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div id="dv-table-container" class="overflow-x-auto">
-                <!-- Table will be injected by JS -->
+     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div id="dv-table-container">
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </div>
+                    <p class="text-gray-500">Loading requests...</p>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const tableContainer = document.getElementById('dv-table-container');
-    const searchInput = document.getElementById('searchInput');
-    let toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) {
-        toastContainer = document.createElement('div');
-        toastContainer.id = 'toast-container';
-        toastContainer.className = 'fixed top-5 right-5 z-50 flex flex-col space-y-2';
-        document.body.appendChild(toastContainer);
-    }
+     const tableContainer = document.getElementById('dv-table-container');
+    const searchInput = document.getElementById('search-input');
+    const toastContainer = document.getElementById('toast-container');
+    const connectionStatus = document.getElementById('connection-status');
     let allRequests = [];
+    let searchTerm = "";
 
     const statusColors = {
         'ORS_obligated': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
         'Outgoing_received': ['bg-yellow-100 text-yellow-800','bg-yellow-400','Received'],
         'Outgoing_finalized': ['bg-green-100 text-green-800','bg-green-400','Finalized'],
     };
+
+     const pusher = new Pusher('{{ config('broadcasting.connections.pusher.key') }}', {
+        cluster: '{{ config('broadcasting.connections.pusher.options.cluster') }}',
+        encrypted: true
+    });
+
+
+      function updateConnectionStatus(state) {
+        const statusMap = {
+            'connecting': { text: 'Connecting...', color: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400 animate-pulse' },
+            'connected': { text: 'Live', color: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+            'unavailable': { text: 'Disconnected', color: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+            'failed': { text: 'Connection Failed', color: 'bg-red-100 text-red-600', dot: 'bg-red-500' }
+        };
+
+        const status = statusMap[state] || statusMap.connecting;
+        connectionStatus.innerHTML = `
+            <span class="w-2 h-2 mr-2 rounded-full ${status.dot}"></span>
+            ${status.text}
+        `;
+        connectionStatus.className = `inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${status.color}`;
+    }
+
+   
+    pusher.connection.bind('state_change', function(states) {
+        updateConnectionStatus(states.current);
+    });
+
+
+    const outgoingChannel = pusher.subscribe('dv-requests-outgoing');
+
+   
+        outgoingChannel.bind('dv-request-submitted', function(data) {
+        console.log('New DV request submitted:', data);
+        showToast(`New request from ${data.submitted_by}`, 'success');
+        fetchDvRequests(); // Refresh the table
+    });
+
+    // Listen for status updates
+    outgoingChannel.bind('status-updated', function(data) {
+        console.log('DV request status updated:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for request received events
+    outgoingChannel.bind('dv-request-received', function(data) {
+        console.log('DV request received:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for processing started events
+    outgoingChannel.bind('dv-request-processing', function(data) {
+        console.log('DV request processing started:', data);
+        fetchDvRequests();
+    });
+
+    outgoingChannel.bind('dv-request-finalized', function(data) {
+        console.log('DV request finalized:', data);
+        fetchDvRequests();
+    });
+
+    outgoingChannel.bind('dv-request-rejected', function(data) {
+    console.log('DV request rejected:', data);
+    fetchDvRequests();
+    });
+
+    
 
  function showToast(message, type = 'success') {
         const toastId = 'toast-' + Date.now();
@@ -203,7 +277,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                     class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md">
                                     View / Process
                                 </a>
-                            </td>`
+                                 <a href="/Outgoing/dvrequests/${req.id}/preview" 
+                                    class="inline-flex items-center px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium rounded-md ml-2">
+                                    Preview DV
+                                    </a>       
+                                </td>`
                         }
                 </tr>`;
         });
@@ -215,32 +293,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // Fetch DV requests from server
     async function fetchDvRequests() {
         try {
-            const res = await fetch("{{ route('Outgoing.dvrequests.fetch') }}");
+            const res = await fetch("{{ route('Outgoing.dvrequests.fetch') }}?search=" + encodeURIComponent(searchTerm));
             const data = await res.json();
             allRequests = data;
             renderTable(allRequests);
         } catch (err) {
-            console.error('Failed to fetch DV requests:', err);
+             console.error('Failed to fetch DV requests', err);
+            tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
         }
     }
 
-    // Search filter
-    searchInput.addEventListener('input', () => {
-        const query = searchInput.value.toLowerCase();
-        const filtered = allRequests.filter(r =>
-            r.id.toString().includes(query) ||
-            (r.ors_number ?? '').toLowerCase().includes(query) ||
-            (r.dv_number ?? '').toLowerCase().includes(query) ||
-            r.submitted_by.toLowerCase().includes(query) ||
-            r.program.toLowerCase().includes(query) ||
-            r.respocenter.toLowerCase().includes(query)
-        );
-        renderTable(filtered);
+    let searchTimeout;
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            searchTerm = this.value;
+            fetchDvRequests();
+        }, 300);
     });
 
-    // Initial fetch and polling every 5 seconds
+    // Initial fetch
     fetchDvRequests();
-    setInterval(fetchDvRequests, 5000);
 });
+
 </script>
 @endsection

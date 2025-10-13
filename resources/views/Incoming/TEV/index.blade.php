@@ -8,8 +8,14 @@
         <!-- Header Section -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">Received TEV Disbursement Voucher Requests</h1>
+                <h1 class="text-3xl font-bold text-gray-900">Received DV Requests</h1>
                 <p class="mt-2 text-sm text-gray-600">Manage and verify submitted TEV disbursement voucher requests</p>
+            </div>
+            <div class="mt-4 sm:mt-0">
+                <span id="connection-status" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    <span class="w-2 h-2 mr-2 rounded-full bg-gray-400 animate-pulse"></span>
+                    Connecting...
+                </span>
             </div>
         </div>
 
@@ -23,31 +29,107 @@
         <!-- Main Content Card -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div id="dv-table-container">
-                <!-- Table will be dynamically injected here -->
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </div>
+                    <p class="text-gray-500">Loading requests...</p>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col space-y-2"></div>
+
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const tableContainer = document.getElementById('dv-table-container');
     const searchInput = document.getElementById('searchInput');
+    const connectionStatus = document.getElementById('connection-status');
     let toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) {
-        toastContainer = document.createElement('div');
-        toastContainer.id = 'toast-container';
-        toastContainer.className = 'fixed top-5 right-5 z-50 flex flex-col space-y-2';
-        document.body.appendChild(toastContainer);
-    }
     let allRequests = [];
+    let searchTerm = "";
 
     const statusColors = {
         'IMSD_verified': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
-        'Incoming-TEV_received': ['bg-green-100 text-green-800','bg-green-400','Received'],
+        'Incoming-TEV_received': ['bg-blue-100 text-blue-800','bg-blue-400','Received'],
         'Incoming-TEV_in_process': ['bg-blue-100 text-blue-800','bg-blue-400','In Process'],
         'Incoming-TEV_verified': ['bg-green-100 text-green-800','bg-green-400','Verified']
     };
+
+  const pusher = new Pusher('{{ config('broadcasting.connections.pusher.key') }}', {
+        cluster: '{{ config('broadcasting.connections.pusher.options.cluster') }}',
+        encrypted: true,
+        enabledTransports: ['ws', 'wss']
+    });
+
+    // Update connection status
+    function updateConnectionStatus(state) {
+        const statusMap = {
+            'connecting': { text: 'Connecting...', color: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400 animate-pulse' },
+            'connected': { text: 'Live', color: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+            'unavailable': { text: 'Disconnected', color: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+            'failed': { text: 'Connection Failed', color: 'bg-red-100 text-red-600', dot: 'bg-red-500' }
+        };
+
+        const status = statusMap[state] || statusMap.connecting;
+        connectionStatus.innerHTML = `
+            <span class="w-2 h-2 mr-2 rounded-full ${status.dot}"></span>
+            ${status.text}
+        `;
+        connectionStatus.className = `inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${status.color}`;
+    }
+
+    // Monitor Pusher connection
+    pusher.connection.bind('state_change', function(states) {
+        updateConnectionStatus(states.current);
+    });
+
+    // Subscribe to Incoming-TEV channel
+    const tevChannel = pusher.subscribe('dv-requests-incoming-tev');
+
+    // Listen for new DV request submissions from IMSD
+    tevChannel.bind('dv-request-submitted', function(data) {
+        console.log('New DV request received from IMSD:', data);
+        showToast(`New TEV request from ${data.submitted_by || 'a focal person'}`, 'success');
+        fetchDvRequests();
+    });
+
+    // Listen for received events
+    tevChannel.bind('dv-request-received', function(data) {
+        console.log('DV request received:', data);
+        showToast(`Request #${data.dv_request_id} has been received`, 'success');
+        fetchDvRequests();
+    });
+
+    // Listen for processing started events
+    tevChannel.bind('dv-request-processing', function(data) {
+        console.log('DV request processing started:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for verified events
+    tevChannel.bind('dv-request-verified', function(data) {
+        console.log('DV request verified:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for rejected events
+    tevChannel.bind('dv-request-rejected', function(data) {
+        console.log('DV request rejected:', data);
+        fetchDvRequests();
+    });
+
+    // Listen for status updates
+    tevChannel.bind('status-updated', function(data) {
+        console.log('DV request status updated:', data);
+        fetchDvRequests();
+    });
 
     function showToast(message, type = 'success') {
         const toastId = 'toast-' + Date.now();
@@ -114,7 +196,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (response.ok && result.success) {
                 showToast(result.message || 'Document has been received by Incoming-TEV.', 'success');
-                await fetchDvRequests();
+                // Pusher will handle the refresh automatically
             } else {
                 showToast(result.message || 'Failed to receive document.', 'error');
                 button.innerHTML = originalText;
@@ -132,6 +214,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (dvRequests.length === 0) {
             tableContainer.innerHTML = `
                 <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
                     <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
                     <p class="text-gray-500">Try adjusting your search filter.</p>
                 </div>
@@ -147,14 +235,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 <table class="w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Control No.</th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Submitted By</th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Responsibility Center</th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Date Submitted</th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsibility Center</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
@@ -163,13 +251,10 @@ document.addEventListener('DOMContentLoaded', function() {
         dvRequests.forEach(request => {
             const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
             html += `
-                <tr class="hover:bg-gray-50">
+                <tr class="hover:bg-gray-50 transition-colors duration-150">
                     <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                            Control #${request.accounting_control_number}
-                            ${request.user_sequence !== undefined 
-                                ? `<br><span class="text-xs text-gray-500">Seq: ${request.user_sequence}</span>` 
-                                : ''}
-                        </td>
+                     ${request.accounting_control_number}
+                    </td>
                     <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${request.program}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${request.respocenter}</td>
@@ -186,13 +271,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         ? `<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button type="button" 
                                 onclick="handleReceiveAction(${request.id}, this)"
-                                class="px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium rounded-md">
+                                class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium rounded-md transition-colors duration-200">
                                 Receive
                             </button>
                         </td>`
                         : `<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <a href="/Incoming/TEV/dvrequests/${request.id}" 
-                                class="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md">
+                                class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md">
                                 View / Process
                             </a>
                         </td>`
@@ -200,35 +285,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 </tr>`;
         });
 
-        html += `</tbody></table></div>`;
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
         tableContainer.innerHTML = html;
     }
 
+    // Fetch requests
     async function fetchDvRequests() {
         try {
-            const res = await fetch("{{ route('Incoming.TEV.fetchAll') }}");
+            const res = await fetch("{{ route('Incoming.TEV.fetchAll') }}?search=" + encodeURIComponent(searchTerm));
             const data = await res.json();
             allRequests = data;
             renderTable(allRequests);
         } catch (err) {
             console.error('Failed to fetch DV requests', err);
+            tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
         }
     }
 
-    function filterRequests() {
-        const query = searchInput.value.toLowerCase();
-        const filtered = allRequests.filter(r =>
-            r.id.toString().includes(query) ||
-            r.submitted_by.toLowerCase().includes(query) ||
-            r.program.toLowerCase().includes(query) ||
-            r.respocenter.toLowerCase().includes(query)
-        );
-        renderTable(filtered);
-    }
+    // Search with debounce
+    let searchTimeout;
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            searchTerm = this.value;
+            fetchDvRequests();
+        }, 300);
+    });
 
-    searchInput.addEventListener('input', filterRequests);
+    // Initial fetch
     fetchDvRequests();
-    setInterval(fetchDvRequests, 5000);
 });
 </script>
 @endsection

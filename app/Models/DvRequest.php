@@ -25,6 +25,7 @@ class DvRequest extends Model
         'amount',
         'status',
         'tupad_modality',
+        'tev_modality',
         'locked_at',
         'locked_by',
     ];
@@ -41,6 +42,10 @@ class DvRequest extends Model
     {
         return $this->hasMany(TupadAttachment::class, 'dv_request_id');
     }
+    public function tevAttachments()
+    {
+        return $this->hasMany(TEVAttachment::class, 'dv_request_id');
+    }
 
     public function focalperson()
     {
@@ -51,13 +56,22 @@ class DvRequest extends Model
     {
         return $this->hasOne(OrsRequest::class, 'dv_request_id');
     }
-    public function modeOfPayments()
-    {
-        return $this->belongsToMany(ModeOfPayment::class, 'dv_request_mode_of_payment')
-                    ->using(DvRequestModeOfPayment::class)
-                    ->withPivot('id') // pivot I
-                    ->withTimestamps();
-    }
+
+
+
+    
+        public function modeOfPayments()
+        {
+            return $this->belongsToMany(
+                ModeOfPayment::class,
+                'dv_request_mode_of_payment',
+                'dv_request_id',
+                'mode_of_payment_id'
+            )
+            ->using(DvRequestModeOfPayment::class)
+            ->withPivot('id', 'created_at', 'updated_at')
+            ->withTimestamps();
+        }
 
     public function paymentDetails()
     {
@@ -70,7 +84,12 @@ class DvRequest extends Model
             'id'  // pivot id
         );
     }
-
+public function modeOfPaymentsWithDetails()
+{
+    return $this->modeOfPayments()->withPivotValue(['id'])->get()->each(function ($mop) {
+        $mop->pivot->load('paymentDetail');
+    });
+}
     public function program()
     {
         return $this->belongsTo(Program::class, 'program_id');

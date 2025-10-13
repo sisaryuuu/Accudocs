@@ -24,8 +24,8 @@ class RoleSeeder extends Seeder
                 'guard' => 'web',
                 'permissions' => [
                     'imsd.view',
-                    'imsd.tupad.verify',
-                    'imsd.gip.verify',
+                    'imsd.verify',
+                    'imsd.reject',
                 ],
             ],
 
@@ -53,7 +53,8 @@ class RoleSeeder extends Seeder
                 'permissions' => [
                     'tupad.view',
                     'tupad.approve',
-                    'tupad.edit'
+                    'tupad.edit',
+                    'tupad.reject',
                 ],
             ],
 
@@ -62,7 +63,8 @@ class RoleSeeder extends Seeder
                 'permissions' => [
                     'gip.view',
                     'gip.approve',
-                    'gip.edit'
+                    'gip.edit',
+                    'gip.reject',
                 ],
             ],
 
@@ -71,7 +73,8 @@ class RoleSeeder extends Seeder
                 'permissions' => [
                     'tev.view',
                     'tev.approve',
-                    'tev.edit'
+                    'tev.edit',
+                    'tev.reject'
                 ],
             ],
 
@@ -94,6 +97,7 @@ class RoleSeeder extends Seeder
                     'outgoing.approve',
                     'outgoing.edit',
                     'outgoing.generatedv',
+                    'outgoing.rejected',
                     'outgoing.printdv'
                 ],
             ],
@@ -104,6 +108,7 @@ class RoleSeeder extends Seeder
                     'accunit.view',
                     'accunit.create',
                     'accunit.edit',
+                    'accunit.validate',
                     'accunit.delete',
                     'viewdataanyltics',
                 ],

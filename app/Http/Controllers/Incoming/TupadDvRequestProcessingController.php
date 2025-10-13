@@ -135,8 +135,7 @@ class TupadDvRequestProcessingController extends Controller
             'Incoming-TUPAD_received',
             'Request officially received by Incoming-TUPAD'
         );
-        
-       
+    
         $focalId = $dvRequest->focalperson_id;
         Notification::create([
             'focalperson_id' => $focalId,
@@ -153,7 +152,14 @@ class TupadDvRequestProcessingController extends Controller
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
         
-       
+         // ✅ NEW: Broadcast to Incoming-GIP channel for real-time table updates
+        $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-received', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'Incoming-TUPAD_received',
+            'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
@@ -229,6 +235,12 @@ public function startProcessing(Request $request, $id)
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
             'remarks'       => $remarks,
+            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+         $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-processing', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
             'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
@@ -319,7 +331,7 @@ public function startProcessing(Request $request, $id)
 
         $result = $dvRequests->map(fn($request) => [
             'id'           => $request->id,
-            'accounting_control_number' => $request->accounting_control_number,
+            'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 5, '0', STR_PAD_LEFT): '—',
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
@@ -391,6 +403,14 @@ public function startProcessing(Request $request, $id)
         'locked_at'  => null,
     ]);
     
+     $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
+        'dv_request_id' => $dvRequest->id,
+        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+        'program'       => $dvRequest->program->prcode ?? 'N/A',
+        'status'        => 'Incoming-TUPAD_verified',
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
     $focalId = $dvRequest->focalperson_id;
     $status = 'Incoming-TUPAD_verified';
     $action = 'Approved';
@@ -413,6 +433,12 @@ public function startProcessing(Request $request, $id)
         ]);
     }
     
+    $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-verified', [
+        'dv_request_id' => $dvRequest->id,
+        'status'        => $status,
+        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
     $this->logAction(
         $dvRequest->id,
         'Incoming',
@@ -424,50 +450,108 @@ public function startProcessing(Request $request, $id)
         ->with('success', 'DV Request Approved.');
 }
 
-        public function reject(Request $request, $id)
-    {
+public function reject(Request $request, $id)
+{
+    try {
+        // Validate input
         $request->validate([
-            'remarks' => 'nullable|string|max:1000',
+            'remarks' => 'required|string|max:1000|min:10',
         ]);
 
+        // Find the DV request
         $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
-                            ->findOrFail($id);
+                              ->findOrFail($id);
 
-        // Update status to rejected
-        $dvRequest->status = 'Incoming-TUPAD_rejected';
-        $dvRequest->save();
-        $focalId = $dvRequest->focalperson_id;
-                $status = 'Incoming-TUPAD_rejected';
-                $action = 'Rejected';
-                $remarks = $request->remarks ?? 'Request rejected by Incoming-TUPAD';
-
-                $notification = Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $status,
-                    'action'         => $action,
-                    'remarks'        => $remarks,
-                ]);
-
-        if ($dvRequest->focalperson_id) {
-            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        =>  $status,
-                'remarks'       =>  $remarks,
-                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
+        // ✅ Only allow rejection if status is currently in Incoming-TUPAD stage
+        if (!in_array($dvRequest->status, ['Incoming-TUPAD_received', 'Incoming-TUPAD_in_process'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This DV request cannot be rejected at its current stage.'
+            ], 422);
         }
-        // Log the rejection
+
+        $rejectedAt = now();
+        $focalId = $dvRequest->focalperson_id;
+        $remarks = trim($request->remarks);
+
+        // ✅ Update DV request
+        $dvRequest->update([
+            'status'     => 'Incoming-TUPAD_rejected',
+            'locked_by'  => null,
+            'locked_at'  => null,
+        ]);
+
+        // ✅ Log rejection
         $this->logAction(
             $dvRequest->id,
-            'Incoming',
-            'Rejected',
-            $request->remarks ?? 'Request rejected by Incoming-TUPAD'
+            'Incoming-TUPAD',
+            'Incoming-TUPAD_rejected',
+            "Rejected by Incoming-TUPAD: {$remarks}"
         );
 
-        return redirect()->route('Incoming.TUPAD.index')
-                        ->with('error', 'DV Request has been rejected.');
+        // ✅ Notify focal person
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => 'Incoming-TUPAD_rejected',
+            'action'         => 'Rejected',
+            'remarks'        => $remarks,
+        ]);
+
+        // ✅ Real-time push to focal person
+        if (isset($this->pusher)) {
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Incoming-TUPAD_rejected',
+                'remarks'       => $remarks,
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            // ✅ Real-time push to Incoming-TUPAD dashboard
+            $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-rejected', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Incoming-TUPAD_rejected',
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
+
+        // ✅ Always return JSON
+        return response()->json([
+            'success' => true,
+            'message' => 'DV request has been rejected successfully.',
+            'data' => [
+                'id'         => $dvRequest->id,
+                'status'     => 'Incoming-TUPAD_rejected',
+                'remarks'    => $remarks,
+            ]
+        ], 200);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        \Log::error('DV Request not found: ' . $e->getMessage());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'DV request not found.'
+        ], 404);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        \Log::error('Validation error: ' . json_encode($e->errors()));
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed: ' . implode(', ', $e->errors()['remarks'] ?? ['Invalid input'])
+        ], 422);
+
+    } catch (\Exception $e) {
+        \Log::error('Error rejecting TUPAD DV request: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred while rejecting the DV request: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     
     public function redirectToFirstPending()

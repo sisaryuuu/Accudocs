@@ -4,7 +4,7 @@
 
 @section('content')
 <div class="min-h-screen bg-gray-50 py-8">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+  <div class="max-w-[110rem] mx-auto px-6">
 
         <!-- Header Section -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
@@ -74,7 +74,7 @@
                 </div>
 
                 <div class="overflow-x-auto">
-                    <table class="w-full divide-y divide-gray-200" id="dvTable">
+                  <table class="w-full table-auto divide-y divide-gray-200" id="dvTable">
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request No.</th>
@@ -147,15 +147,15 @@
                                     <span class="status-label">{{ ucfirst(str_replace('_', ' ', $request->status)) }}</span>
                                 </span>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                    <div>{{ $request->created_at->format('M d, Y') }}</div>
-                                    <div class="text-xs text-gray-400">{{ $request->created_at->format('h:i A') }}</div>
-                                </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div class="flex items-center space-x-2">
                                         <a href="{{ route('FocalPerson.dvrequest.logs', $request->id) }}" 
                                            class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
                                             Track
+                                        </a>
+                                         <a href="{{ route('FocalPerson.dvrequest.preview', $request->id) }}" 
+                                        class="inline-flex items-center px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium rounded-md transition-colors duration-200">
+                                            Preview
                                         </a>
                                         @if($request->status === 'submitted')
                                         <form id="delete-btn-{{ $request->id }}" action="{{ route('FocalPerson.dvrequest.destroy', $request->id) }}" method="POST">

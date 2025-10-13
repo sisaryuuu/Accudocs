@@ -21,28 +21,28 @@ class PermissionSeeder extends Seeder
             'focalperson.delete',
 
             // IMSD (Initial Verification)
-            'imsd.tupad.verify',
-            'imsd.gip.verify',
+            
+            'imsd.approve',
+            'imsd.view',
+            'imsd.reject',
 
-            // MALSU (Initial Verification)
-            'malsu.tev.verify',
-            'malsu.misc.verify',
-
-            // TSSD (Initial Verification)
-            'tssd.tupad.verify',
-            'tssd.gip.verify',
-            'tssd.tev.verify',
 
             // Incoming
             'tupad.view',
             'tupad.approve',
             'tupad.edit',
+            'tupad.reject',
+
             'gip.view',
             'gip.approve',
             'gip.edit',
+            'gip.reject',
+
             'tev.view',
             'tev.approve',
             'tev.edit',
+            'tev.reject',
+
 
             // Budget Officer
             'budget.view',
@@ -58,6 +58,7 @@ class PermissionSeeder extends Seeder
             'outgoing.edit',
             'outgoing.generatedv',
             'outgoing.printdv',
+            'outgoing.reject',
 
             // Accounting
             'accunit.view',
