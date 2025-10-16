@@ -13,6 +13,9 @@ class DvRequest extends Model
 
     protected $fillable = [
         'dv_number',
+        'qr_code_path',
+        'qr_code_token',
+        'qr_code_generated_at',
         'reference_number',
         'accounting_control_number',
         'user_sequence',     
@@ -29,6 +32,14 @@ class DvRequest extends Model
         'locked_at',
         'locked_by',
     ];
+
+      protected $casts = [
+        'qr_code_generated_at' => 'datetime',
+        'locked_at' => 'datetime',
+        'amount' => 'decimal:2',
+    ];
+
+
 
     public function logs()
     {

@@ -1,5 +1,6 @@
 <?php
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\QRCode\DOLEQRController;
 use App\Http\Controllers\DVORS\VoucherController;
 use App\Http\Controllers\FocalPerson\DvRequestController;
 use App\Http\Controllers\BudgetOfficer\ObligateDVORSController;
@@ -22,10 +23,6 @@ use App\Http\Controllers\FocalPerson\NotificationController;
 use App\Http\Controllers\AccountingUnitProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AnalyticsController;
-
-
-
-
 
 
 Route::get('/test-chart', function () {
@@ -87,70 +84,99 @@ Route::middleware(['auth','role:Admin'])->group(function () {
 
 
     Route::middleware(['auth:focal', 'role:Focal_Person'])->group(function () {
-         Route::get('/dvrequest/history', [DvRequestController::class, 'history'])
+    Route::get('/dvrequest/history', [DvRequestController::class, 'history'])
         ->name('FocalPerson.dvrequest.history');
-         Route::get('/dvrequest/history/search', [DvRequestController::class, 'searchHistory'])  
+    Route::get('/dvrequest/history/search', [DvRequestController::class, 'searchHistory'])  
         ->name('FocalPerson.dvrequest.history.search');
-        Route::get('/FocalPerson/dvrequest/index', [DvRequestController::class, 'index'])
+    Route::get('/FocalPerson/dvrequest/index', [DvRequestController::class, 'index'])
         ->middleware('permission:focalperson.view')
         ->name('FocalPerson.dvrequest.index');
-        Route::prefix('FocalPerson/dvrequest')->name('FocalPerson.dvrequest.')->group(function () {
+        
+    Route::prefix('FocalPerson/dvrequest')->name('FocalPerson.dvrequest.')->group(function () {
         Route::get('/submitdvors', [DvRequestController::class, 'create'])
-         ->middleware('permission:focalperson.create')
-        ->name('submitdvors'); 
+            ->middleware('permission:focalperson.create')
+            ->name('submitdvors'); 
         Route::post('/', [DvRequestController::class, 'store'])
-         ->middleware('permission:focalperson.create')
-        ->name('store');      
+            ->middleware('permission:focalperson.create')
+            ->name('store');      
         Route::get('/{dvRequest}/edit', [DvRequestController::class, 'edit'])
-         ->middleware('permission:focalperson.edit')
-        ->name('edit');
+            ->middleware('permission:focalperson.edit')
+            ->name('edit');
         Route::put('/{dvRequest}', [DvRequestController::class, 'update'])
-         ->middleware('permission:focalperson.edit')
-        ->name('update');
+            ->middleware('permission:focalperson.edit')
+            ->name('update');
         Route::get('/{dvRequest}', [DvRequestController::class, 'show'])
-         ->middleware('permission:focalperson.view')
-        ->name('show');
+            ->middleware('permission:focalperson.view')
+            ->name('show');
         Route::get('/search', [DvRequestController::class, 'search'])
-         ->middleware('permission:focalperson.view')
-        ->name('FocalPerson.dvrequest.search');
-         Route::get('/{id}/preview', [DvRequestController::class, 'preview'])
-        ->name('preview');
+            ->middleware('permission:focalperson.view')
+            ->name('FocalPerson.dvrequest.search');
+        Route::get('/{id}/preview', [DvRequestController::class, 'preview'])
+            ->name('preview');
         Route::get('/{id}/generate-pdf', [DvRequestController::class, 'generatePDF'])
-        ->name('generatePDF');
+            ->name('generatePDF');
         Route::get('/{dvRequest}/logs', [DvRequestController::class, 'logs'])
-         ->middleware('permission:focalperson.view')
-        ->name('logs');
-       
-    
-       
+            ->middleware('permission:focalperson.view')
+            ->name('logs');
+        
+        // 🆕 QR CODE ROUTE - i-add diri
+        Route::get('/{dv}/qr', [DvRequestController::class, 'showQR'])
+            ->middleware('permission:focalperson.view')
+            ->name('qr');
+        
         Route::delete('/{dvRequest}', [DvRequestController::class, 'destroy'])
-        ->middleware('permission:focalperson.delete')
-        ->name('destroy');
+            ->middleware('permission:focalperson.delete')
+            ->name('destroy');
 
         //Javascript Route
         Route::get('/{dvRequest}/latest-step', [DvRequestController::class, 'latestStep'])
-        ->name('latestStep');
+            ->name('latestStep');
         Route::get('/refresh', [DvRequestController::class, 'refresh'])
-        ->name('refresh');
-
-        });
-        Route::prefix('FocalPerson/profile')->name('FocalPerson.profile.')->group(function () {
-        Route::get('/show', [FocalProfileController::class, 'show'])
-        ->middleware('permission:focalperson.view')
-        ->name('show');
-        Route::get('/edit', [FocalProfileController::class, 'edit'])
-        ->middleware('permission:focalperson.edit')
-        ->name('edit');
-        Route::post('/update', [FocalProfileController::class, 'update'])
-        ->middleware('permission:focalperson.edit')
-        ->name('update');
+            ->name('refresh');
     });
+    
+    Route::prefix('FocalPerson/profile')->name('FocalPerson.profile.')->group(function () {
+        Route::get('/show', [FocalProfileController::class, 'show'])
+            ->middleware('permission:focalperson.view')
+            ->name('show');
+        Route::get('/edit', [FocalProfileController::class, 'edit'])
+            ->middleware('permission:focalperson.edit')
+            ->name('edit');
+        Route::post('/update', [FocalProfileController::class, 'update'])
+            ->middleware('permission:focalperson.edit')
+            ->name('update');
+    });
+    
     Route::prefix('FocalPerson/notifications')->name('FocalPerson.notifications.')->group(function () {
         Route::get('/fetch', [NotificationController::class, 'fetch'])->name('fetch');
         Route::post('/read/{id}', [NotificationController::class, 'markAsRead'])->name('markAsRead');
         Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
     });
 });
+
+
+// QR Code Status Update Routes
+Route::get('/dv/qr/update-status/{token}', [DOLEQRController::class, 'qrStatusUpdateInterface'])
+    ->name('dv.qr.interface');
+
+Route::post('/dv/qr/update-status/{token}', [DOLEQRController::class, 'updateStatusViaQr'])
+    ->name('dv.qr.update-status');
+
+Route::get('/dv/verify/{reference}', [DOLEQRController::class, 'verifyDv'])
+    ->name('dv.verify');
+
+// Utility route to generate QR code for any DV
+Route::get('/dv/{id}/generate-qr', [DOLEQRController::class, 'generateQrCode'])
+    ->name('dv.generate-qr');
+
+
+Route::get('/qr/scanner', function () {
+    return view('qr.scanner');
+})->name('qr.scanner');
+
+Route::get('/dv/verify/{reference}', [DvRequestController::class, 'verifyQR'])->name('dv.verify');
+
+Route::post('/dv/verify/manual', [DvRequestController::class, 'verifyManual'])->name('dv.verify.manual');
 
 
 Route::middleware(['auth:web', 'role:Admin|IMSD'])->prefix('RegionalOffices/IMSD')->group(function () {

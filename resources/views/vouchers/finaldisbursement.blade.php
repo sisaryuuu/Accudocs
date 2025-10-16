@@ -112,11 +112,30 @@
             
             @media print {
                 body { padding: 0; }
-                .no-print { display: none; }
+                .no-print { display: none; }   
+                
+                 .qr-code-top-right img {
+                width: 70px !important;
+                height: 70px !important;
             }
+        }
         </style>
     </head>
     <body>
+ <div>
+    <div style="font-size: 8px; font-weight: bold; margin-bottom: 2px;">SCAN STATUS</div>
+    @if(isset($data['qr_code']) && $data['qr_code'])
+        <img src="{{ $data['qr_code'] }}" alt="QR Code" 
+             style="width: 70px; height: 70px; border: 1px solid #ccc; display: block;">
+    @else
+        <div style="width: 70px; height: 70px; border: 1px solid #ccc;
+                    display: flex; align-items: center; justify-content: center; 
+                    background: #f5f5f5; color: #666; font-size: 6px;">
+            QR CODE
+        </div>
+    @endif
+    <div style="font-size: 6px; margin-top: 2px;">RD & CASHIER</div>
+</div>
         <!-- Header -->
         <table class="header-table">
             <tr style="border-bottom: none;">
@@ -270,8 +289,6 @@
         
         @php
             $uacsCodes = $uacsCodes ?? collect();
-            $totalAmount = $amount ?? 0;
-            $amountPerUacs = $uacsCodes->count() > 0 ? $totalAmount / $uacsCodes->count() : $totalAmount;
         @endphp
 
         @if($uacsCodes->count() > 0)
@@ -280,17 +297,7 @@
                 <td>{{ $uacs->description ?? 'N/A' }}</td>
                 <td>{{ $uacs->uacscode ?? 'N/A' }}</td>
                 <td></td>
-                <td style="text-align: right;">
-                    @if($loop->last)
-                        <!-- Last row gets remaining amount to avoid rounding issues -->
-                        @php
-                            $remainingAmount = $totalAmount - ($amountPerUacs * ($uacsCodes->count() - 1));
-                        @endphp
-                        ₱{{ number_format($remainingAmount, 2) }}
-                    @else
-                        ₱{{ number_format($amountPerUacs, 2) }}
-                    @endif
-                </td>
+                <td></td>
             </tr>
             @endforeach
         @else

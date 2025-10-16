@@ -490,6 +490,7 @@ class RANCAController extends Controller
             $finalizedAt = now();
             $dvRequest->update([
                 'status'       => 'RANCA_validated',
+                'qr_status'    => 'active', 
                 'finalized_by' => auth()->id(),
                 'finalized_at' => $finalizedAt,
                 'locked_by'    => null,

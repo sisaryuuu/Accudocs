@@ -24,13 +24,11 @@
                         <span id="notification-badge" 
                             class="absolute top-0 right-0 inline-flex items-center justify-center px-1 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">0</span>
                     </button>
-<ul id="notification-list" 
-    class="hidden absolute right-0 mt-2 w-[500px] max-h-96 overflow-y-auto bg-white shadow-lg rounded-md z-50">
-
-    <li class="p-2 bg-gray-100 rounded-md hover:bg-gray-200 cursor-pointer font-bold whitespace-normal break-words">
-      
-    </li>
-</ul>
+                    <ul id="notification-list" 
+                        class="hidden absolute right-0 mt-2 w-[500px] max-h-96 overflow-y-auto bg-white shadow-lg rounded-md z-50">
+                        <li class="p-2 bg-gray-100 rounded-md hover:bg-gray-200 cursor-pointer font-bold whitespace-normal break-words">
+                        </li>
+                    </ul>
                 </div>
 
                 <!-- New DV Request Button -->
@@ -40,6 +38,13 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
                     </svg>
                     New DV Request
+                </a>
+                            <a href="{{ route('qr.scanner') }}" 
+                     class="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors duration-200">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                    </svg>
+                    Scan QR Code
                 </a>
             </div>
         </div>
@@ -59,6 +64,7 @@
                        class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200">
                         Create Request
                     </a>
+                   
                 </div>
             @else
                 <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
@@ -95,7 +101,7 @@
                             @foreach($dvRequests as $request)
                             <tr class="hover:bg-gray-50 transition-colors duration-150">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    #{{ $request ->user_sequence }}
+                                    #{{ $request->user_sequence }}
                                 </td>
                                <td id="dv-{{ $request->id }}" class="px-6 py-4 whitespace-nowrap text-sm">
                                     @if($request->dv_number)
@@ -147,8 +153,20 @@
                                     <span class="status-label">{{ ucfirst(str_replace('_', ' ', $request->status)) }}</span>
                                 </span>
                                 </td>
+                                <td class="px-6 py-4 text-sm text-gray-500">
+                                    {{ $request->created_at->format('M d, Y') }}
+                                </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div class="flex items-center space-x-2">
+                                        <!-- QR Code Button -->
+                                        <button onclick="showQRModal({{ $request->id }})" 
+                                                class="inline-flex items-center px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-medium rounded-md transition-colors duration-200">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                                            </svg>
+                                            QR
+                                        </button>
+
                                         <a href="{{ route('FocalPerson.dvrequest.logs', $request->id) }}" 
                                            class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
                                             Track
@@ -194,6 +212,52 @@
     </div>
 </div>
 
+<!-- QR Code Modal -->
+<div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all">
+        <!-- Modal Header -->
+        <div class="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4 rounded-t-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                    </svg>
+                    DV Request QR Code
+                </h3>
+                <button onclick="closeQRModal()" class="text-white hover:text-gray-200 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Modal Body -->
+        <div id="qrContent" class="p-6 text-center">
+            <div class="flex items-center justify-center mb-4">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+            </div>
+            <p class="text-gray-600">Loading QR Code...</p>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="px-6 py-4 bg-gray-50 rounded-b-2xl flex gap-3 justify-center">
+            <button id="downloadQRBtn" onclick="downloadQR()" class="hidden px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Download
+            </button>
+            <button id="printQRBtn" onclick="printQR()" class="hidden px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                </svg>
+                Print
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Search Script -->
 <script>
 document.getElementById('search').addEventListener('keyup', function() {
@@ -203,6 +267,245 @@ document.getElementById('search').addEventListener('keyup', function() {
         let text = row.innerText.toLowerCase();
         row.style.display = text.includes(query) ? '' : 'none';
     });
+});
+
+// QR Modal Functions
+let currentQRData = null;
+
+async function showQRModal(dvId) {
+    const modal = document.getElementById('qrModal');
+    const content = document.getElementById('qrContent');
+    
+    modal.classList.remove('hidden');
+    content.innerHTML = `
+        <div class="flex items-center justify-center mb-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+        </div>
+        <p class="text-gray-600">Loading QR Code...</p>
+    `;
+    
+    document.getElementById('downloadQRBtn').classList.add('hidden');
+    document.getElementById('printQRBtn').classList.add('hidden');
+    
+    try {
+        const response = await fetch(`/FocalPerson/dvrequest/${dvId}/qr`);
+        const data = await response.json();
+        
+        if (data.error) {
+            content.innerHTML = `
+                <div class="text-center py-8">
+                    <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <p class="text-red-600 font-semibold">${data.error}</p>
+                </div>
+            `;
+            return;
+        }
+        
+        currentQRData = data;
+        
+        content.innerHTML = `
+    <div class="space-y-4">
+        <!-- QR Code Image - Updated for SVG support -->
+        <div class="bg-white p-4 rounded-lg border-2 border-purple-200 inline-block">
+            <object id="qrImage" data="${data.qr_url}" type="image/svg+xml" class="w-64 h-64 mx-auto">
+                <img src="${data.qr_url}" alt="QR Code" class="w-64 h-64 mx-auto" onerror="this.parentElement.innerHTML='<p class=\'text-red-500\'>QR Code not found</p>'">
+            </object>
+        </div>
+        
+        <!-- Request Info -->
+        <div class="bg-gray-50 rounded-lg p-4 text-left">
+            <div class="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                    <p class="text-gray-500 font-medium">Reference Number:</p>
+                    <p class="text-gray-900 font-semibold">${data.reference_number}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-medium">Control Number:</p>
+                    <p class="text-gray-900 font-semibold">${data.control_number}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-medium">Amount:</p>
+                    <p class="text-green-600 font-bold">₱${data.amount}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 font-medium">Status:</p>
+                    <p class="text-blue-600 font-semibold">${data.status}</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Instructions -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-left">
+            <p class="text-xs text-blue-800">
+                <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+                Scan this QR code to view your DV Request status anytime, anywhere.
+            </p>
+        </div>
+    </div>
+`;
+        
+        document.getElementById('downloadQRBtn').classList.remove('hidden');
+        document.getElementById('printQRBtn').classList.remove('hidden');
+        
+    } catch (error) {
+        console.error('Error loading QR:', error);
+        content.innerHTML = `
+            <div class="text-center py-8">
+                <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="text-red-600 font-semibold">Failed to load QR Code</p>
+                <p class="text-gray-500 text-sm mt-2">Please try again later</p>
+            </div>
+        `;
+    }
+}
+
+function closeQRModal() {
+    document.getElementById('qrModal').classList.add('hidden');
+    currentQRData = null;
+}
+
+function downloadQR() {
+    if (!currentQRData) return;
+    
+    const link = document.createElement('a');
+    link.href = currentQRData.qr_url;
+    link.download = `QR_${currentQRData.reference_number}.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    Swal.fire({
+        icon: 'success',
+        title: 'Downloaded!',
+        text: 'QR Code has been saved to your device',
+        timer: 2000,
+        showConfirmButton: false
+    });
+}
+
+function printQR() {
+    if (!currentQRData) return;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Print QR Code - ${currentQRData.reference_number}</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    padding: 20px;
+                }
+                .container {
+                    text-align: center;
+                    max-width: 500px;
+                }
+                .qr-box {
+                    border: 3px solid #7c3aed;
+                    padding: 20px;
+                    border-radius: 10px;
+                    margin: 20px 0;
+                    background: white;
+                }
+                img {
+                    max-width: 300px;
+                    height: auto;
+                }
+                .info {
+                    background: #f3f4f6;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin-top: 20px;
+                }
+                .info-row {
+                    display: flex;
+                    justify-content: space-between;
+                    margin: 10px 0;
+                    padding: 8px;
+                    border-bottom: 1px solid #e5e7eb;
+                }
+                .label {
+                    font-weight: bold;
+                    color: #6b7280;
+                }
+                .value {
+                    color: #111827;
+                    font-weight: 600;
+                }
+                h1 {
+                    color: #7c3aed;
+                    margin-bottom: 10px;
+                }
+                .subtitle {
+                    color: #6b7280;
+                    font-size: 14px;
+                }
+                @media print {
+                    body {
+                        padding: 0;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>DV Request QR Code</h1>
+                <p class="subtitle">Scan to verify request status</p>
+                
+                <div class="qr-box">
+                    <img src="${currentQRData.qr_url}" alt="QR Code">
+                </div>
+                
+                <div class="info">
+                    <div class="info-row">
+                        <span class="label">Reference Number:</span>
+                        <span class="value">${currentQRData.reference_number}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Control Number:</span>
+                        <span class="value">${currentQRData.control_number}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Amount:</span>
+                        <span class="value">₱${currentQRData.amount}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Status:</span>
+                        <span class="value">${currentQRData.status}</span>
+                    </div>
+                </div>
+                
+                <p style="margin-top: 20px; color: #6b7280; font-size: 12px;">
+                    Generated on ${new Date().toLocaleString()}
+                </p>
+            </div>
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+    setTimeout(() => {
+        printWindow.print();
+    }, 500);
+}
+
+// Close modal when clicking outside
+document.getElementById('qrModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeQRModal();
+    }
 });
 </script>
 
@@ -222,7 +525,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         timerProgressBar: true,
     });
 
-    // 🔧 Reusable render function for notifications
+    // Reusable render function for notifications
     function renderNotification(n) {
         const url = "{{ url('FocalPerson/dvrequest') }}/" + n.dv_request_id + "/logs";
         const timestamp = n.timestamp ? n.timestamp : new Date(n.created_at).toLocaleString();
@@ -233,7 +536,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
     }
 
-    // 🔹 Initial fetch notifications
+    // Initial fetch notifications
     try {
         const res = await fetch('{{ route("FocalPerson.notifications.fetch") }}');
         const notifications = await res.json();
@@ -255,7 +558,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         list.innerHTML = '<li class="p-2 text-red-500">Failed to load notifications</li>';
     }
 
-    // 🔹 Pusher real-time updates
+    // Pusher real-time updates
     Pusher.logToConsole = true;
     const pusher = new Pusher('{{ env("PUSHER_APP_KEY") }}', {
         cluster: '{{ env("PUSHER_APP_CLUSTER") }}',
@@ -271,7 +574,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dvEl = document.getElementById('dv-' + dv.dv_request_id);
     const deleteBtn = document.getElementById('delete-btn-' + dv.dv_request_id);
 
-    // 🔹 Update status text
+    // Update status text
     if (statusEl) {
         const label = statusEl.querySelector('.status-label');
         if (label) {
@@ -280,10 +583,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusEl.dataset.status = dv.status.toLowerCase();
     }
 
-    // 🔹 Update DV number cell
+    // Update DV number cell
     if (dvEl) {
         if (dv.dv_number) {
-            // Assign DV number
             dvEl.innerHTML = `
                 <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                     ${dv.dv_number}
@@ -291,7 +593,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
             dvEl.dataset.dvNumber = dv.dv_number;
         } else {
-            // Show Pending if still no DV number
             dvEl.innerHTML = `
                 <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
                     Pending
@@ -301,7 +602,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 🔹 Handle delete button visibility - show only if status is 'submitted'
+    // Handle delete button visibility
     if (deleteBtn) {
         if (dv.status === 'submitted') {
             deleteBtn.style.display = 'inline-block';
@@ -310,6 +611,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 }
+
     // Pusher binding
     channel.unbind('status-updated');
     channel.bind('status-updated', function(data) {
@@ -334,7 +636,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateDVStatus(data);
     });
 
-    // 🔹 Mark notifications as read individually
+    // Mark notifications as read individually
     list.addEventListener('click', async (e) => {
         const li = e.target.closest('li');
         if (!li) return;
@@ -360,7 +662,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // 🔹 Toggle notification dropdown + mark all as read
+    // Toggle notification dropdown + mark all as read
     if (notifButton) {
         notifButton.addEventListener('click', async () => {
             list.classList.toggle('hidden');
@@ -389,7 +691,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // 🔹 Auto-refresh DV requests every 60s
+    // Auto-refresh DV requests every 60s
     setInterval(async () => {
         try {
             const res = await fetch('{{ route("FocalPerson.dvrequest.refresh") }}');
@@ -403,7 +705,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 60000);
 });
 </script>
-
-
 
 @endsection

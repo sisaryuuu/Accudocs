@@ -249,8 +249,6 @@
                     </form>
                     @endif
                 </div>
-            </div>
-        </div>
 
         <!-- Right Sidebar -->
         <div class="lg:col-span-1">

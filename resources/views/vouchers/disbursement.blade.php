@@ -204,7 +204,7 @@
             <td class="center bold" style="width: 20%; background-color: #f5f5f5;">Amount</td>
         </tr>
         <tr style="height: 275px;">
-            <td class="particulars-section" style="vertical-align: top; padding: 10px;">
+            <td class="particulars-section" style="vertica  l-align: top; padding: 10px;">
                 <div style="white-space: pre-wrap;">{{ $particulars ?? '' }}</div>
                 <br><br>
                 <table style="border: none; margin-top: 10px;" cellpadding="2">
@@ -261,22 +261,22 @@
             <th style="width: 17.5%;">Credit</th>
         </tr>
         <tr>
-            <td>Rents - Buildings and Structures</td>
-            <td>3829980501 (782)</td>
             <td></td>
-            <td style="text-align: right;">{{ $amount ?? '-' }}</td>
+            <td></td>
+            <td></td>
+            <td style="text-align: right;"></td>
         </tr>
         <tr>
-            <td>Due to BIR</td>
-            <td>20210110004123</td>
             <td></td>
-            <td style="text-align: right;">-</td>
+            <td></td>
+            <td></td>
+            <td style="text-align: right;"></td>
         </tr>
         <tr>
-            <td>Cash - MDS, Regular</td>
-            <td>10180408001080</td>
             <td></td>
-            <td style="text-align: right;">-</td>
+            <td></td>
+            <td></td>
+            <td style="text-align: right;"></td>
         </tr>
         <tr>
             <td colspan="4" style="height: 20px;"></td>

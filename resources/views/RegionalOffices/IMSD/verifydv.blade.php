@@ -277,7 +277,7 @@
         </form>
     @endif
 </div>
-</div>
+
 
           <!-- Sidebar -->
         <div class="lg:col-span-1">
