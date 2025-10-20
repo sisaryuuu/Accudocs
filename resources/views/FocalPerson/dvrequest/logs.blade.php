@@ -4,7 +4,7 @@
 
 @section('content')
 @php
-    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget_Officer', 'Outgoing', 'Accounting_III', 'Regional Director', 'Cashier', 'Completed'];
+    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget_Officer', 'Outgoing', 'Accounting_III', 'Regional_Director', 'Cashier', 'Completed'];
     
     // Get the last log entry's action
     $lastLogAction = $logs->last()?->action ?? 'Submitted';
@@ -52,10 +52,18 @@
         'Outgoing_rejected' => 'Outgoing',
         
         // RANCA (Accounting_III) statuses
-        'RANCA_received' => 'Accounting_III',
+        'RANCA_received' => 'Accounting_III',   
         'RANCA_in_process' => 'Accounting_III',
         'RANCA_validated' => 'Accounting_III',
         'RANCA_amount_updated' => 'Accounting_III',
+        
+        // Regional Director statuses
+        'Regional_Director_received' => 'Regional_Director',
+        'Regional_Director_signed_approved' => 'Regional_Director',
+
+        // Cashier statuses
+        'Cashier_received' => 'Cashier',
+        'Cashier_released' => 'Cashier',
     ];
     
     // Determine last step from either status or action
@@ -229,7 +237,7 @@
                                             {{ ucfirst($log->remarks) }}
                                         @else
                                             Document was {{ strtolower($log->action) }}.
-                                        @endif
+                                        @endif 
                                     </p>
                                     
                                     <div class="flex items-center gap-2 mt-2 text-sm text-gray-500">
@@ -277,65 +285,85 @@
                             </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200" id="logsBody">
-                                @foreach($logs as $log)
-                                    <tr class="hover:bg-gray-50 transition-colors duration-150">
-                                        <td class="px-6 py-4">
-                                            <div class="flex items-center">
-                                                <div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">
+                            @foreach($logs as $log)
+                                <tr class="hover:bg-gray-50 transition-colors duration-150">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">
+                                                @if($log->focalPerson)
+                                                    <img src="{{ $log->focalPerson->profile_image 
+                                                        ? asset('storage/profiles/' . $log->focalPerson->profile_image) 
+                                                        : asset('storage/profiles/default.png') }}" 
+                                                        class="w-10 h-10 object-cover"
+                                                        onerror="this.src='{{ asset('storage/profiles/default.png') }}'">
+                                                @elseif($log->accountingUnit)
+                                                    <img src="{{ $log->accountingUnit->profile_image 
+                                                        ? asset('storage/profiles/' . $log->accountingUnit->profile_image) 
+                                                        : asset('storage/profiles/default.png') }}" 
+                                                        class="w-10 h-10 object-cover"
+                                                        onerror="this.src='{{ asset('storage/profiles/default.png') }}'">
+                                                @else
+                                                    <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center rounded-full">
+                                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                                        </svg>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                            <div class="ml-3">
+                                                <div class="text-sm font-medium text-gray-900">
+                                                    {{-- FIXED: Use consistent relationship name (focalPerson instead of focalperson) --}}
                                                     @if($log->focalPerson)
-                                                        <img src="{{ $log->focalPerson->profile_image 
-                                                            ? asset('storage/profiles/' . $log->focalPerson->profile_image) 
-                                                            : asset('storage/profiles/default.png') }}" 
-                                                            class="w-10 h-10 object-cover">
+                                                        {{ trim($log->focalPerson->fname . ' ' . ($log->focalPerson->mi ? $log->focalPerson->mi . ' ' : '') . $log->focalPerson->lname) }}
                                                     @elseif($log->accountingUnit)
-                                                        <img src="{{ $log->accountingUnit->profile_image 
-                                                            ? asset('storage/profiles/' . $log->accountingUnit->profile_image) 
-                                                            : asset('storage/profiles/default.png') }}" 
-                                                            class="w-10 h-10 object-cover">
+                                                        {{ $log->accountingUnit->fname }} {{ $log->accountingUnit->lname }}
+                                                    @elseif($log->external_actor)
+                                                        {{ $log->external_actor }}
                                                     @else
-                                                        <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center rounded-full">
-                                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                                                            </svg>
-                                                        </div>
+                                                        System
                                                     @endif
                                                 </div>
-                                                <div class="ml-3">
-                                                    <div class="text-sm font-medium text-gray-900">
-                                                        @if($log->focalperson)
-                                                            {{ trim($log->focalperson->fname . ' ' . $log->focalperson->mi . ' ' . $log->focalperson->lname) }}
-                                                        @elseif($log->accountingUnit)
-                                                            {{ $log->accountingUnit->fname }} {{ $log->accountingUnit->lname }}
-                                                        @elseif($log->external_actor)
-                                                            {{ $log->external_actor }}
-                                                        @else
-                                                            System
-                                                        @endif
-                                                    </div>
-                                                    <div class="text-xs text-gray-500">
-                                                        {{ ucfirst($log->action) }}
-                                                    </div>
+                                                <div class="text-xs text-gray-500">
+                                                    {{-- FIXED: Show department and role information --}}
+                                                    @php
+                                                        $role = null;
+                                                        if ($log->focalPerson && $log->focalPerson->roles->first()) {
+                                                            $role = $log->focalPerson->roles->first()->name;
+                                                        } elseif ($log->accountingUnit && $log->accountingUnit->roles->first()) {
+                                                            $role = $log->accountingUnit->roles->first()->name;
+                                                        }
+                                                    @endphp
+                                                    
+                                                    @if($role)
+                                                        {{ $role }}
+                                                    @else
+                                                        {{ $log->department ?? 'System' }}
+                                                    @endif
                                                 </div>
                                             </div>
-                                        </td>
+                                        </div>
+                                    </td>
 
-                                        <td class="px-6 py-4">
-                                            @if($log->remarks)
-                                                <div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">
-                                                    <p class="text-gray-700">{{ ucfirst($log->remarks) }}</p>
-                                                </div>
-                                            @else
-                                                <span class="text-gray-400 italic">No remarks</span>
-                                            @endif
-                                        </td>
+                                    <td class="px-6 py-4">
+                                        {{-- FIXED: Better remarks handling --}}
+                                        @if($log->remarks && trim($log->remarks) !== '')
+                                            <div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">
+                                                <p class="text-gray-700">{{ ucfirst($log->remarks) }}</p>
+                                            </div>
+                                        @else
+                                            <div class="bg-gray-50 rounded-lg p-3 border-l-4 border-gray-300">
+                                                <p class="text-gray-500 italic">Document was {{ strtolower($log->action) }}</p>
+                                            </div>
+                                        @endif
+                                    </td>
 
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <div class="text-sm text-gray-900 font-medium">{{ $log->created_at->format('M d, Y') }}</div>
-                                            <div class="text-xs text-gray-500">{{ $log->created_at->format('h:i A') }}</div>
-                                            <div class="text-xs text-gray-400 mt-1">{{ $log->created_at->diffForHumans() }}</div>
-                                        </td>
-                                    </tr>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900 font-medium">{{ $log->created_at->format('M d, Y') }}</div>
+                                        <div class="text-xs text-gray-500">{{ $log->created_at->format('h:i A') }}</div>
+                                        <div class="text-xs text-gray-400 mt-1">{{ $log->created_at->diffForHumans() }}</div>
+                                    </td>
+                                </tr>
                                 @endforeach
                             </tbody>
                         </table>
@@ -467,7 +495,7 @@
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                                                 </svg>
                                             </template>
-                                            <template x-if="step === 'Regional Director'">
+                                            <template x-if="step === 'Regional_Director'">
                                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                                 </svg>
@@ -663,6 +691,12 @@ function stepper() {
             'RANCA_in_process': 'Accounting_III',
             'RANCA_validated': 'Accounting_III',
             'RANCA_amount_updated': 'Accounting_III',
+            'Regional_Director_received': 'Regional_Director',
+            'Regional_Director_signed_approved': 'Regional_Director',
+            'Cashier_received': 'Cashier',
+            'Cashier_released': 'Cashier',
+
+
         },
         
         translateStep(step) {

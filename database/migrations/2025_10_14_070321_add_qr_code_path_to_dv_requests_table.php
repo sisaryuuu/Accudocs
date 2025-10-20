@@ -16,6 +16,7 @@ return new class extends Migration
              $table->string('qr_code_token')->nullable()->after('qr_code_path');
             $table->timestamp('qr_code_generated_at')->nullable()->after('qr_code_token');
              $table->enum('qr_status', ['inactive', 'active'])->default('inactive')->after('qr_code_token');
+             $table->longText('qr_code_data')->nullable()->after('qr_status');
         });
     }
 

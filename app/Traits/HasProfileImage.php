@@ -11,3 +11,4 @@ trait HasProfileImage
         : asset('profiles/default.png');
 }
 }
+    

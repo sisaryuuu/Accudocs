@@ -37,6 +37,13 @@
         'RANCA_in_process' => 'Accounting_III',
         'RANCA_validated' => 'Accounting_III',
         'RANCA_amount_updated' => 'Accounting_III',
+
+          'Regional_Director_received' => 'Regional_Director',
+        'Regional_Director_signed_approved' => 'Regional_Director',
+
+        // Cashier statuses
+        'Cashier_received' => 'Cashier',
+        'Cashier_released' => 'Cashier',
     ];
     
     $currentStep = $statusToStepMap[$dv->status] ?? 'Submitted';

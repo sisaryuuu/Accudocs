@@ -40,6 +40,7 @@ class FocalProfileController extends Controller
         'mi'            => 'nullable|string|max:5',
         'lname'         => 'required|string|max:255',
         'email'         => 'required|email|unique:focalpersons,email,' . $user->id,
+        'contactnumber' => 'nullable|string|max:11',
         'password'      => 'nullable|string|min:8|confirmed',
         'profile_image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
     ]);

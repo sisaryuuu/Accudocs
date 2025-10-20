@@ -1,64 +1,111 @@
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Disbursement Voucher</title>
-        <style>
-            @page { size: Legal; margin: 0mm; }
-            body { 
-                font-family: "Times New Roman", Times, serif; 
-                font-size: 10px;
-                margin: 0; 
-                padding: 15px;
-                line-height: 1.2;
-            }
-            
-            table { 
-                border-collapse: collapse; 
-                width: 100%; 
-                margin-bottom: 0;
-            }
-            
-            td, th { 
-                border: 1px solid #000; 
-                padding: 4px 6px;
-                vertical-align: top;
-                font-weight: normal;
-                font-family: "Times New Roman", Times, serif;
-            }
-            
-            .header-table td {
-                font-weight: bold;
-                font-size: 9px;
-            }
-            
-            .bold { font-weight: bold; }
-            .center { text-align: center; }
-            .small { font-size: 9px; }
-            .no-border { border: none !important; }
-            .border-right { border-right: 1px solid #000; }
-            
-            .logo-cell {
-                width: 70px;
-                text-align: center;
-                padding: 5px;
-            }
-            
-            .logo-placeholder {
-                width: 50px;
-                height: 50px;
-                background: #e0e0e0;
-                margin: 0 auto;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 8px;
-                color: #666;
-                font-family: "Times New Roman", Times, serif;
-            }
-            
-            .checkbox {
+   <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disbursement Voucher</title>
+    <style>
+        @page { size: Legal; margin: 0mm; }
+        body { 
+            font-family: "Times New Roman", Times, serif; 
+            font-size: 10px;
+            margin: 0; 
+            padding: 15px;
+            line-height: 1.2;
+            position: relative; /* For QR positioning */
+        }
+        
+        /* QR Code Styling - Top Right Corner */
+        .qr-code-top-right {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+            text-align: center;
+            background: white;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .qr-code-top-right .qr-label {
+            font-size: 7px;
+            font-weight: bold;
+            margin-bottom: 3px;
+            color: #333;
+        }
+
+        .qr-code-top-right img {
+            width: 80px;
+            height: 80px;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .qr-code-top-right .qr-status {
+            font-size: 6px;
+            margin-top: 3px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+
+        .qr-status.active {
+            background-color: #10b981;
+            color: white;
+        }
+
+        .qr-status.inactive {
+            background-color: #f59e0b;
+            color: white;
+        }
+
+        .qr-code-placeholder {
+            width: 80px;
+            height: 80px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            color: #666;
+            font-size: 8px;
+            font-weight: bold;
+        }
+        
+        table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            margin-bottom: 0;
+        }
+        
+        td, th { 
+            border: 1px solid #000; 
+            padding: 4px 6px;
+            vertical-align: top;
+            font-weight: normal;
+            font-family: "Times New Roman", Times, serif;
+        }
+        
+        .header-table td {
+            font-weight: bold;
+            font-size: 9px;
+        }
+        
+        .bold { font-weight: bold; }
+        .center { text-align: center; }
+        .small { font-size: 9px; }
+        .no-border { border: none !important; }
+        .border-right { border-right: 1px solid #000; }
+        
+        .logo-cell {
+            width: 70px;
+            text-align: center;
+            padding: 5px;
+        }
+        
+        .checkbox {
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -72,186 +119,194 @@
             font-size: 12px;
             font-weight: bold;
             background-color: #fff;
-            border-radius: 2px; /* Slightly rounded corners for clarity */
+            border-radius: 2px;
         }
 
         .checkbox.checked {
             background-color: #000;
             color: #fff;
         }
-            .particulars-section {
-                min-height: 120px;
+        
+        .particulars-section {
+            min-height: 120px;
+        }
+        
+        .signature-section {
+            min-height: 60px;
+            position: relative;
+        }
+        
+        .signature-line {
+            border-top: 1px solid #000;
+            width: 70%;
+            margin: 35px auto 3px auto;
+        }
+        
+        .accounting-table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            text-align: center;
+            padding: 5px;
+            font-family: "Times New Roman", Times, serif;
+        }
+        
+        @media print {
+            body { padding: 0; }
+            .no-print { display: none; }
+            
+            .qr-code-top-right {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                box-shadow: none;
             }
             
-            .signature-section {
-                min-height: 60px;
-                position: relative;
-            }
-            
-            .signature-line {
-                border-top: 1px solid #000;
-                width: 70%;
-                margin: 35px auto 3px auto;
-            }
-            
-            .accounting-table th {
-                background-color: #f5f5f5;
-                font-weight: bold;
-                text-align: center;
-                padding: 5px;
-                font-family: "Times New Roman", Times, serif;
-            }
-            
-            input[type="text"] {
-                border: none;
-                border-bottom: 1px solid #000;
-                width: 100%;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 10px;
-            }
-            
-            @media print {
-                body { padding: 0; }
-                .no-print { display: none; }   
-                
-                 .qr-code-top-right img {
+            .qr-code-top-right img {
                 width: 70px !important;
                 height: 70px !important;
             }
         }
-        </style>
-    </head>
+    </style>
+</head>
     <body>
- <div>
-    <div style="font-size: 8px; font-weight: bold; margin-bottom: 2px;">SCAN STATUS</div>
-    @if(isset($data['qr_code']) && $data['qr_code'])
-        <img src="{{ $data['qr_code'] }}" alt="QR Code" 
-             style="width: 70px; height: 70px; border: 1px solid #ccc; display: block;">
+
+<!-- Header -->
+<table class="header-table">
+      <!-- ✅ QR CODE - Top Right Corner -->
+
+    <div class="qr-label">SCAN FOR STATUS</div>
+    
+    @if(isset($qrCode) && $qrCode)
+        <img src="{{ $qrCode }}" alt="DV QR Code">
+        
+        @if(isset($dvRequest))
+            <div class="qr-status {{ $dvRequest->qr_status === 'active' ? 'active' : 'inactive' }}">
+                {{ $dvRequest->qr_status === 'active' ? '● ACTIVE' : '○ PENDING' }}
+            </div>
+        @endif
     @else
-        <div style="width: 70px; height: 70px; border: 1px solid #ccc;
-                    display: flex; align-items: center; justify-content: center; 
-                    background: #f5f5f5; color: #666; font-size: 6px;">
-            QR CODE
+        <div class="qr-code-placeholder">
+            QR CODE<br>NOT<br>GENERATED
         </div>
     @endif
-    <div style="font-size: 6px; margin-top: 2px;">RD & CASHIER</div>
-</div>
-        <!-- Header -->
-        <table class="header-table">
-            <tr style="border-bottom: none;">
-            <td rowspan="2" style="width: 15%; text-align: center; border-right: none;">
-                <img src="{{ asset('storage/logo/DOLE.png') }}" 
-                    alt="DOLE Logo" 
-                    style="width: 100px; height: auto; display: block; margin: 0 auto;">
-            </td>
-            
-                <td class="center no-inner-border" style="width: 60%; border-bottom: none;">
-                    <br>
-                    Republic of the Philippines<br><br>
-                    <strong style="font-size: 11px;">DEPARTMENT OF LABOR AND EMPLOYMENT XI</strong><br><br>
-                    <strong style="font-size: 12px; text-decoration: underline;">DISBURSEMENT VOUCHER</strong><br><br>
-                </td>
-                <td style="width: 20%;">
-                    Fund Cluster: ___________
-                </td>
-            </tr>
-            <tr>
-                <td class="no-border"></td>
-                <td>
-                    Date: <strong>{{ $date ?? '_____________' }}</strong><br><br>
-                    DV No.: <strong>{{ $dv_no ?? '_____________' }}</strong>
-                </td>
-            </tr>
-        </table>
+    
+    <div style="font-size: 6px; margin-top: 2px; color: #666;">
+        RD & CASHIER
+    </div>
 
-        <!-- Mode of Payment -->
-        <table>
-            <tr>
-                <td class="bold" style="width: 15%;">Mode of Payment</td>
-            <td style="width: 15%;">
-        <span class="checkbox {{ ($mode_of_payment ?? '') == 'MDS Check' ? 'checked' : '' }}">
-            {{ ($mode_of_payment ?? '') == 'MDS Check' ? '✓' : '' }}
-        </span> MDS Check
-    </td>
-    <td style="width: 20%;">
-        <span class="checkbox {{ ($mode_of_payment ?? '') == 'Commercial Check' ? 'checked' : '' }}">
-            {{ ($mode_of_payment ?? '') == 'Commercial Check' ? '✓' : '' }}
-        </span> Commercial Check
-    </td>
-    <td style="width: 15%;">
-        <span class="checkbox {{ ($mode_of_payment ?? '') == 'ADA' ? 'checked' : '' }}">
-            {{ ($mode_of_payment ?? '') == 'ADA' ? '✓' : '' }}
-        </span> ADA
-    </td>
-    <td>
-        <span class="checkbox {{ !in_array($mode_of_payment ?? '', ['MDS Check', 'Commercial Check', 'ADA']) && ($mode_of_payment ?? '') ? 'checked' : '' }}">
-            {{ !in_array($mode_of_payment ?? '', ['MDS Check', 'Commercial Check', 'ADA']) ? '✓' : '' }}
-        </span>
-        Others: {{ !in_array($mode_of_payment ?? '', ['MDS Check', 'Commercial Check', 'ADA']) ? $mode_of_payment : '___________' }}
-    </td>
-            </tr>
-        </table>
+    <tr style="border-bottom: none;">
+        <td rowspan="2" style="width: 15%; text-align: center; border-right: none;">
+            <img src="{{ asset('storage/logo/DOLE.png') }}" 
+                alt="DOLE Logo" 
+                style="width: 100px; height: auto; display: block; margin: 0 auto;">
+        </td>
+        
+        <td class="center no-inner-border" style="width: 60%; border-bottom: none;">
+            <br>
+            Republic of the Philippines<br><br>
+            <strong style="font-size: 11px;">DEPARTMENT OF LABOR AND EMPLOYMENT XI</strong><br><br>
+            <strong style="font-size: 12px; text-decoration: underline;">DISBURSEMENT VOUCHER</strong><br><br>
+        </td>
+        <td style="width: 20%;">
+            Fund Cluster: ___________
+        </td>
+    </tr>
+    <tr>
+        <td class="no-border"></td>
+        <td>
+            Date: <strong>{{ $data['date'] ?? '_____________' }}</strong><br><br>
+            DV No.: <strong>{{ $data['dv_no'] ?? '_____________' }}</strong>
+        </td>
+    </tr>
+</table>
 
-        <!-- Payee Information -->
-        <table>
-            <tr>
-                <td class="bold" style="width: 5%; height: 30px;">Payee</td>
-                <td style="width: 38%;" colspan="2">
-                    <strong>{{ strtoupper($payee ?? 'NAME OF PAYEE') }}</strong>
-                </td>
-                <td style="width: 30%;">
-                    TIN/Employee No.: <strong>{{ $tin ?? '___________' }}</strong>
-                </td>
-            <td style="width: 18%;">
-                ORS/BURS No.: <strong>{{ $dvRequest->orsRequest->ors_number ?? '___________' }}</strong>
-            </td>
-            </tr>
-            <tr>
-                <td class="bold">Address</td>
-                <td colspan="4">
-                    <strong>{{ strtoupper($address ?? 'DAVAO CITY') }}</strong>
-                </td>
-            </tr>
-        </table>
+<!-- Mode of Payment -->
+<table>
+    <tr>
+        <td class="bold" style="width: 15%;">Mode of Payment</td>
+        <td style="width: 15%;">
+            <span class="checkbox {{ ($data['mode_of_payment'] ?? '') == 'MDS Check' ? 'checked' : '' }}">
+                {{ ($data['mode_of_payment'] ?? '') == 'MDS Check' ? '✓' : '' }}
+            </span> MDS Check
+        </td>
+        <td style="width: 20%;">
+            <span class="checkbox {{ ($data['mode_of_payment'] ?? '') == 'Commercial Check' ? 'checked' : '' }}">
+                {{ ($data['mode_of_payment'] ?? '') == 'Commercial Check' ? '✓' : '' }}
+            </span> Commercial Check
+        </td>
+        <td style="width: 15%;">
+            <span class="checkbox {{ ($data['mode_of_payment'] ?? '') == 'ADA' ? 'checked' : '' }}">
+                {{ ($data['mode_of_payment'] ?? '') == 'ADA' ? '✓' : '' }}
+            </span> ADA
+        </td>
+        <td>
+            <span class="checkbox {{ !in_array($data['mode_of_payment'] ?? '', ['MDS Check', 'Commercial Check', 'ADA']) && ($data['mode_of_payment'] ?? '') ? 'checked' : '' }}">
+                {{ !in_array($data['mode_of_payment'] ?? '', ['MDS Check', 'Commercial Check', 'ADA']) ? '✓' : '' }}
+            </span>
+            Others: {{ !in_array($data['mode_of_payment'] ?? '', ['MDS Check', 'Commercial Check', 'ADA']) ? $data['mode_of_payment'] : '___________' }}
+        </td>
+    </tr>
+</table>
 
-        <!-- Particulars Section -->
-        <table>
-            <tr>
-                <td class="center bold" style="width: 30%; background-color: #f5f5f5;">Particulars</td>
-                <td class="center bold" style="width: 20%; background-color: #f5f5f5;">Responsibility Center</td>
-                <td class="center bold" style="width: 20%; background-color: #f5f5f5;">MFO/PAP</td>
-                <td class="center bold" style="width: 20%; background-color: #f5f5f5;">Amount</td>
-            </tr>
-            <tr style="height: 275px;">
-                <td class="particulars-section" style="vertical-align: top; padding: 10px;">
-                    <div style="white-space: pre-wrap;">{{ $particulars ?? '' }}</div>
-                    <br><br>
-                    <table style="border: none; margin-top: 10px;" cellpadding="2">
-                        <tr style="border: none;">
-                            <td class="no-border" colspan="2"></td>
-                            <td class="no-border" style="border-top: 1px solid #000; border-bottom: 3px double #000; font-weight: bold;"></td>
-                        </tr>
-                    </table>
-                </td>
-                <td style="text-align: center;">
-                    <br>
-                    <strong>{{ $respocenter_code }}</strong><br>
-                    {{ $respocenter_desc}}<br>
-                </td>
-                    <td style="text-align: center;">
-                        <!-- Display MFO/PAP here -->
-                        @if(isset($mfocode) && $mfocode)
-                            <strong>{{ $mfocode }}</strong><br>
-                            {{ $mfodescription ?? '' }}
-                        @else
-                            <em>Not yet obligated</em>
-                        @endif
-                    </td>
-                <td style="vertical-align: bottom; text-align: right; padding-bottom: 10px;">
-                    <strong>₱{{ $amount ?? '-' }}</strong>
-                </td>
-            </tr>
-        </table>
+<!-- Payee Information -->
+<table>
+    <tr>
+        <td class="bold" style="width: 5%; height: 30px;">Payee</td>
+        <td style="width: 38%;" colspan="2">
+            <strong>{{ strtoupper($data['payee'] ?? 'NAME OF PAYEE') }}</strong>
+        </td>
+        <td style="width: 30%;">
+            TIN/Employee No.: <strong>{{ $data['tin'] ?? '___________' }}</strong>
+        </td>
+        <td style="width: 18%;">
+            ORS/BURS No.: <strong>{{ $data['ors_number'] ?? '___________' }}</strong>
+        </td>
+    </tr>
+    <tr>
+        <td class="bold">Address</td>
+        <td colspan="4">
+            <strong>{{ strtoupper($data['address'] ?? 'DAVAO CITY') }}</strong>
+        </td>
+    </tr>
+</table>
+
+<!-- Particulars Section -->
+<table>
+    <tr>
+        <td class="center bold" style="width: 30%; background-color: #f5f5f5;">Particulars</td>
+        <td class="center bold" style="width: 20%; background-color: #f5f5f5;">Responsibility Center</td>
+        <td class="center bold" style="width: 20%; background-color: #f5f5f5;">MFO/PAP</td>
+        <td class="center bold" style="width: 20%; background-color: #f5f5f5;">Amount</td>
+    </tr>
+    <tr style="height: 275px;">
+        <td class="particulars-section" style="vertical-align: top; padding: 10px;">
+            <div style="white-space: pre-wrap;">{{ $data['particulars'] ?? '' }}</div>
+            <br><br>
+            <table style="border: none; margin-top: 10px;" cellpadding="2">
+                <tr style="border: none;">
+                    <td class="no-border" colspan="2"></td>
+                    <td class="no-border" style="border-top: 1px solid #000; border-bottom: 3px double #000; font-weight: bold;"></td>
+                </tr>
+            </table>
+        </td>
+        <td style="text-align: center;">
+            <br>
+            <strong>{{ $data['respocenter_code'] ?? '' }}</strong><br>
+            {{ $data['respocenter_desc'] ?? '' }}<br>
+        </td>
+        <td style="text-align: center;">
+            @if(isset($data['mfocode']) && $data['mfocode'])
+                <strong>{{ $data['mfocode'] }}</strong><br>
+                {{ $data['mfodescription'] ?? '' }}
+            @else
+                <em>Not yet obligated</em>
+            @endif
+        </td>
+        <td style="vertical-align: bottom; text-align: right; padding-bottom: 10px;">
+            <strong>₱{{ $data['amount'] ?? '-' }}</strong>
+        </td>
+    </tr>
+</table>
 
         <!-- Section A -->
         <table>
@@ -296,10 +351,11 @@
             <tr>
                 <td>{{ $uacs->description ?? 'N/A' }}</td>
                 <td>{{ $uacs->uacscode ?? 'N/A' }}</td>
-                <td></td>
-                <td></td>
+                 <td>&nbsp;</td>
+                  <td>&nbsp;</td>
             </tr>
             @endforeach
+            
         @else
             <!-- Default entries when no UACS codes are assigned -->
             <tr>
@@ -321,7 +377,11 @@
                 <td style="text-align: right;">-</td>
             </tr>
         @endif
-        
+          <td>&nbsp;</td>
+        <td>&nbsp;</td>
+          <td>&nbsp;</td>
+                  <td>&nbsp;</td>
+                  
         <tr>
             <td colspan="4" style="height: 20px;"></td>
         </tr>

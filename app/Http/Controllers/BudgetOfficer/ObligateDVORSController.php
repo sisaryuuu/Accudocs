@@ -9,6 +9,7 @@ use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Services\PusherService;
 use App\Models\Notification;
+use App\Models\BudgetObligationHistory;
 use App\Models\UacsCode;
 use App\Models\AdlCode;
 use App\Models\AllotmentClass;
@@ -223,6 +224,8 @@ class ObligateDVORSController extends Controller
     {
         try {
             $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
+            $statusBefore = $dvRequest->status;
+            $receivedAt = now();
 
             if (!in_array($dvRequest->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','Incoming-TEV_verified'])) {
                 return response()->json([
@@ -231,9 +234,7 @@ class ObligateDVORSController extends Controller
                 ], 422);
             }
 
-            $receivedAt = now();
-
-            // ✅ Update ORS Request first (if exists)
+            // Update ORS Request first (if exists)
             if ($dvRequest->orsRequest) {
                 $dvRequest->orsRequest->update([
                     'status'            => 'ORS_received',
@@ -244,7 +245,7 @@ class ObligateDVORSController extends Controller
                 ]);
             }
 
-            // ✅ Update DV Request
+            // Update DV Request
             $dvRequest->update([
                 'status'            => 'ORS_received',
                 'gross'             => $request->input('amount', $dvRequest->amount),
@@ -254,6 +255,21 @@ class ObligateDVORSController extends Controller
                 'locked_by'         => auth()->id(),
                 'locked_at'         => $receivedAt,
             ]);
+
+            // ✅ SAVE VERIFICATION HISTORY
+            $this->saveBudgetObligationHistory(
+                $dvRequest,
+                'receive',
+                'ORS request received by Budget Officer for processing',
+                [
+                    'status_before' => $statusBefore,
+                    'status_after'  => 'ORS_received',
+                    'received_by' => auth()->id(),
+                    'received_at' => $receivedAt->toISOString(),
+                    'amount' => $dvRequest->amount,
+                    'ors_request_id' => $dvRequest->orsRequest->id ?? null
+                ]
+            );
 
             $this->logAction(
                 $dvRequest->id,
@@ -273,7 +289,7 @@ class ObligateDVORSController extends Controller
                 'remarks'        => $remarks,
             ]);
 
-            // ✅ Trigger Pusher events
+            // Trigger Pusher events
             $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                 'dv_request_id' => $dvRequest->id,
                 'status'        => $dvRequest->status,
@@ -321,6 +337,8 @@ class ObligateDVORSController extends Controller
     {
         try {
             $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
+            $statusBefore = $dvRequest->status;
+            $startedAt = now();
 
             if ($dvRequest->status !== 'ORS_received') {
                 return response()->json([
@@ -328,8 +346,6 @@ class ObligateDVORSController extends Controller
                     'message' => 'Request must be received before processing.'
                 ], 422);
             }
-
-            $startedAt = now();
 
             $dvRequest->update([
                 'status'    => 'ORS_in_process',
@@ -343,6 +359,21 @@ class ObligateDVORSController extends Controller
                     'gross' => $dvRequest->amount,
                 ]);
             }
+
+            // ✅ SAVE VERIFICATION HISTORY
+            $this->saveBudgetObligationHistory(
+                $dvRequest,
+                'process',
+                'Processing started by Budget Officer',
+                [
+                    'status_before' => $statusBefore,
+                    'status_after'  => 'ORS_in_process',
+                    'processed_by' => auth()->id(),
+                    'processed_at' => $startedAt->toISOString(),
+                    'amount' => $dvRequest->amount,
+                    'ors_request_id' => $dvRequest->orsRequest->id ?? null
+                ]
+            );
 
             $this->logAction(
                 $dvRequest->id,
@@ -364,7 +395,7 @@ class ObligateDVORSController extends Controller
                 'remarks'        => $remarks,
             ]);
 
-            // ✅ Trigger Pusher events
+            // Trigger Pusher events
             $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                 'dv_request_id' => $dvRequest->id,
                 'status'        => $status,
@@ -372,7 +403,7 @@ class ObligateDVORSController extends Controller
                 'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
-                        try {
+            try {
                 $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-processing', [
                     'dv_request_id' => $dvRequest->id,
                     'status'        => $status,
@@ -537,7 +568,7 @@ class ObligateDVORSController extends Controller
         }
     }
 
-            public function storeADLCode(Request $request)
+    public function storeADLCode(Request $request)
     {
         try {
             \Log::info('storeADLCode called with data:', $request->all());
@@ -589,10 +620,10 @@ class ObligateDVORSController extends Controller
         ]);
     }
 
-    public function store(Request $request, $dvRequestId)
+   public function store(Request $request, $dvRequestId)
     {
         $request->validate([
-            'uacscode_ids'       => 'required|array|min:1', // ✅ Changed to array
+            'uacscode_ids'       => 'required|array|min:1',
             'uacscode_ids.*'     => 'required|exists:uacscodes,id|distinct',
             'adlcode_id'         => 'required|exists:adlcodes,id',
             'allotment_class_id' => 'required|exists:allotment_classes,id',
@@ -603,6 +634,7 @@ class ObligateDVORSController extends Controller
         ]);
 
         $dvRequest = DvRequest::findOrFail($dvRequestId)->fresh();
+        $statusBefore = $dvRequest->status;
         
         $dvRequest->update([
             'status'    => 'ORS_obligated',
@@ -611,17 +643,17 @@ class ObligateDVORSController extends Controller
         ]);
         
         $orsNumber = null;
+        $orsRequest = null;
 
-        DB::transaction(function () use ($request, $dvRequest, &$orsNumber) {
+        DB::transaction(function () use ($request, $dvRequest, &$orsNumber, &$orsRequest) {
             $orsNumber = $this->generateOrsNumber($request->allotment_class_id, $request->contcurrent_id);
             
-            // ✅ Create ORS Request (without uacscode_id in main table)
+            // Create ORS Request
             $orsRequest = OrsRequest::create([
                 'ors_number'         => $orsNumber,
                 'dv_request_id'      => $dvRequest->id,
                 'focalperson_id'     => $dvRequest->focalperson_id,         
                 'accountingunit_id'  => $dvRequest->accounting_id ?? null,
-                // ❌ REMOVE: 'uacscode_id' => $request->uacscode_id,
                 'adlcode_id'         => $request->adlcode_id,
                 'allotment_class_id' => $request->allotment_class_id,
                 'mfopap_id'          => $request->mfopap_id,
@@ -633,7 +665,7 @@ class ObligateDVORSController extends Controller
                 'obligated_at'       => now(),
             ]);
             
-            // ✅ Attach multiple UACS codes to ORS Request
+            // Attach multiple UACS codes to ORS Request
             $attachData = [];
             foreach ($request->uacscode_ids as $index => $uacsId) {
                 $attachData[$uacsId] = ['order' => $index + 1];
@@ -641,7 +673,50 @@ class ObligateDVORSController extends Controller
             
             $orsRequest->uacsCodes()->attach($attachData);
         });
-        
+
+        // Get UACS codes data for verification history
+        $uacsCodes = UacsCode::whereIn('id', $request->uacscode_ids)->get();
+        $uacsData = $uacsCodes->map(function($uacs) {
+            return [
+                'id' => $uacs->id,
+                'code' => $uacs->uacscode,
+                'description' => $uacs->description,
+                'full_path' => $uacs->full_path
+            ];
+        })->toArray();
+
+        // Get additional data for verification history
+        $adlCode = AdlCode::find($request->adlcode_id);
+        $allotmentClass = AllotmentClass::find($request->allotment_class_id);
+        $mfopap = Mfopap::find($request->mfopap_id);
+        $contcurrent = ContinuingOrCurrent::find($request->contcurrent_id);
+
+        // ✅ SAVE VERIFICATION HISTORY
+        $this->saveBudgetObligationHistory(
+            $dvRequest,
+            'obligate',
+            $request->remarks ?? "ORS Number $orsNumber assigned with " . count($request->uacscode_ids) . " UACS codes.",
+            [
+                'status_before' => $statusBefore,
+                'status_after' => 'ORS_obligated',
+                'ors_number' => $orsNumber,
+                'ors_request_id' => $orsRequest->id,
+                'adlcode_id' => $request->adlcode_id,
+                'adlcode' => $adlCode ? $adlCode->adlcode . ' - ' . $adlCode->description : null,
+                'allotment_class_id' => $request->allotment_class_id,
+                'allotment_class' => $allotmentClass ? $allotmentClass->allotcode . ' - ' . $allotmentClass->description : null,
+                'mfopap_id' => $request->mfopap_id,
+                'mfopap' => $mfopap ? $mfopap->mfocode . ' - ' . $mfopap->mfodescription : null,
+                'contcurrent_id' => $request->contcurrent_id,
+                'contcurrent' => $contcurrent ? $contcurrent->ccode . ' - ' . $contcurrent->description : null,
+                'uacs_codes' => $uacsData,
+                'uacs_count' => count($request->uacscode_ids),
+                'amount' => $dvRequest->amount,
+                'obligated_by' => auth()->id(),
+                'obligated_at' => now()->toISOString()
+            ]
+        );
+
         $focalId = $dvRequest->focalperson_id;
         $status  = 'ORS_obligated';
         $action  = 'Obligated';
@@ -656,7 +731,7 @@ class ObligateDVORSController extends Controller
             'remarks'        => $remarks,
         ]);
 
-        // ✅ Trigger Pusher events
+        // Trigger Pusher events
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
@@ -664,7 +739,7 @@ class ObligateDVORSController extends Controller
             'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
-        // ✅ To Budget Officer channel
+        // To Budget Officer channel
         $this->pusher->trigger('dv-requests-budget-officer', 'ors-obligated', [
             'dv_request_id' => $dvRequest->id,
             'ors_number'    => $orsNumber,
@@ -682,6 +757,8 @@ class ObligateDVORSController extends Controller
         return redirect()->route('BudgetOfficer.dvrequests.index')
             ->with('success', "ORS Request Created with ORS Number: $orsNumber ($uacsCount UACS codes)");
     }
+
+    
 
     public function releaseLock($id)
     {
@@ -719,14 +796,36 @@ class ObligateDVORSController extends Controller
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
 
-    public function history()
+   public function history()
     {
-        $orsRequests = OrsRequest::with(['dvRequest.program', 'dvRequest.focalPerson', 'dvRequest.respocenter'])
-            ->whereIn('status', ['ORS_obligated', 'ORS_onhold', 'ORS_for_revision','ORS_received'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $verificationHistory = BudgetObligationHistory::with([
+            'dvRequest.program',
+            'dvRequest.focalPerson', 
+            'dvRequest.respocenter',
+            'orsRequest',
+            'orsRequest.uacsCodes',
+            'verifier'
+        ])
+        ->where('verified_by', auth()->id())
+        ->orderBy('verified_at', 'desc')
+        ->paginate(20);
 
-        return view('BudgetOfficer.loghistory', compact('orsRequests'));
+        return view('BudgetOfficer.loghistory', compact('verificationHistory'));
+    }
+    // VERIFICATION HISTORY HELPER METHOD
+    protected function saveBudgetObligationHistory($dvRequest, $step, $remarks = null, $data = [])
+    {
+        BudgetObligationHistory::create([
+            'dv_request_id' => $dvRequest->id,
+            'ors_request_id' => $dvRequest->orsRequest->id ?? null,
+            'verified_by' => auth()->id(),
+            'verification_step' => $step,
+            'status_before' => $data['status_before'] ?? $dvRequest->getOriginal('status'),
+            'status_after' => $dvRequest->status,
+            'verification_data' => $data,
+            'remarks' => $remarks,
+            'verified_at' => now(),
+        ]);
     }
 
    private function generateOrsNumber($allotmentClassId, $contcurrentId)

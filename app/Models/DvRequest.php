@@ -16,6 +16,8 @@ class DvRequest extends Model
         'qr_code_path',
         'qr_code_token',
         'qr_code_generated_at',
+         'qr_status',
+         'qr_code_data',
         'reference_number',
         'accounting_control_number',
         'user_sequence',     
@@ -119,4 +121,6 @@ public function modeOfPaymentsWithDetails()
     {
         return $this->belongsTo(AccountingUnit::class, 'accountingunit_id');
     }
+
+    
 }

@@ -35,13 +35,22 @@
             </div>
         </div>
 
-        {{-- Email --}}
+       
+         {{-- Email --}}
         <div>
-            <label class="block text-sm font-medium text-gray-700">Email</label>
+       <label class="block text-sm font-medium text-gray-700">Email</label>
             <input type="email" name="email" value="{{ old('email') }}" required 
                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
             @error('email') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-        </div>
+        </div>     
+
+          {{-- Email --}}
+        <div>
+       <label class="block text-sm font-medium text-gray-700">Phone Number</label>
+            <input type="number" name="phone" value="{{ old('phone') }}" required 
+                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            @error('phone') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+        </div>    
 
         {{-- Password --}}
             <div class="grid grid-cols-2 gap-4">

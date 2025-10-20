@@ -20,9 +20,12 @@ class AccountingUnitSeeder extends Seeder
         $imsdRole = Role::firstOrCreate(['name' => 'IMSD']);
         $incomingGipRole = Role::firstOrCreate(['name' => 'Incoming-GIP']);
         $incomingTupadRole = Role::firstOrCreate(['name' => 'Incoming-TUPAD']);
+        $incomingTevRole = Role::firstOrCreate(['name' => 'Incoming-TEV']);
         $budgetOfficerRole = Role::firstOrCreate(['name' => 'Budget_Officer']);
         $outgoingRole = Role::firstOrCreate(['name' => 'Outgoing']);
          $accountingRole = Role::firstOrCreate(['name' => 'Accounting_III']);
+        $regionalDirectorRole = Role::firstOrCreate(['name' => 'Regional_Director']);
+        $cashierRole = Role::firstOrCreate(['name' => 'Cashier']);
 
         // Create Admin account
         $admin = AccountingUnit::firstOrCreate(
@@ -168,6 +171,19 @@ class AccountingUnitSeeder extends Seeder
         );
         $incomingTupad3->assignRole($incomingTupadRole);
 
+        $incomingTev = AccountingUnit::firstOrCreate(
+            ['email' => 'incoming.tev@email.com'],  
+            [
+                'fname' => 'Incoming',
+                'mi' => 'T',
+                'lname' => 'EV',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $incomingTev->assignRole($incomingTevRole);
 
         $budgetOfficer = AccountingUnit::firstOrCreate(
             ['email' => 'budget.officer@email.com'],
@@ -266,5 +282,37 @@ class AccountingUnitSeeder extends Seeder
             ]
         );
         $accounting->assignRole($accountingRole);
+
+           $rd = AccountingUnit::firstOrCreate(
+            ['email' => 'regional.director@email.com'],
+            [
+                'fname' => 'Regional',
+                'mi' => 'R',
+                'lname' => 'Director',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $rd->assignRole($regionalDirectorRole);
+
+        
+        $cash= AccountingUnit::firstOrCreate(
+            ['email' => 'cashier@email.com'],
+            [
+                'fname' => 'Cashier',
+                'mi' => 'C',
+                'lname' => 'Cashier',
+                'password' => ('password'),
+                'profile_image' => 'default.png',
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+        $cash->assignRole($cashierRole);
+
     }
+ 
+
 }

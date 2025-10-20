@@ -250,34 +250,42 @@
                 @endif
 
                 <!-- ORS Details (Read-only for RANCA) -->
-                @if($dvRequest->orsRequest)
-                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h3 class="text-sm font-medium text-blue-900 mb-3">ORS Details</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-medium text-blue-700">UACS Code</label>
-                            <input type="text" value="{{ $dvRequest->orsRequest->uacscode_id ?? 'N/A' }}" 
-                                   class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-blue-700">ADL Code</label>
-                            <input type="text" value="{{ $dvRequest->orsRequest->adlcode_id->adlcode ?? 'N/A' }}" 
-                                   class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-blue-700">Allotment Class</label>
-                            <input type="text" value="{{ $dvRequest->orsRequest->allotment_class_id->allotcode ?? 'N/A' }}" 
-                                   class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-blue-700">MFO/PAP</label>
-                            <input type="text" value="{{ $dvRequest->orsRequest->mfopap_id ?? 'N/A' }}" 
-                                   class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
-                        </div>
-                    </div>
+               @if($dvRequest->orsRequest)
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 class="text-sm font-medium text-blue-900 mb-3">ORS Details</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+           <div>
+    <label class="block text-xs font-medium text-blue-700">UACS Code</label>
+    <div class="mt-1 max-h-20 overflow-y-auto w-full rounded-lg border border-blue-300 bg-blue-50 p-2 text-xs">
+        @if($dvRequest->orsRequest->uacsCodes->isNotEmpty())
+            @foreach($dvRequest->orsRequest->uacsCodes as $uacs)
+                <div class="{{ !$loop->first ? 'mt-1' : '' }}">
+                    {{ $uacs->uacscode }} - {{ $uacs->description }}
                 </div>
-                @endif
-
+            @endforeach
+        @else
+            <div class="text-gray-500">N/A</div>
+        @endif
+    </div>
+</div>
+            <div>
+                <label class="block text-xs font-medium text-blue-700">ADL Code</label>
+                <input type="text" value="{{ $dvRequest->orsRequest->AdlCode ? $dvRequest->orsRequest->AdlCode->adlcode . ' - ' . $dvRequest->orsRequest->AdlCode->description : 'N/A' }}" 
+                       class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-blue-700">Allotment Class</label>
+                <input type="text" value="{{ $dvRequest->orsRequest->allotment_class_id ?? 'N/A' }}" 
+                       class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-blue-700">MFO/PAP</label>
+                <input type="text" value="{{ $dvRequest->orsRequest->Mfopap ? $dvRequest->orsRequest->Mfopap->mfocode . ' - ' . $dvRequest->orsRequest->Mfopap->mfodescription : 'N/A' }}" 
+                       class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
+            </div>
+        </div>
+    </div>
+@endif
                 <!-- Processing Info -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>

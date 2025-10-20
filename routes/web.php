@@ -62,12 +62,17 @@ Route::middleware(['auth', 'role:Admin|Accounting_III'])->group(function () {
     Route::get('/Admin/dashboard', [DashboardController::class, 'index'])
         ->name('Admin.dashboard');
 
-    Route::resource('AccountingUnits', AccountingUnitController::class)
+    Route::resource('admin/accountingunits', AccountingUnitController::class)
         ->names('admin.accountingunits');
 });
 
-
 Route::middleware(['auth','role:Admin'])->group(function () {
+
+
+    Route::get('admin/accountingunits/{accountingunit}', [AccountingUnitController::class, 'show'])->name('admin.accountingunits.show');
+    Route::post('admin/accountingunits/bulk-action', [AccountingUnitController::class, 'bulkAction'])->name('admin.accountingunits.bulk-action');
+    Route::get('admin/accountingunits/search', [AccountingUnitController::class, 'search'])->name('admin.accountingunits.search');
+    Route::put('/admin/accountingunits/{accountingunit}', [AccountingUnitController::class, 'update'])->name('admin.accountingunits.update');
 
     Route::resource('roles', RoleController::class)
     ->names('admin.roles');
@@ -79,6 +84,7 @@ Route::middleware(['auth','role:Admin'])->group(function () {
     Route::delete('permissions/{permission}', [RoleController::class, 'permissionsDestroy'])->name('admin.permissions.destroy');
     Route::get('admin/settings', [SettingsController::class, 'edit'])->name('admin.settings.edit');
     Route::post('admin/settings', [SettingsController::class, 'update'])->name('admin.settings.update');
+    
 });
 
 
@@ -154,8 +160,30 @@ Route::middleware(['auth','role:Admin'])->group(function () {
     });
 });
 
+Route::get('/api/check-auth', function() {
+    return response()->json([
+        'authenticated' => auth()->check(),
+        'user' => auth()->check() ? [
+            'name' => auth()->user()->name,
+            'roles' => auth()->user()->getRoleNames()
+        ] : null
+    ]);
+});
 
-// QR Code Status Update Routes
+Route::prefix('api')->group(function () {
+    // Statistics endpoints
+    Route::get('/cashier/stats', [DOLEQRController::class, 'getCashierStats'])->name('cashier.stats');
+    Route::get('/regional-director/stats', [DOLEQRController::class, 'getRegionalDirectorStats'])->name('regional.director.stats');
+    
+    // DV details endpoint
+    Route::get('/dv/{id}/details', [DOLEQRController::class, 'getDvDetails'])->name('dv.details');
+    
+    // Trigger endpoints (for testing or manual updates)
+    Route::post('/dv/{id}/status-update', [DOLEQRController::class, 'triggerStatusUpdate'])->name('dv.trigger.status');
+    Route::post('/dv/{id}/new-added', [DOLEQRController::class, 'triggerNewDvAdded'])->name('dv.trigger.new');
+    Route::post('/dv/{id}/removed', [DOLEQRController::class, 'triggerDvRemoved'])->name('dv.trigger.removed');
+});
+
 Route::get('/dv/qr/update-status/{token}', [DOLEQRController::class, 'qrStatusUpdateInterface'])
     ->name('dv.qr.interface');
 
@@ -170,9 +198,36 @@ Route::get('/dv/{id}/generate-qr', [DOLEQRController::class, 'generateQrCode'])
     ->name('dv.generate-qr');
 
 
+Route::prefix('regional-director')->name('regional.director.')->middleware(['auth', 'role:Regional_Director'])->group(function () {
+    Route::get('/dashboard', [DOLEQRController::class, 'regionalDirectorDashboard'])->name('dashboard');
+});
+
+// Cashier Routes  
+Route::prefix('cashier')->name('cashier.')->middleware(['auth', 'role:Cashier'])->group(function () {
+    Route::get('/dashboard', [DOLEQRController::class, 'cashierDashboard'])->name('dashboard');
+});
+Route::prefix('regional-director')->name('regional.director.')->middleware(['auth', 'role:Regional_Director'])->group(function () {
+    Route::get('/scanner', [DOLEQRController::class, 'regionalDirectorScanner'])->name('scanner');
+    Route::get('/scannable-dvs', [DOLEQRController::class, 'scannableDvs'])->name('scannable-dvs');
+});
+
+// Cashier Scanner Routes  
+Route::prefix('cashier')->name('cashier.')->middleware(['auth', 'role:Cashier'])->group(function () {
+    Route::get('/scanner', [DOLEQRController::class, 'cashierScanner'])->name('scanner');
+    Route::get('/todays-transactions', [DOLEQRController::class, 'getTodaysTransactions'])->name('todays-transactions');
+    Route::get('/pending-payments', [DOLEQRController::class, 'cashierDashboard'])->name('pending-payments');
+});
+
+
+
+
 Route::get('/qr/scanner', function () {
     return view('qr.scanner');
 })->name('qr.scanner');
+
+
+
+
 
 Route::get('/dv/verify/{reference}', [DvRequestController::class, 'verifyQR'])->name('dv.verify');
 
@@ -194,13 +249,12 @@ Route::middleware(['auth:web', 'role:Admin|IMSD'])->prefix('RegionalOffices/IMSD
     ->name('IMSD.dvrequests.receive');
     Route::post('/dvrequests/{id}/start-processing', 
     [DvRequestProcessingController::class, 'startProcessing'])->name('IMSD.dvrequests.startProcessing');
-
     Route::post('/dvrequests/{id}/verify', [DvRequestProcessingController::class, 'verify'])
     ->name('IMSD.dvrequests.verify');
     Route::post('/dvrequests/{id}/reject', [DvRequestProcessingController::class, 'reject'])
     ->name('IMSD.dvrequests.reject');
-    Route::get('/history', [DvRequestProcessingController::class, 'history'])
-    ->name('history');
+   Route::get('/history', [DvRequestProcessingController::class, 'verificationHistory'])
+    ->name('RegionalOffices.IMSD.history');
     Route::get('/RegionalOffices/IMSD/load-form/{id}',[DvRequestProcessingController::class, 'loadForm'])
     ->name('RegionalOffices.IMSD.loadForm');
     Route::get('/redirect-to-first', [DvRequestProcessingController::class, 'redirectToFirstPending'])
@@ -432,8 +486,15 @@ Route::middleware(['auth:web','role:Admin|Outgoing'])->prefix('/Outgoing')->name
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.recent');
         Route::get('/dvrequests/{id}/preview', [OutgoingDvController::class, 'previewDv'])->name('dvrequests.preview');
+
         Route::get('/dvrequests/{id}/print', [OutgoingDvController::class, 'printOfficialDv'])->name('dvrequests.print');
+
         Route::get('/dvrequests/{id}/generate-pdf', [OutgoingDvController::class, 'generatePdf'])->name('dvrequests.generate-pdf');
+
+                Route::get('/dvrequests/history-preview/{id}', [OutgoingDvController::class, 'previewFromHistory'])
+            ->name('dvrequests.previewFromHistory')
+            ->middleware('permission:outgoing.view');
+
         Route::get('/dvrequests/dvloghistory', [OutgoingDvController::class, 'history'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.dvloghistory');

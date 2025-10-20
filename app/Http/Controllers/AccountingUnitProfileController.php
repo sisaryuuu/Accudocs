@@ -39,6 +39,7 @@ class AccountingUnitProfileController extends Controller
             'mi'            => 'nullable|string|max:10',
             'lname'         => 'required|string|max:255',
             'email'         => 'required|email|unique:accountingunits,email,' . $user->id, 
+            'phone'         => 'nullable|string|max:11',
             'password'      => 'nullable|string|min:8|confirmed',
             'profile_image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);

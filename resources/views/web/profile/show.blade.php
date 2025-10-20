@@ -26,6 +26,9 @@
         <div>
             <span class="font-semibold">Email:</span> {{ $user->email }}
         </div>
+           <div>
+            <span class="font-semibold">Phone Number:</span> {{ $user->phone }}
+        </div>
         <div>
             <span class="font-semibold">Role:</span> Accounting Unit
         </div>

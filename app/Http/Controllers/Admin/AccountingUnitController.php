@@ -17,15 +17,15 @@ class AccountingUnitController extends Controller
                  $query->where('name', 'Admin');
              })
              ->get();
-        $programs = Program::all();
-        return view('Admin.AccountingUnits.index', compact('users','programs'));
+        
+        return view('admin.accountingUnits.index', compact('users'));
     }
 
     public function create()
     {
         $roles = Role::all();
-        $programs = Program::all();
-        return view('Admin.AccountingUnits.create', compact('roles','programs'));
+        
+        return view('admin.accountingUnits.create', compact('roles'));
     }
 
     public function store(Request $request)
@@ -35,6 +35,7 @@ class AccountingUnitController extends Controller
             'mi' => 'nullable|string|max:10',
             'lname' => 'required|string|max:100',
             'email' => 'required|email|unique:accountingunits,email',
+            'phone' => 'nullable|string|max:11',
             'password' => 'required|min:6|confirmed',
             'roles' => 'nullable|array',
         ]);
@@ -44,6 +45,7 @@ class AccountingUnitController extends Controller
             'mi' => $request->mi,
             'lname' => $request->lname,
             'email' => $request->email,
+            'phone' => $request->phone,
             'password' => $request->password,
 
         ]);
@@ -67,6 +69,7 @@ class AccountingUnitController extends Controller
             'lname' => 'required|string|max:100',
             'program_id' => 'nullable|exists:programs,id',
             'email' => 'required|email|unique:accountingunits,email,' . $accountingunit->id,
+            'phone' => 'nullable|max:11',
             'password' => 'nullable|min:6|confirmed',
             'roles' => 'nullable|array',
         ]);

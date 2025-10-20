@@ -14,6 +14,7 @@ return new class extends Migration
             $table->string('mi',1); 
             $table->string('lname',100);
             $table->string('email')->unique();
+            $table->string('phone',11)->nullable();
             $table->string('password');
             $table->string('profile_image')->default('default.png');
             $table->timestamps(); // Add this line for created_at and updated_at

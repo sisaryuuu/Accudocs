@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Models\Notification;
+use App\Models\IncomingTUPADVerificationHistory;
 use App\Models\TUPADAttachment;
 use App\Services\PusherService;
 use Illuminate\Support\Facades\Auth;
@@ -111,7 +112,8 @@ class TupadDvRequestProcessingController extends Controller
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
-        
+        $statusBefore = $dvRequest->status;
+        $receivedAt = now();
         if ($dvRequest->status !== 'IMSD_verified') {
             return response()->json([
                 'success' => false,
@@ -119,8 +121,7 @@ class TupadDvRequestProcessingController extends Controller
             ], 422);
         }
         
-        $receivedAt = now();
-        
+       
         $dvRequest->update([
             'status'           => 'Incoming-TUPAD_received',
             'accountingunit_id'=> auth()->id(),
@@ -129,6 +130,19 @@ class TupadDvRequestProcessingController extends Controller
             'locked_by'        => auth()->id(),
             'locked_at'        => $receivedAt,
         ]);
+
+        $this->saveIncomingTUPADVerificationHistory(
+            $dvRequest,
+            'receive',
+            'Request officially received by Incoming-TUPAD',
+            [
+                'status_before' => $statusBefore,
+                'status_after' =>'Incoming-TUPAD_received',
+                    'received_by' => auth()->id(),
+                    'received_at' => $receivedAt->toISOString()
+                ]
+            );
+
         $this->logAction(
             $dvRequest->id,
             'Incoming',
@@ -192,7 +206,8 @@ public function startProcessing(Request $request, $id)
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
-
+         $statusBefore = $dvRequest->status;
+            $startedAt = now();
         if ($dvRequest->status !== 'Incoming-TUPAD_received') {
             return response()->json([
                 'success' => false,
@@ -207,6 +222,17 @@ public function startProcessing(Request $request, $id)
             'locked_by' => auth()->id(),
             'locked_at' => $startedAt,
         ]);
+          $this->saveIncomingTUPADVerificationHistory(
+                $dvRequest,
+                'process',
+                'Processing started by Incoming-TUPAD',
+                [
+                    'status_before' => $statusBefore,
+                    'status_after' => 'Incoming-TUPAD_in_process',
+                    'processed_by' => auth()->id(),
+                    'processed_at' => $startedAt->toISOString()
+                ]
+            );
 
         // Log
         $this->logAction(
@@ -377,14 +403,27 @@ public function startProcessing(Request $request, $id)
     $dvRequest = DvRequest::with('tupadAttachments')
         ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
         ->findOrFail($id);
+    $statusBefore = $dvRequest->status;
 
+    $verifiedAt = now();
+    $attachmentData = [];
+    
     // Update TUPAD attachments if any were checked/unchecked
     if ($request->has('attachments') && $dvRequest->tupad_modality) {
         // Mark submitted attachments as present
         foreach ($request->attachments as $attachmentId => $value) {
             $attachment = $dvRequest->tupadAttachments()->find($attachmentId);
             if ($attachment) {
-                $attachment->update(['is_present' => true]);
+                $isPresent = (bool)$value; // Fix: define $isPresent
+                $attachment->update(['is_present' => $isPresent]);
+
+                $attachmentData[] = [
+                    'id' => $attachment->id,
+                    'name' => $attachment->name,
+                    'is_present' => $isPresent,
+                    'modality' => $attachment->modality,
+                    'type' => 'tupad' // Changed from 'tev' to 'tupad'
+                ];
             }
         }
         
@@ -397,7 +436,7 @@ public function startProcessing(Request $request, $id)
     }
 
     // Update status
-    DvRequest::where('id', $dvRequest->id)->update([
+    $dvRequest->update([ // Use the model instance instead of query builder
         'status'     => 'Incoming-TUPAD_verified',
         'locked_by'  => null,
         'locked_at'  => null,
@@ -410,7 +449,7 @@ public function startProcessing(Request $request, $id)
         'status'        => 'Incoming-TUPAD_verified',
         'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
     ]);
-
+    $attachmentData = [];
     $focalId = $dvRequest->focalperson_id;
     $status = 'Incoming-TUPAD_verified';
     $action = 'Approved';
@@ -438,6 +477,21 @@ public function startProcessing(Request $request, $id)
         'status'        => $status,
         'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
     ]);
+  $attachmentData = [];
+
+   $this->saveIncomingTUPADVerificationHistory(
+            $dvRequest,
+            'verify',
+            $request->remarks ?? 'Request verified by Incoming-TUPAD',
+            [
+                'action' => 'verified',
+                'status_before' => $statusBefore,
+                'status_after'  => 'Incoming-TUPAD_verified',
+                'attachments_checked' => $attachmentData,
+                'verified_by' => auth()->id(),
+                'verified_at' => $verifiedAt->toISOString()
+            ]
+        );
 
     $this->logAction(
         $dvRequest->id,
@@ -461,7 +515,7 @@ public function reject(Request $request, $id)
         // Find the DV request
         $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
                               ->findOrFail($id);
-
+    $statusBefore = $dvRequest->status;
         // ✅ Only allow rejection if status is currently in Incoming-TUPAD stage
         if (!in_array($dvRequest->status, ['Incoming-TUPAD_received', 'Incoming-TUPAD_in_process'])) {
             return response()->json([
@@ -480,7 +534,19 @@ public function reject(Request $request, $id)
             'locked_by'  => null,
             'locked_at'  => null,
         ]);
-
+    $this->saveIncomingTUPADVerificationHistory(
+                    $dvRequest,
+                    'reject',
+                    $remarks,
+                    [
+                        'action' => 'rejected',
+                        'status_before' => $statusBefore,
+                        'status_after'  => 'Incoming-TUPAD_rejected',
+                        'rejected_by' => auth()->id(),
+                        'rejected_at' => $rejectedAt->toISOString(),
+                        'rejection_reason' => $remarks
+                    ]
+                );
         // ✅ Log rejection
         $this->logAction(
             $dvRequest->id,
@@ -617,41 +683,77 @@ public function reject(Request $request, $id)
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
 
-public function history()
-{
-    $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'accountingUnit'])
-        ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
-        ->where('status', 'Incoming-TUPAD_verified') 
-        ->orderBy('updated_at', 'desc')
-        ->get();
+  public function history()
+    {
+        $verificationHistory = IncomingTUPADVerificationHistory::with([
+            'dvRequest.program',
+            'dvRequest.focalPerson',
+                    'dvRequest.respocenter',
+                    'verifier'
+                ])
+                ->where('verified_by', auth()->id())
+                ->orderBy('verified_at', 'desc')
+                ->paginate(20);
 
-    return view('Incoming.TUPAD.loghistory', compact('dvRequests'));
-}
-  protected function logAction($dvRequestId, $action, $status, $remarks = null)
-{
-    \Log::info('LogAction Debug', [
-        'web_check' => auth()->guard('web')->check(),
-        'focal_check' => auth()->guard('focal')->check(),
-        'auth_id' => auth()->id(),
-        'guard' => auth()->getDefaultDriver()
-    ]);
+                return view('Incoming.TUPAD.loghistory', compact('verificationHistory'));
+        }
 
-    $logData = [
-        'dv_request_id' => $dvRequestId,
-        'action'        => $action,
-        'status'        => $status,
-        'remarks'       => $remarks,
-    ];
+ protected function saveIncomingTUPADVerificationHistory($dvRequest, $step, $remarks = null, $data = [])
+        {
+          try{  IncomingTUPADVerificationHistory::create([
+            'dv_request_id'      => $dvRequest->id,
+            'verified_by'        => auth()->id(),
+            'verification_step'  => $step,
+            'status_before'      => $data['status_before'] ?? $dvRequest->getOriginal('status'),
+            'status_after'       => $data['status_after'] ?? $dvRequest->status,
+            'verification_data'  => $data,
+            'remarks'            => $remarks,
+            'verified_at'        => now(),
+        ]);
 
-    if (auth()->guard('web')->check()) {
-        $logData['accountingunit_id'] = auth()->id();
-    } elseif (auth()->guard('focal')->check()) {
-        $logData['focalperson_id'] = auth()->id();
-    } else {
-        $logData['external_actor'] = 'System';
+    } catch (\Exception $e) {
+        \Log::error('Failed to save Incoming-GIP verification history', [
+            'dv_request_id' => $dvRequest->id ?? null,
+            'step' => $step,
+            'error' => $e->getMessage(),
+        ]);
+
+        // Optionally, rethrow to ensure rollback inside DB::transaction
+        throw $e;
     }
-
-    DvRequestLog::create($logData);
 }
+  protected function logAction($dvRequestId, $department, $action, $remarks = null)
+        {
+            try {
+                $logData = [
+                    'dv_request_id' => $dvRequestId,
+                    'action'        => $action,
+                    'remarks'       => $remarks,
+                    'created_at'    => now(),
+                    'updated_at'    => now(),
+                ];
 
+                // Set the correct user based on who is performing the action
+                if (auth()->guard('web')->check()) {
+                    // Accounting/Admin user - set accountingunit_id
+                    $logData['accountingunit_id'] = auth()->id();
+                    // Don't set focalperson_id for accounting users
+                } elseif (auth()->guard('focal')->check()) {
+                    // Focal person - set focalperson_id
+                    $logData['focalperson_id'] = auth()->id();
+                } else {
+                    // System or external actor
+                    $logData['external_actor'] = 'System';
+                }
+
+                DvRequestLog::create($logData);
+
+            } catch (\Exception $e) {
+                \Log::error('Failed to log action: ' . $e->getMessage(), [
+                    'dv_request_id' => $dvRequestId,
+                    'action' => $action,
+                ]);
+                // Don't throw error - just log and continue
+            }
+        }
 }

@@ -45,7 +45,7 @@ class DvRequestController extends Controller
         try {
             $dvRequests = DvRequest::with(['focalperson', 'program','respocenter', 'modeOfPayments'])
                             ->where('focalperson_id', $focalId)
-                            ->whereNotIn('status', ['rejected', 'completed'])
+                            ->where('status','not like',['%_rejected', 'Completed'])
                             ->latest()
                             ->get();
         } catch (\Exception $e) {
@@ -227,14 +227,14 @@ class DvRequestController extends Controller
                     }
 
                     // Use external QR API (most reliable - always works!)
-                    $apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=png&data=' . urlencode($verifyUrl);
+                    $apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&data=' . urlencode($verifyUrl);
                     
                     // Download QR code image
                     $qrCodeContent = @file_get_contents($apiUrl);
                     
                     if ($qrCodeContent === false) {
                         // Fallback: Try alternative API
-                        $apiUrl2 = 'https://chart.googleapis.com/chart?chs=400x400&cht=qr&chl=' . urlencode($verifyUrl);
+                        $apiUrl2 = 'https://chart.googleapis.com/chart?chs=600x600&cht=qr&chl=' . urlencode($verifyUrl);
                         $qrCodeContent = @file_get_contents($apiUrl2);
                         
                         if ($qrCodeContent === false) {
@@ -578,83 +578,128 @@ class DvRequestController extends Controller
     }
 
     public function logs(DvRequest $dvRequest, Request $request)
-    {
-        $logs = $dvRequest->logs()
-            ->with(['focalperson', 'accountingUnit'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+{
+    // FIXED: Eager load roles for both focalperson and accountingUnit
+    $logs = $dvRequest->logs()
+        ->with([
+            'focalperson.roles', // Load Spatie roles for focal person
+            'accountingUnit.roles' // Load Spatie roles for accounting unit
+        ])
+        ->orderBy('created_at', 'desc')
+        ->get();
 
-        if ($request->ajax() || $request->get('ajax') == '1') {
-            $html = '';
+    if ($request->ajax() || $request->get('ajax') == '1') {
+        $html = '';
+        
+        foreach ($logs as $index => $log) {
+            $actorName = 'System';
+            $profileImage = asset('storage/profiles/default.png');
+            $roleOrDepartment = $log->department ?? 'System';
             
-            foreach ($logs as $index => $log) {
-                $actorName = 'System';
-                $profileImage = asset('storage/profiles/default.png');
-                
-                if ($log->focalperson) {
-                    $actorName = trim($log->focalperson->fname . ' ' . ($log->focalperson->mi ?? '') . ' ' . $log->focalperson->lname);
-                    if ($log->focalperson->profile_image) {
-                        $profileImage = asset('storage/profiles/' . $log->focalperson->profile_image);
-                    }
-                } elseif ($log->accountingUnit) {
-                    $actorName = ($log->accountingUnit->fname ?? '') . ' ' . ($log->accountingUnit->lname ?? '');
-                    if ($log->accountingUnit->profile_image) {
-                        $profileImage = asset('storage/profiles/' . $log->accountingUnit->profile_image);
-                    }
-                } elseif ($log->external_actor) {
-                    $actorName = $log->external_actor;
+            // FIXED: Get role from Spatie roles
+            if ($log->focalperson) {
+                $actorName = trim($log->focalperson->fname . ' ' . ($log->focalperson->mi ?? '') . ' ' . $log->focalperson->lname);
+                if ($log->focalperson->profile_image) {
+                    $profileImage = asset('storage/profiles/' . $log->focalperson->profile_image);
                 }
-                
-                $html .= '<tr class="hover:bg-gray-50 transition-colors duration-150">';
-                $html .= '<td class="px-6 py-4 whitespace-nowrap">';
-                $html .= '<div class="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">';
-                $html .= ($index + 1);
-                $html .= '</div></td>';
-                
-                $html .= '<td class="px-6 py-4"><div class="flex items-center">';
-                $html .= '<div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">';
-                
-                if ($log->focalperson || $log->accountingUnit) {
-                    $html .= '<img src="' . $profileImage . '" class="w-10 h-10 object-cover">';
-                } else {
-                    $html .= '<div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center rounded-full">';
-                    $html .= '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
-                    $html .= '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>';
-                    $html .= '</svg></div>';
+                // FIXED: Get role from Spatie
+                if ($log->focalperson->roles->first()) {
+                    $roleOrDepartment = $log->focalperson->roles->first()->name;
                 }
-                
-                $html .= '</div><div class="ml-3">';
-                $html .= '<div class="text-sm font-medium text-gray-900">' . htmlspecialchars($actorName) . '</div>';
-                $html .= '<div class="text-xs text-gray-500">' . htmlspecialchars(ucfirst($log->action)) . '</div>';
-                $html .= '</div></div></td>';
-                
-                $html .= '<td class="px-6 py-4">';
-                if ($log->remarks && trim($log->remarks) !== '') {
-                    $html .= '<div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">';
-                    $html .= '<p class="text-gray-700">' . htmlspecialchars(ucfirst($log->remarks)) . '</p></div>';
-                } else {
-                    $html .= '<span class="text-gray-400 italic">No remarks</span>';
+            } elseif ($log->accountingUnit) {
+                $actorName = ($log->accountingUnit->fname ?? '') . ' ' . ($log->accountingUnit->lname ?? '');
+                if ($log->accountingUnit->profile_image) {
+                    $profileImage = asset('storage/profiles/' . $log->accountingUnit->profile_image);
                 }
-                $html .= '</td>';
-                
-                $html .= '<td class="px-6 py-4 whitespace-nowrap">';
-                $html .= '<div class="text-sm text-gray-900 font-medium">' . $log->created_at->format('M d, Y') . '</div>';
-                $html .= '<div class="text-xs text-gray-500">' . $log->created_at->format('h:i A') . '</div>';
-                $html .= '<div class="text-xs text-gray-400 mt-1">' . $log->created_at->diffForHumans() . '</div>';
-                $html .= '</td></tr>';
+                // FIXED: Get role from Spatie
+                if ($log->accountingUnit->roles->first()) {
+                    $roleOrDepartment = $log->accountingUnit->roles->first()->name;
+                }
+            } elseif ($log->external_actor) {
+                $actorName = $log->external_actor;
             }
             
-            return response()->json([
-                'html' => $html,
-                'count' => $logs->count(),
-                'lastUpdated' => $logs->first()?->created_at->diffForHumans() ?? 'Never'
-            ]);
+            $html .= '<tr class="hover:bg-gray-50 transition-colors duration-150">';
+            $html .= '<td class="px-6 py-4 whitespace-nowrap">';
+            $html .= '<div class="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">';
+            $html .= ($index + 1);
+            $html .= '</div></td>';
+            
+            $html .= '<td class="px-6 py-4"><div class="flex items-center">';
+            $html .= '<div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">';
+            
+            if ($log->focalperson || $log->accountingUnit) {
+                $html .= '<img src="' . $profileImage . '" class="w-10 h-10 object-cover" onerror="this.src=\'' . asset('storage/profiles/default.png') . '\'">';
+            } else {
+                $html .= '<div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center rounded-full">';
+                $html .= '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
+                $html .= '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>';
+                $html .= '</svg></div>';
+            }
+            
+            $html .= '</div><div class="ml-3">';
+            $html .= '<div class="text-sm font-medium text-gray-900">' . htmlspecialchars($actorName) . '</div>';
+            // FIXED: Show role/department instead of action
+            $html .= '<div class="text-xs text-gray-500">' . htmlspecialchars($roleOrDepartment) . '</div>';
+            $html .= '</div></div></td>';
+            
+            $html .= '<td class="px-6 py-4">';
+            // FIXED: Better remarks handling
+            if ($log->remarks && trim($log->remarks) !== '') {
+                $html .= '<div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">';
+                $html .= '<p class="text-gray-700">' . htmlspecialchars(ucfirst($log->remarks)) . '</p></div>';
+            } else {
+                $html .= '<div class="bg-gray-50 rounded-lg p-3 border-l-4 border-gray-300">';
+                $html .= '<p class="text-gray-500 italic">Document was ' . htmlspecialchars(strtolower($log->action)) . '</p></div>';
+            }
+            $html .= '</td>';
+            
+            $html .= '<td class="px-6 py-4 whitespace-nowrap">';
+            $html .= '<div class="text-sm text-gray-900 font-medium">' . $log->created_at->format('M d, Y') . '</div>';
+            $html .= '<div class="text-xs text-gray-500">' . $log->created_at->format('h:i A') . '</div>';
+            $html .= '<div class="text-xs text-gray-400 mt-1">' . $log->created_at->diffForHumans() . '</div>';
+            $html .= '</td></tr>';
         }
-
-        $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing','Accountant III','Regional Director','Cashier', 'Completed'];
         
-        return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs', 'steps'));
+        return response()->json([
+            'html' => $html,
+            'count' => $logs->count(),
+            'lastUpdated' => $logs->first()?->created_at->diffForHumans() ?? 'Never',
+            'logs' => $logs->map(function($log) {
+                // For JavaScript side if needed
+                $role = null;
+                if ($log->focalperson && $log->focalperson->roles->first()) {
+                    $role = $log->focalperson->roles->first()->name;
+                } elseif ($log->accountingUnit && $log->accountingUnit->roles->first()) {
+                    $role = $log->accountingUnit->roles->first()->name;
+                }
+                
+                return [
+                    'id' => $log->id,
+                    'action' => $log->action,
+                    'remarks' => $log->remarks,
+                    'department' => $log->department,
+                    'role' => $role,
+                    'created_at_human' => $log->created_at->diffForHumans(),
+                    'focal_person' => $log->focalperson ? [
+                        'fname' => $log->focalperson->fname,
+                        'lname' => $log->focalperson->lname,
+                        'profile_image' => $log->focalperson->profile_image
+                    ] : null,
+                    'accounting_unit' => $log->accountingUnit ? [
+                        'fname' => $log->accountingUnit->fname,
+                        'lname' => $log->accountingUnit->lname,
+                        'profile_image' => $log->accountingUnit->profile_image
+                    ] : null,
+                ];
+            })
+        ]);
     }
+
+    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing','Accountant III','Regional Director','Cashier', 'Completed'];
+    
+    return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs', 'steps'));
+}
 
     protected function logAction(DvRequest $dvRequest, string $status, string $action, string $remarks): void
     {

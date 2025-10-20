@@ -185,13 +185,12 @@
                                             Delete
                                         </button>
                                     </form>
-                                    @endif
-                                     @if($request->status === 'ORS_for_revision' || $request->status === 'submitted')
-                                            <a href="{{ route('FocalPerson.dvrequest.edit', $request->id) }}"
+                                    <a href="{{ route('FocalPerson.dvrequest.edit', $request->id) }}" 
+                                            id="edit-btn-{{ $request->id }}"
                                             class="inline-flex items-center px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 text-xs font-medium rounded-md transition-colors duration-200">
                                                 Edit
                                             </a>
-                                        @endif
+                                    @endif
                                     </div>
                                 </td>
                             </tr>
@@ -269,7 +268,6 @@ document.getElementById('search').addEventListener('keyup', function() {
     });
 });
 
-// QR Modal Functions
 let currentQRData = null;
 
 async function showQRModal(dvId) {
@@ -306,48 +304,68 @@ async function showQRModal(dvId) {
         currentQRData = data;
         
         content.innerHTML = `
-    <div class="space-y-4">
-        <!-- QR Code Image - Updated for SVG support -->
-        <div class="bg-white p-4 rounded-lg border-2 border-purple-200 inline-block">
-            <object id="qrImage" data="${data.qr_url}" type="image/svg+xml" class="w-64 h-64 mx-auto">
-                <img src="${data.qr_url}" alt="QR Code" class="w-64 h-64 mx-auto" onerror="this.parentElement.innerHTML='<p class=\'text-red-500\'>QR Code not found</p>'">
-            </object>
-        </div>
-        
-        <!-- Request Info -->
-        <div class="bg-gray-50 rounded-lg p-4 text-left">
-            <div class="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                    <p class="text-gray-500 font-medium">Reference Number:</p>
-                    <p class="text-gray-900 font-semibold">${data.reference_number}</p>
+                    <div class="space-y-6">
+                    <!-- QR Code Container -->
+                    <div class="flex justify-center">
+                        <div class="bg-white p-6 rounded-xl border-2 border-purple-200 shadow-inner 
+                                    w-full max-w-sm mx-auto overflow-hidden">
+                            
+                            <div class="qr-image-container flex justify-center items-center">
+                                <object 
+                                    id="qrImage" 
+                                    data="${data.qr_url}" 
+                                    type="image/png"
+                                    class="w-[85%] max-w-[300px] h-auto object-contain transition-all duration-300 ease-in-out"
+                                    style="max-height: 300px;">
+                                    
+                                    <!-- Fallback if <object> fails -->
+                                    <img 
+                                        src="${data.qr_url}" 
+                                        alt="QR Code" 
+                                        class="w-[85%] max-w-[300px] h-auto object-contain transition-all duration-300 ease-in-out" 
+                                        style="max-height: 300px;">
+                                </object>
+                            </div>
+
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <p class="text-gray-500 font-medium">Control Number:</p>
-                    <p class="text-gray-900 font-semibold">${data.control_number}</p>
+                                
+                <!-- Request Information -->
+                <div class="bg-gray-50 rounded-xl p-5 border border-gray-200">
+                    <div class="grid grid-cols-1 gap-4 text-sm">
+                        <div class="flex justify-between items-center pb-3 border-b border-gray-200">
+                            <span class="text-gray-600 font-medium">Reference Number:</span>
+                            <span class="text-gray-900 font-semibold text-right break-all">${data.reference_number}</span>
+                        </div>
+                        <div class="flex justify-between items-center pb-3 border-b border-gray-200">
+                            <span class="text-gray-600 font-medium">Control Number:</span>
+                            <span class="text-gray-900 font-semibold">${data.control_number}</span>
+                        </div>
+                        <div class="flex justify-between items-center pb-3 border-b border-gray-200">
+                            <span class="text-gray-600 font-medium">Amount:</span>
+                            <span class="text-green-600 font-bold">₱${data.amount}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600 font-medium">Status:</span>
+                            <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">${data.status}</span>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <p class="text-gray-500 font-medium">Amount:</p>
-                    <p class="text-green-600 font-bold">₱${data.amount}</p>
-                </div>
-                <div>
-                    <p class="text-gray-500 font-medium">Status:</p>
-                    <p class="text-blue-600 font-semibold">${data.status}</p>
+                
+                <!-- Instructions -->
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                    <p class="text-sm text-blue-800 flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                        </svg>
+                        Scan this QR code to view your DV Request status anytime, anywhere.
+                    </p>
                 </div>
             </div>
-        </div>
+        `;
         
-        <!-- Instructions -->
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-left">
-            <p class="text-xs text-blue-800">
-                <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                </svg>
-                Scan this QR code to view your DV Request status anytime, anywhere.
-            </p>
-        </div>
-    </div>
-`;
-        
+        // Show action buttons
         document.getElementById('downloadQRBtn').classList.remove('hidden');
         document.getElementById('printQRBtn').classList.remove('hidden');
         
@@ -375,100 +393,124 @@ function downloadQR() {
     
     const link = document.createElement('a');
     link.href = currentQRData.qr_url;
-    link.download = `QR_${currentQRData.reference_number}.svg`;
+    link.download = `DV_QR_${currentQRData.reference_number}.svg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    Swal.fire({
-        icon: 'success',
-        title: 'Downloaded!',
-        text: 'QR Code has been saved to your device',
-        timer: 2000,
-        showConfirmButton: false
-    });
+    // Show success message
+    showToast('QR Code downloaded successfully!', 'success');
 }
 
 function printQR() {
     if (!currentQRData) return;
     
-    const printWindow = window.open('', '_blank');
+    const printWindow = window.open('', '_blank', 'width=600,height=700');
     printWindow.document.write(`
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Print QR Code - ${currentQRData.reference_number}</title>
+            <title>DV Request QR Code - ${currentQRData.reference_number}</title>
             <style>
+                @import url('https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css');
                 body {
-                    font-family: Arial, sans-serif;
+                    font-family: system-ui, -apple-system, sans-serif;
                     display: flex;
                     justify-content: center;
                     align-items: center;
                     min-height: 100vh;
                     margin: 0;
                     padding: 20px;
-                }
-                .container {
-                    text-align: center;
-                    max-width: 500px;
-                }
-                .qr-box {
-                    border: 3px solid #7c3aed;
-                    padding: 20px;
-                    border-radius: 10px;
-                    margin: 20px 0;
                     background: white;
                 }
-                img {
+                .print-container {
+                    text-align: center;
+                    max-width: 400px;
+                    width: 100%;
+                }
+                .header {
+                    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+                    color: white;
+                    padding: 20px;
+                    border-radius: 12px 12px 0 0;
+                    margin-bottom: 0;
+                }
+                .qr-section {
+                    border: 3px solid #7c3aed;
+                    padding: 25px;
+                    border-radius: 0 0 12px 12px;
+                    margin: 0 auto 20px;
+                    background: white;
                     max-width: 300px;
+                }
+                .qr-section img {
+                    width: 100%;
                     height: auto;
                 }
-                .info {
-                    background: #f3f4f6;
-                    padding: 15px;
-                    border-radius: 8px;
-                    margin-top: 20px;
+                .info-section {
+                    background: #f8fafc;
+                    padding: 20px;
+                    border-radius: 12px;
+                    border: 1px solid #e2e8f0;
                 }
                 .info-row {
                     display: flex;
                     justify-content: space-between;
-                    margin: 10px 0;
-                    padding: 8px;
-                    border-bottom: 1px solid #e5e7eb;
+                    align-items: center;
+                    padding: 10px 0;
+                    border-bottom: 1px solid #e2e8f0;
+                }
+                .info-row:last-child {
+                    border-bottom: none;
                 }
                 .label {
-                    font-weight: bold;
-                    color: #6b7280;
+                    color: #64748b;
+                    font-weight: 600;
+                    font-size: 14px;
                 }
                 .value {
-                    color: #111827;
+                    color: #1e293b;
+                    font-weight: 700;
+                    text-align: right;
+                }
+                .amount {
+                    color: #059669;
+                }
+                .status {
+                    background: #dbeafe;
+                    color: #1e40af;
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    font-size: 12px;
                     font-weight: 600;
                 }
-                h1 {
-                    color: #7c3aed;
-                    margin-bottom: 10px;
-                }
-                .subtitle {
-                    color: #6b7280;
-                    font-size: 14px;
+                .footer {
+                    margin-top: 20px;
+                    color: #64748b;
+                    font-size: 12px;
                 }
                 @media print {
                     body {
                         padding: 0;
                     }
+                    .print-container {
+                        box-shadow: none;
+                    }
                 }
             </style>
         </head>
         <body>
-            <div class="container">
-                <h1>DV Request QR Code</h1>
-                <p class="subtitle">Scan to verify request status</p>
-                
-                <div class="qr-box">
-                    <img src="${currentQRData.qr_url}" alt="QR Code">
+            <div class="print-container">
+                <div class="header">
+                    <h1 class="text-2xl font-bold">DV Request QR Code</h1>
+                    <p class="opacity-90">Scan to verify request status</p>
                 </div>
                 
-                <div class="info">
+                <div class="qr-section">
+                    <img src="${currentQRData.qr_url}" alt="QR Code for ${currentQRData.reference_number}">
+                </div>
+                
+                <div class="info-section">
                     <div class="info-row">
                         <span class="label">Reference Number:</span>
                         <span class="value">${currentQRData.reference_number}</span>
@@ -479,31 +521,70 @@ function printQR() {
                     </div>
                     <div class="info-row">
                         <span class="label">Amount:</span>
-                        <span class="value">₱${currentQRData.amount}</span>
+                        <span class="value amount">₱${currentQRData.amount}</span>
                     </div>
                     <div class="info-row">
                         <span class="label">Status:</span>
-                        <span class="value">${currentQRData.status}</span>
+                        <span class="status">${currentQRData.status}</span>
                     </div>
                 </div>
                 
-                <p style="margin-top: 20px; color: #6b7280; font-size: 12px;">
-                    Generated on ${new Date().toLocaleString()}
-                </p>
+                <div class="footer">
+                    Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+                </div>
             </div>
         </body>
         </html>
     `);
     
     printWindow.document.close();
+    
+    // Wait for content to load before printing
+    printWindow.onload = function() {
+        setTimeout(() => {
+            printWindow.print();
+            // Optional: Close the print window after printing
+            // printWindow.close();
+        }, 500);
+    };
+}
+
+// Toast notification function
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium transform transition-all duration-300 ${
+        type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    }`;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    // Animate in
     setTimeout(() => {
-        printWindow.print();
-    }, 500);
+        toast.classList.remove('transform', 'translate-x-full');
+    }, 100);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.add('transform', 'translate-x-full', 'opacity-0');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
 }
 
 // Close modal when clicking outside
-document.getElementById('qrModal')?.addEventListener('click', function(e) {
+document.getElementById('qrModal').addEventListener('click', function(e) {
     if (e.target === this) {
+        closeQRModal();
+    }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !document.getElementById('qrModal').classList.contains('hidden')) {
         closeQRModal();
     }
 });
@@ -527,13 +608,77 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Reusable render function for notifications
     function renderNotification(n) {
-        const url = "{{ url('FocalPerson/dvrequest') }}/" + n.dv_request_id + "/logs";
-        const timestamp = n.timestamp ? n.timestamp : new Date(n.created_at).toLocaleString();
-        return `
-            <a href="${url}" class="block w-full h-full">
-                [${timestamp}] #${n.dv_request_id} ${n.status.toUpperCase()} - ${n.remarks}
+    const url = "{{ url('FocalPerson/dvrequest') }}/" + n.dv_request_id + "/logs";
+    const timestamp = n.timestamp
+        ? n.timestamp
+        : new Date(n.created_at).toLocaleString();
+
+    // Determine color by status
+    let colorClass = "bg-gray-400";
+    if (n.status?.toLowerCase().includes("approved")) colorClass = "bg-green-500";
+    else if (n.status?.toLowerCase().includes("rejected")) colorClass = "bg-red-500";
+    else if (n.status?.toLowerCase().includes("pending")) colorClass = "bg-yellow-500";
+    else if (n.status?.toLowerCase().includes("processed")) colorClass = "bg-purple-500";
+
+    return `
+        <li class="p-3 border-b border-gray-100 hover:bg-purple-50 cursor-pointer transition duration-200">
+            <a href="${url}" class="flex items-start space-x-2 w-full h-full">
+                <div class="flex-shrink-0">
+                    <span class="block w-2.5 h-2.5 ${colorClass} rounded-full mt-2"></span>
+                </div>
+                <div class="flex-1">
+                    <p class="text-sm text-gray-800 font-medium">
+                        #${n.dv_request_id} ${n.status.toUpperCase()} — ${n.remarks}
+                    </p>
+                    <p class="text-xs text-gray-500 mt-0.5">${timestamp}</p>
+                </div>
             </a>
-        `;
+        </li>
+    `;
+}
+
+    // Helper function: update table & show toast if DV number is new
+    function updateDVStatus(dv) {
+        const statusEl = document.getElementById('status-' + dv.dv_request_id);
+        const dvEl = document.getElementById('dv-' + dv.dv_request_id);
+        const deleteBtn = document.getElementById('delete-btn-' + dv.dv_request_id);
+
+        // Update status text
+        if (statusEl) {
+            const label = statusEl.querySelector('.status-label');
+            if (label) {
+                label.textContent = dv.status.charAt(0).toUpperCase() + dv.status.slice(1).replace('_', ' ');
+            }
+            statusEl.dataset.status = dv.status.toLowerCase();
+        }
+
+        // Update DV number cell
+        if (dvEl) {
+            if (dv.dv_number) {
+                dvEl.innerHTML = `
+                    <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                        ${dv.dv_number}
+                    </span>
+                `;
+                dvEl.dataset.dvNumber = dv.dv_number;
+            } else {
+                dvEl.innerHTML = `
+                    <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
+                        Pending
+                    </span>
+                `;
+                dvEl.dataset.dvNumber = '';
+            }
+        }
+
+        // Handle delete button visibility
+        if (deleteBtn) {
+            if (dv.status === 'submitted') {
+                deleteBtn.style.display = 'inline-block';
+            } else {
+                deleteBtn.style.display = 'none';
+            }
+        }
     }
 
     // Initial fetch notifications
@@ -568,52 +713,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const userId = '{{ Auth::guard("focal")->id() }}';
     const channel = pusher.subscribe('dv-requests-' + userId);
 
-    // Helper function: update table & show toast if DV number is new
-   function updateDVStatus(dv) {
-    const statusEl = document.getElementById('status-' + dv.dv_request_id);
-    const dvEl = document.getElementById('dv-' + dv.dv_request_id);
-    const deleteBtn = document.getElementById('delete-btn-' + dv.dv_request_id);
-
-    // Update status text
-    if (statusEl) {
-        const label = statusEl.querySelector('.status-label');
-        if (label) {
-            label.textContent = dv.status.charAt(0).toUpperCase() + dv.status.slice(1).replace('_', ' ');
-        }
-        statusEl.dataset.status = dv.status.toLowerCase();
-    }
-
-    // Update DV number cell
-    if (dvEl) {
-        if (dv.dv_number) {
-            dvEl.innerHTML = `
-                <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                    ${dv.dv_number}
-                </span>
-            `;
-            dvEl.dataset.dvNumber = dv.dv_number;
-        } else {
-            dvEl.innerHTML = `
-                <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
-                    Pending
-                </span>
-            `;
-            dvEl.dataset.dvNumber = '';
-        }
-    }
-
-    // Handle delete button visibility
-    if (deleteBtn) {
-        if (dv.status === 'submitted') {
-            deleteBtn.style.display = 'inline-block';
-        } else {
-            deleteBtn.style.display = 'none';
-        }
-    }
-}
-
-    // Pusher binding
-    channel.unbind('status-updated');
+    // Pusher binding - MOVED OUTSIDE the function
     channel.bind('status-updated', function(data) {
         console.log('Received real-time notification:', data);
 
@@ -629,10 +729,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         Toast.fire({
-        icon: 'info',
-        title: 'DV Request Status Update',
-        text: `#${data.dv_request_id} ${data.status.toUpperCase()} - ${data.remarks || ''}`
+            icon: 'info',
+            title: 'DV Request Status Update',
+            text: `#${data.dv_request_id} ${data.status.toUpperCase()} - ${data.remarks || ''}`
         });
+        
+        // Update the table with new status
         updateDVStatus(data);
     });
 
@@ -705,5 +807,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 60000);
 });
 </script>
-
 @endsection

@@ -11,7 +11,7 @@
   <!-- SweetAlert2 -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Alpine.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -90,9 +90,14 @@
         <div class="flex justify-between items-center h-16">
 
             <!-- Left Section -->
-            <div class="flex items-center">
-                <span class="text-xl font-bold text-gray-800">My App</span>
-            </div>
+          <div class="flex items-center">
+    <img 
+        src="{{ asset('storage/logo/acculogo.png') }}" 
+        alt="My App Logo" 
+        class="h-12 md:h-14 lg:h-18 w-auto object-contain"
+    >
+</div>
+
 
             <!-- Center Section (Focal Person Links) -->
             @role('Focal_Person')
@@ -125,8 +130,8 @@
                 Verify Disbursement Documents
             </a>
 
-            <a href="{{ route('history') }}" 
-            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('history') ? 'bg-gray-200 font-semibold' : '' }}">
+            <a href="{{ route('RegionalOffices.IMSD.history') }}" 
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('RegionalOffices.IMSD.history') ? 'bg-gray-200 font-semibold' : '' }}">
                 IMSD Log History
             </a>
         </div>
@@ -186,8 +191,8 @@
                     </a>
 
                     <!-- Request History -->
-                    <a href="" 
-                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('') ? 'bg-gray-200 font-semibold' : '' }}">
+                    <a href="{{ route('dvrequests.tevhistory') }}" 
+                    class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('dvrequests.tevhistory') ? 'bg-gray-200 font-semibold' : '' }}">
                         Request History
                     </a>
                 </div>

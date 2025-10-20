@@ -14,6 +14,7 @@ use App\Models\GIPAttachment;
 use App\Models\TUPADAttachment;
 use App\Models\TEVAttachment;
 use App\Models\Notification;
+use App\Models\OutgoingFinalizationHistory;
 use App\Models\DvRequestLog;
 use SimpleSoftwareIO\QrCode\Facades\Qrcode;
 use Illuminate\Support\Facades\DB;
@@ -31,8 +32,8 @@ class OutgoingDvController extends Controller
 
     public function index()
     {
-         $sidebarCounts = $this->getSidebarCounts();
-        return view('Outgoing.index',compact('sidebarCounts'));
+
+        return view('Outgoing.index');
     }
 
      public function fetchDvRequests()
@@ -135,182 +136,210 @@ class OutgoingDvController extends Controller
         'selectedModality','tevSelectedModality','tevAttachments'));
 }
 
-public function receive(Request $request, $id)
-{
-    try {
-        $dvRequest = DvRequest::findOrFail($id);
+ public function receive(Request $request, $id)
+    {
+        try {
+            $dvRequest = DvRequest::findOrFail($id);
+            $statusBefore = $dvRequest->status;
+            $receivedAt = now();
 
-        // Only allow if status is already obligated
-        if ($dvRequest->status !== 'ORS_obligated') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This request is not yet ready for Outgoing to receive.'
-            ], 422);
-        }
+            // Only allow if status is already obligated
+            if ($dvRequest->status !== 'ORS_obligated') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This request is not yet ready for Outgoing to receive.'
+                ], 422);
+            }
 
-        $receivedAt = now();
-
-        // Update DV request
-        $dvRequest->update([
-            'status'      => 'Outgoing_received',
-             'accountingunit_id'=> auth()->id(),
-            'received_by' => auth()->id(),
-            'received_at' => $receivedAt,
-            'locked_by'   => auth()->id(),
-            'locked_at'   => $receivedAt,
-        ]);
-
-        // Log action
-        $this->logAction(
-            $dvRequest->id,
-            'Outgoing',
-            'Outgoing_received',
-            'DV request received by Outgoing for final verification'
-        );
-
-        // Notify focal person
-        $focalId = $dvRequest->focalperson_id;
-        $remarks = $request->remarks ?? "DV request received by Outgoing for final verification";
-
-        Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => 'Outgoing_received', 
-            'action'         => 'Received',
-            'remarks'        => $remarks,
-        ]);
-
-        // Real-time push
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => 'Outgoing_received',
-            'remarks'       => $remarks,
-            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-
-        // ✅ To Budget Officer channel (for real-time table update)
-        $this->pusher->trigger('dv-requests-outgoing', 'dv-request-received', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => $dvRequest->status,
-            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-
-        // Response
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Document has been received by Outgoing.',
-                'data' => [
-                    'id'          => $dvRequest->id,
-                    'status'      => 'Outgoing_received',
-                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                ]
+            // Update DV request
+            $dvRequest->update([
+                'status'      => 'Outgoing_received',
+                'accountingunit_id'=> auth()->id(),
+                'received_by' => auth()->id(),
+                'received_at' => $receivedAt,
+                'locked_by'   => auth()->id(),
+                'locked_at'   => $receivedAt,
             ]);
+
+            // ✅ SAVE FINALIZATION HISTORY
+            $this->saveOutgoingFinalizationHistory(
+                $dvRequest,
+                'receive',
+                'DV request received by Outgoing for final verification',
+                [
+                    'status_before' => $statusBefore,
+                    'status_after'  => 'Outgoing_received',
+                    'received_by' => auth()->id(),
+                    'received_at' => $receivedAt->toISOString(),
+                    'amount' => $dvRequest->amount
+                ]
+            );
+
+            // Log action
+            $this->logAction(
+                $dvRequest->id,
+                'Outgoing',
+                'Outgoing_received',
+                'DV request received by Outgoing for final verification'
+            );
+
+            // Notify focal person
+            $focalId = $dvRequest->focalperson_id;
+            $remarks = $request->remarks ?? "DV request received by Outgoing for final verification";
+
+            Notification::create([
+                'focalperson_id' => $focalId,
+                'dv_request_id'  => $dvRequest->id,
+                'status'         => 'Outgoing_received', 
+                'action'         => 'Received',
+                'remarks'        => $remarks,
+            ]);
+
+            // Real-time push
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Outgoing_received',
+                'remarks'       => $remarks,
+                'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            // To Outgoing channel (for real-time table update)
+            $this->pusher->trigger('dv-requests-outgoing', 'dv-request-received', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => $dvRequest->status,
+                'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            // Response
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Document has been received by Outgoing.',
+                    'data' => [
+                        'id'          => $dvRequest->id,
+                        'status'      => 'Outgoing_received',
+                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                    ]
+                ]);
+            }
+
+            return redirect()->route('Outgoing.dvrequests.index')
+                ->with('success', 'Document has been received by Outgoing.');
+
+        } catch (\Exception $e) {
+            \Log::error('Error receiving DV request by Outgoing: ' . $e->getMessage());
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while processing the request.'
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'An error occurred while processing the request.');
         }
-
-        return redirect()->route('Outgoing.dvrequests.index')
-            ->with('success', 'Document has been received by Outgoing.');
-
-    } catch (\Exception $e) {
-        \Log::error('Error receiving DV request by Outgoing: ' . $e->getMessage());
-
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'An error occurred while processing the request.'
-            ], 500);
-        }
-
-        return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
-}
 
-public function startProcessing(Request $request, $id)
-{
-    try {
-        $dvRequest = DvRequest::findOrFail($id);
+    public function startProcessing(Request $request, $id)
+    {
+        try {
+            $dvRequest = DvRequest::findOrFail($id);
+            $statusBefore = $dvRequest->status;
+            $startedAt = now();
 
-        if ($dvRequest->status !== 'Outgoing_received') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Request must be received first before processing.'
-            ], 422);
-        }
+            if ($dvRequest->status !== 'Outgoing_received') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Request must be received first before processing.'
+                ], 422);
+            }
 
-        $startedAt = now();
+            $dvRequest->update([
+                'status'    => 'Outgoing_in_process',
+                'locked_by' => auth()->id(),
+                'locked_at' => $startedAt,
+            ]);
 
-        $dvRequest->update([
-            'status'    => 'Outgoing_in_process',
-            'locked_by' => auth()->id(),
-            'locked_at' => $startedAt,
-        ]);
+            // ✅ SAVE FINALIZATION HISTORY
+            $this->saveOutgoingFinalizationHistory(
+                $dvRequest,
+                'process',
+                'Processing started by Outgoing',
+                [
+                    'status_before' => $statusBefore,
+                    'status_after' => 'Outgoing_in_process',
+                    'processed_by' => auth()->id(),
+                    'processed_at' => $startedAt->toISOString(),
+                    'amount' => $dvRequest->amount
+                ]
+            );
 
-        // Log
-        $this->logAction(
-            $dvRequest->id,
-            'Outgoing',
-            'Outgoing_in_process',
-            'Processing started by Outgoing',
-        );
+            // Log
+            $this->logAction(
+                $dvRequest->id,
+                'Outgoing',
+                'Outgoing_in_process',
+                'Processing started by Outgoing',
+            );
 
-        // Notify focal person
-        $focalId = $dvRequest->focalperson_id;
-        $status  = 'Outgoing_in_process';
-        $action  = 'Processing Started';
-        $remarks = 'Request is now being processed by Outgoing';
+            // Notify focal person
+            $focalId = $dvRequest->focalperson_id;
+            $status  = 'Outgoing_in_process';
+            $action  = 'Processing Started';
+            $remarks = 'Request is now being processed by Outgoing';
 
-        Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => $status,
-            'action'         => $action,
-            'remarks'        => $remarks,
-        ]);
+            Notification::create([
+                'focalperson_id' => $focalId,
+                'dv_request_id'  => $dvRequest->id,
+                'status'         => $status,
+                'action'         => $action,
+                'remarks'        => $remarks,
+            ]);
 
-        // Trigger real-time event
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => $status,
-            'remarks'       => $remarks,
-            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
+            // Trigger real-time event
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => $status,
+                'remarks'       => $remarks,
+                'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
 
-         $this->pusher->trigger('dv-requests-outgoing', 'dv-request-processing', [
+            $this->pusher->trigger('dv-requests-outgoing', 'dv-request-processing', [
                 'dv_request_id' => $dvRequest->id,
                 'status'        => $status,
                 'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
-        // JSON response for AJAX
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Processing started.',
-                'data' => [
-                    'id'         => $dvRequest->id,
-                    'status'     => $status,
-                    'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                ]
-            ]);
+            // JSON response for AJAX
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Processing started.',
+                    'data' => [
+                        'id'         => $dvRequest->id,
+                        'status'     => $status,
+                        'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                    ]
+                ]);
+            }
+
+            // Fallback redirect
+            return redirect()->route('Outgoing.dvrequests.index')
+                ->with('success', 'Processing started.');
+
+        } catch (\Exception $e) {
+            \Log::error('Error starting processing: ' . $e->getMessage());
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while starting processing.'
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'An error occurred while starting processing.');
         }
-
-        // Fallback redirect
-        return redirect()->route('Incoming.GIP.index')
-            ->with('success', 'Processing started.');
-
-    } catch (\Exception $e) {
-        \Log::error('Error starting processing: ' . $e->getMessage());
-
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'An error occurred while starting processing.'
-            ], 500);
-        }
-
-        return redirect()->back()->with('error', 'An error occurred while starting processing.');
     }
-}
 
 
    public function redirectToFirstPending()
@@ -343,6 +372,7 @@ public function startProcessing(Request $request, $id)
     return redirect()->route('Outgoing.dvrequests.index')
                      ->with('info', 'All pending GIP DV requests are currently locked by other users.');
 }
+
 public function finalize(Request $request, $id)
 {
     $request->validate([
@@ -356,6 +386,7 @@ public function finalize(Request $request, $id)
     ]);
 
     $dvRequest = DvRequest::with(['gipAttachments', 'tupadAttachments', 'tevAttachments'])->findOrFail($id);
+    $statusBefore = $dvRequest->status;
 
     if ($dvRequest->status !== 'Outgoing_in_process') {
         return redirect()->back()->with('error', 'This DV request cannot be finalized yet.');
@@ -370,6 +401,8 @@ public function finalize(Request $request, $id)
 
     $qrCode = $this->generateDvQrCode($dvRequest->id, $dvNumber);
 
+    // Collect attachment data for verification history
+    $attachmentData = [];
 
     // ✅ Handle GIP Attachments
     if ($dvRequest->program->prcode === 'GIP' && $request->has('gip_attachments')) {
@@ -377,14 +410,31 @@ public function finalize(Request $request, $id)
             $attachment = $dvRequest->gipAttachments()->find($attachmentId);
             if ($attachment) {
                 $attachment->update(['is_present' => true]);
+                
+                // Collect attachment data
+                $attachmentData[] = [
+                    'id' => $attachment->id,
+                    'name' => $attachment->name,
+                    'is_present' => true,
+                    'type' => 'gip'
+                ];
             }
         }
         
-        // Mark unchecked as not present
+        // Mark unchecked as not present and collect data
         $checkedIds = array_keys($request->input('gip_attachments', []));
         $dvRequest->gipAttachments()
             ->whereNotIn('id', $checkedIds)
-            ->update(['is_present' => false]);
+            ->each(function($attachment) use (&$attachmentData) {
+                $attachment->update(['is_present' => false]);
+                
+                $attachmentData[] = [
+                    'id' => $attachment->id,
+                    'name' => $attachment->name,
+                    'is_present' => false,
+                    'type' => 'gip'
+                ];
+            });
     }
 
     // ✅ Handle TUPAD Attachments
@@ -393,6 +443,14 @@ public function finalize(Request $request, $id)
             $attachment = $dvRequest->tupadAttachments()->find($attachmentId);
             if ($attachment) {
                 $attachment->update(['is_present' => true]);
+                
+                $attachmentData[] = [
+                    'id' => $attachment->id,
+                    'name' => $attachment->name,
+                    'is_present' => true,
+                    'type' => 'tupad',
+                    'modality' => $attachment->modality
+                ];
             }
         }
         
@@ -401,7 +459,17 @@ public function finalize(Request $request, $id)
         $dvRequest->tupadAttachments()
             ->where('modality', $dvRequest->tupad_modality)
             ->whereNotIn('id', $checkedIds)
-            ->update(['is_present' => false]);
+            ->each(function($attachment) use (&$attachmentData) {
+                $attachment->update(['is_present' => false]);
+                
+                $attachmentData[] = [
+                    'id' => $attachment->id,
+                    'name' => $attachment->name,
+                    'is_present' => false,
+                    'type' => 'tupad',
+                    'modality' => $attachment->modality
+                ];
+            });
     }
 
     // ✅ Handle TEV Attachments
@@ -410,6 +478,14 @@ public function finalize(Request $request, $id)
             $attachment = $dvRequest->tevAttachments()->find($attachmentId);
             if ($attachment) {
                 $attachment->update(['is_present' => true]);
+                
+                $attachmentData[] = [
+                    'id' => $attachment->id,
+                    'name' => $attachment->name,
+                    'is_present' => true,
+                    'type' => 'tev',
+                    'modality' => $attachment->modality
+                ];
             }
         }
         
@@ -418,22 +494,54 @@ public function finalize(Request $request, $id)
         $dvRequest->tevAttachments()
             ->where('modality', $dvRequest->tev_modality)
             ->whereNotIn('id', $checkedIds)
-            ->update(['is_present' => false]);
+            ->each(function($attachment) use (&$attachmentData) {
+                $attachment->update(['is_present' => false]);
+                
+                $attachmentData[] = [
+                    'id' => $attachment->id,
+                    'name' => $attachment->name,
+                    'is_present' => false,
+                    'type' => 'tev',
+                    'modality' => $attachment->modality
+                ];
+            });
     }
 
-    // Update DV Request
-    DvRequest::where('id', $dvRequest->id)->update([
-        'status'     => 'Outgoing_finalized',
+    // ✅ UPDATE DV REQUEST STATUS FIRST
+    $dvRequest->update([
+        'status'     => 'Outgoing_finalized', // This should be the new status
         'dv_number'  => $dvNumber,
         'locked_by'  => null,
         'locked_at'  => null,
     ]);
+
+    // ✅ Refresh the model to get the updated status
+    $dvRequest->refresh();
 
     if ($dvRequest->focalPerson) {
         $dvRequest->focalPerson->update([
             'dv_number' => $dvNumber
         ]);
     }
+
+    // ✅ NOW SAVE FINALIZATION HISTORY WITH CORRECT STATUS_AFTER
+    $finalizedAt = now();
+    $this->saveOutgoingFinalizationHistory(
+        $dvRequest,
+        'finalize',
+        $request->remarks ?? "DV finalized with DV Number: {$dvNumber}",
+        [
+            'status_before' => $statusBefore,
+            'status_after' => 'Outgoing_finalized', 
+            'dv_number' => $dvNumber,
+            'attachments_checked' => $attachmentData,
+            'qr_code_generated' => !empty($qrCode),
+            'finalized_by' => auth()->id(),
+            'finalized_at' => $finalizedAt->toISOString(),
+            'amount' => $dvRequest->amount,
+            'program' => $dvRequest->program->prcode ?? null
+        ]
+    );
 
     $focalId = $dvRequest->focalperson_id;
     $status = 'Outgoing_finalized';
@@ -453,14 +561,14 @@ public function finalize(Request $request, $id)
         'status'        => $dvRequest->status,
         'dv_number'     => $dvRequest->dv_number,
         'remarks'       => $remarks,
-        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        'timestamp'     => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
     ]);
 
     $this->pusher->trigger('dv-requests-outgoing', 'dv-request-finalized', [
         'dv_request_id' => $dvRequest->id,
         'dv_number'     => $dvRequest->dv_number,
         'status'        => $status,
-        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        'timestamp'     => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
     ]);
 
     $this->logAction(
@@ -470,149 +578,268 @@ public function finalize(Request $request, $id)
         $remarks
     );
 
-     return redirect()->route('Outgoing.dvrequests.preview', $dvRequest->id)
+    return redirect()->route('Outgoing.dvrequests.preview', $dvRequest->id)
         ->with('success', "DV Request finalized with DV Number: {$dvNumber}")
         ->with('print_modal', true);
 }
 
     private function generateDvQrCode($dvRequestId, $dvNumber)
-        {
-            try {
-                $dvRequest = DvRequest::find($dvRequestId);
-                
-                // Create a unique token for this DV
-                $token = hash('sha256', $dvRequestId . $dvNumber . now()->timestamp . uniqid());
-                
-                // Generate QR code data - use the centralized QR controller route
-                $qrData = json_encode([
-                    'dv_id' => $dvRequestId,
-                    'dv_number' => $dvNumber,
-                    'token' => $token,
-                    'action_url' => route('dv.qr.update-status', ['token' => $token]),
-                    'timestamp' => now()->timestamp,
-                    'type' => 'dv_status_update'
-                ]);
-
-                // Generate QR code as base64 image
-                $qrCodeImage = QrCode::format('png')
-                    ->size(200)
-                    ->margin(2)
-                    ->errorCorrection('H')
-                    ->generate($qrData);
-
-                $base64QrCode = 'data:image/png;base64,' . base64_encode($qrCodeImage);
-
-                // Store QR code info in the database
-                $dvRequest->update([
-                    'qr_code_token' => $token,
-                    'qr_code_generated_at' => now(),
-                ]);
-
-                \Log::info('QR Code generated by Outgoing', [
-                    'dv_id' => $dvRequestId,
-                    'dv_number' => $dvNumber,
-                    'generated_by' => 'Outgoing'
-                ]);
-
-                return $base64QrCode;
-
-            } catch (\Exception $e) {
-                \Log::error('QR Code Generation Error in Outgoing: ' . $e->getMessage());
-                return null;
-            }
-        }
-
-    public function reject(Request $request, $id)
 {
-    $request->validate([
-        'remarks' => 'required|string|max:1000',
-    ]);
-
     try {
-        $dvRequest = DvRequest::findOrFail($id);
+        \Log::info('Starting QR Code Generation via API', [
+            'dv_request_id' => $dvRequestId,
+            'dv_number' => $dvNumber,
+        ]);
 
-        // ✅ Only allow rejection if status is currently in Outgoing stage
-        if (!in_array($dvRequest->status, ['Outgoing_in_process'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This DV request cannot be rejected at its current stage.'
-            ], 422);
+        $dvRequest = DvRequest::find($dvRequestId);
+        
+        if (!$dvRequest) {
+            \Log::error('DV Request not found for QR generation', ['dv_id' => $dvRequestId]);
+            return null;
         }
 
-        $rejectedAt = now();
-        $focalId = $dvRequest->focalperson_id;
-        $remarks = trim($request->remarks);
-
-        // ✅ Update DV request
-        $dvRequest->update([
-            'status'     => 'Outgoing_rejected',
-            'locked_by'  => null,
-            'locked_at'  => null,
-        ]);
-
-        // ✅ Log rejection - REMOVE the prefix, just use remarks
-        $this->logAction(
-            $dvRequest->id,
-            'Outgoing',
-            'Outgoing_rejected',
-            $remarks  // ✅ Changed from "Rejected by Outgoing: {$remarks}"
-        );
-
-        // ✅ Notify focal person
-        Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => 'Outgoing_rejected',
-            'action'         => 'Rejected',
-            'remarks'        => $remarks,
-        ]);
-
-        // ✅ Real-time push to focal person
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => 'Outgoing_rejected',
-            'remarks'       => $remarks,
-            'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-
-        // ✅ Real-time push to Outgoing dashboard
-        $this->pusher->trigger('dv-requests-outgoing', 'dv-request-rejected', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => 'Outgoing_rejected',
-            'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-
-        // ✅ Return JSON if AJAX
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'DV request has been rejected successfully.',
-                'data' => [
-                    'id'         => $dvRequest->id,
-                    'status'     => 'Outgoing_rejected',
-                    'remarks'    => $remarks,
-                ]
-            ]);
+        // Check if QR code already exists and is valid
+        if ($dvRequest->qr_code_token && $dvRequest->qr_code_data) {
+            \Log::info('Using existing QR code');
+            return $dvRequest->qr_code_data;
         }
 
-        // ✅ Fallback redirect
-        return redirect()->route('Outgoing.dvrequests.index')
-                         ->with('error', 'DV request has been rejected.');
+        // Create a unique token
+        $token = $dvRequest->qr_code_token ?? hash('sha256', $dvRequestId . $dvNumber . now()->timestamp . uniqid());
+        
+        // Generate QR code data - use the centralized QR controller route
+        $qrData = json_encode([
+            'dv_id' => $dvRequestId,
+            'dv_number' => $dvNumber,
+            'token' => $token,
+            'action_url' => route('dv.qr.update-status', ['token' => $token]),
+            'timestamp' => now()->timestamp,
+            'type' => 'dv_status_update'
+        ]);
+
+        // ✅ Use external QR code APIs (no PHP extensions needed)
+        $verifyUrl = route('dv.qr.update-status', ['token' => $token]);
+        
+        // Try multiple QR code APIs for reliability
+        $qrCodeContent = null;
+        
+        // API 1: QR Server API
+        $apiUrl1 = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&format=png&data=' . urlencode($verifyUrl);
+        $qrCodeContent = @file_get_contents($apiUrl1);
+        
+        if ($qrCodeContent === false || empty($qrCodeContent)) {
+            \Log::warning('QR Server API failed, trying Google Charts API');
+            
+            // API 2: Google Charts API (fallback)
+            $apiUrl2 = 'https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=' . urlencode($verifyUrl) . '&choe=UTF-8';
+            $qrCodeContent = @file_get_contents($apiUrl2);
+        }
+        
+        if ($qrCodeContent === false || empty($qrCodeContent)) {
+            \Log::warning('Google Charts API failed, trying GoQR API');
+            
+            // API 3: GoQR API (fallback)
+            $apiUrl3 = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' . urlencode($verifyUrl);
+            $qrCodeContent = @file_get_contents($apiUrl3);
+        }
+
+        if ($qrCodeContent === false || empty($qrCodeContent)) {
+            \Log::error('All QR code APIs failed');
+            throw new \Exception('Failed to generate QR code from external APIs');
+        }
+
+        // Convert to base64
+        $base64QrCode = 'data:image/png;base64,' . base64_encode($qrCodeContent);
+
+        // Verify the base64 data is valid
+        if (empty($base64QrCode)) {
+            throw new \Exception('Failed to encode QR code image to base64');   
+        }
+
+        // Store QR code info in the database
+        $updateData = [
+            'qr_code_token' => $token,
+            'qr_code_generated_at' => now(),
+            'qr_status' => 'inactive',
+            'qr_code_data' => $base64QrCode,
+        ];
+
+        $updated = $dvRequest->update($updateData);
+
+        if (!$updated) {
+            \Log::error('Failed to update DV request with QR code data');
+            throw new \Exception('Failed to save QR code to database');
+        }
+
+        \Log::info('QR Code generated via API successfully', [
+            'dv_id' => $dvRequestId,
+            'dv_number' => $dvNumber,
+            'token' => substr($token, 0, 10) . '...',
+            'qr_status' => 'inactive',
+            'api_used' => 'External QR API'
+        ]);
+
+        return $base64QrCode;
 
     } catch (\Exception $e) {
-        \Log::error('Error rejecting DV request: ' . $e->getMessage());
-
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'An error occurred while rejecting the DV request.'
-            ], 500);
-        }
-
-        return redirect()->back()->with('error', 'An error occurred while rejecting the DV request.');
+        \Log::error('QR Code Generation Error: ' . $e->getMessage(), [
+            'dv_id' => $dvRequestId,
+            'dv_number' => $dvNumber,
+        ]);
+        return null;
     }
 }
- public function printOfficialDv($id)
+
+
+// Helper method to display QR code in your view
+public function getQrCodeForDv($id)
+{
+    try {
+            $dvRequest = DvRequest::findOrFail($id);
+            
+            // If QR code already exists and is valid, return it
+            if ($dvRequest->qr_code_token && $dvRequest->qr_code_data) {
+                return response()->json([
+                    'success' => true,
+                    'qr_code' => $dvRequest->qr_code_data,
+                    'dv_number' => $dvRequest->dv_number
+                ]);
+            }
+            
+            // Generate new QR code if it doesn't exist
+            if ($dvRequest->dv_number) {
+                $qrCode = $this->generateDvQrCode($dvRequest->id, $dvRequest->dv_number);
+                
+                if ($qrCode) {
+                    return response()->json([
+                        'success' => true,
+                        'qr_code' => $qrCode,
+                        'dv_number' => $dvRequest->dv_number
+                    ]);
+                }
+            }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to generate QR code'
+            ], 500);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error fetching QR code: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error generating QR code'
+            ], 500);
+        }
+    }
+
+      public function reject(Request $request, $id)
+    {
+        $request->validate([
+            'remarks' => 'required|string|max:1000',
+        ]);
+
+        try {
+            $dvRequest = DvRequest::findOrFail($id);
+            $statusBefore = $dvRequest->status;
+
+            // ✅ Only allow rejection if status is currently in Outgoing stage
+            if (!in_array($dvRequest->status, ['Outgoing_in_process'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This DV request cannot be rejected at its current stage.'
+                ], 422);
+            }
+
+            $rejectedAt = now();
+            $focalId = $dvRequest->focalperson_id;
+            $remarks = trim($request->remarks);
+
+            // ✅ Update DV request
+            $dvRequest->update([
+                'status'     => 'Outgoing_rejected',
+                'locked_by'  => null,
+                'locked_at'  => null,
+            ]);
+
+            // ✅ SAVE FINALIZATION HISTORY
+            $this->saveOutgoingFinalizationHistory(
+                $dvRequest,
+                'reject',
+                $remarks,
+                [
+                    'status_before' => $statusBefore,
+                    'status_after' => 'Outgoing_rejected',
+                    'rejected_by' => auth()->id(),
+                    'rejected_at' => $rejectedAt->toISOString(),
+                    'rejection_reason' => $remarks
+                ]
+            );
+
+            // ✅ Log rejection
+            $this->logAction(
+                $dvRequest->id,
+                'Outgoing',
+                'Outgoing_rejected',
+                $remarks
+            );
+
+            // ✅ Notify focal person
+            Notification::create([
+                'focalperson_id' => $focalId,
+                'dv_request_id'  => $dvRequest->id,
+                'status'         => 'Outgoing_rejected',
+                'action'         => 'Rejected',
+                'remarks'        => $remarks,
+            ]);
+
+            // ✅ Real-time push to focal person
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Outgoing_rejected',
+                'remarks'       => $remarks,
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            // ✅ Real-time push to Outgoing dashboard
+            $this->pusher->trigger('dv-requests-outgoing', 'dv-request-rejected', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Outgoing_rejected',
+                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            // ✅ Return JSON if AJAX
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'DV request has been rejected successfully.',
+                    'data' => [
+                        'id'         => $dvRequest->id,
+                        'status'     => 'Outgoing_rejected',
+                        'remarks'    => $remarks,
+                    ]
+                ]);
+            }
+
+            // ✅ Fallback redirect
+            return redirect()->route('Outgoing.dvrequests.index')
+                             ->with('error', 'DV request has been rejected.');
+
+        } catch (\Exception $e) {
+            \Log::error('Error rejecting DV request: ' . $e->getMessage());
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while rejecting the DV request.'
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'An error occurred while rejecting the DV request.');
+        }
+    }
+
+    public function printOfficialDv($id)
 {
     $dvRequest = DvRequest::with([
         'program',
@@ -669,67 +896,119 @@ public function generatePdf($id)
         return redirect()->back()->with('error', 'Error generating PDF: ' . $e->getMessage());
     }
 }
-
 public function previewDv($id)
 {
-    $dvRequest = DvRequest::with([
-        'program',
-        'focalPerson',
-        'respocenter',
-        'modeOfPayments',
-        'orsRequest.uacsCodes',
-        'orsRequest.Mfopap' // ✅ Load through orsRequest
-    ])->findOrFail($id);
-    $dvRequest->modeOfPayments->each(fn($mop) => $mop->pivot->load('paymentDetail'));
-    if ($dvRequest->status !== 'Outgoing_finalized') {
-        return redirect()->back()->with('error', 'This DV has not been finalized yet.');
+    try {
+        \Log::info('Accessing previewDv for ID: ' . $id);
+        
+        $dvRequest = DvRequest::with([
+            'program',
+            'focalPerson',
+            'respocenter',
+            'modeOfPayments',
+            'orsRequest.uacsCodes',
+            'orsRequest.Mfopap'
+        ])->findOrFail($id);
+        
+        \Log::info('DV Request found:', [
+            'id' => $dvRequest->id,
+            'status' => $dvRequest->status,
+            'dv_number' => $dvRequest->dv_number,
+            'finalized' => $dvRequest->status === 'Outgoing_finalized'
+        ]);
+    
+
+        
+        if (!$dvRequest->dv_number) {
+            \Log::warning('DV number missing for preview', ['id' => $dvRequest->id]);
+            return redirect()->back()->with('error', 'DV Number has not been assigned yet.');
+        }
+
+        $modeOfPayment = $dvRequest->modeOfPayments->first();
+        $paymentDetail = $modeOfPayment?->pivot?->paymentDetail;
+        $orsRequest = $dvRequest->orsRequest;
+        $uacsCodes = $orsRequest && $orsRequest->uacsCodes ? $orsRequest->uacsCodes : collect();
+
+        // Generate or retrieve QR code
+        if ($dvRequest->qr_code_data) {
+            $qrCode = $dvRequest->qr_code_data;
+        } else {
+            $qrCode = $this->generateDvQrCode($dvRequest->id, $dvRequest->dv_number);
+            $dvRequest->refresh();
+        }
+        
+        $data = [
+            'dvRequest' => $dvRequest,
+            'date' => $dvRequest->created_at->format('m/d/Y'),
+            'dv_no' => $dvRequest->dv_number,
+            'mode_of_payment' => $modeOfPayment?->mopname ?? 'Not specified',
+            'payee' => $dvRequest->payee_name ?? ($dvRequest->focalPerson ? 
+                    trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')) : 'N/A'),
+            'tin' => $dvRequest->focalPerson->TIN_number ?? $dvRequest->focalPerson->tin_number ?? '___________',
+            'amount' => number_format($dvRequest->amount, 2),
+            'address' => $dvRequest->Address ?? $dvRequest->payee_address ?? 'DAVAO CITY',
+            'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
+            'respocenter_code' => $dvRequest->respocenter->rccode ?? '',
+            'respocenter_desc' => $dvRequest->respocenter->description ?? '',
+            'mfocode' => $orsRequest && $orsRequest->mfopap ? ($orsRequest->mfopap->mfocode ?? '') : '',
+            'mfodescription' => $orsRequest && $orsRequest->mfopap ? ($orsRequest->mfopap->mfodescription ?? '') : '',
+            'uacsCodes' => $uacsCodes,
+            'bank_name' => $paymentDetail?->bank_name ?? '',
+            'bank_accnum' => $paymentDetail?->bank_accnum ?? '',
+            'bank_address' => $paymentDetail?->bank_address ?? '',
+            'ors_number' => $orsRequest->ors_number ?? '___________',
+            'imsd_head' => \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD'),
+            'accountant_name' => \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT'),
+            'regional_director' => \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR'),
+        ];
+
+        \Log::info('Successfully loading preview for DV: ' . $dvRequest->dv_number);
+        
+        return view('Outgoing.previewdv', [
+            'data' => $data,
+            'dvRequest' => $dvRequest,
+            'orsRequest' => $orsRequest,
+            'uacsCodes' => $uacsCodes,
+            'qrCode' => $qrCode,
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Error in previewDv: ' . $e->getMessage(), [
+            'id' => $id,
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return redirect()->back()->with('error', 'Error accessing DV preview: ' . $e->getMessage());
     }
-    
-    
-    $modeOfPayment = $dvRequest->modeOfPayments->first();
-    $paymentDetail = $modeOfPayment?->pivot?->paymentDetail;
-    $orsRequest = $dvRequest->orsRequest;
-    $uacsCodes = $orsRequest && $orsRequest->uacsCodes ? $orsRequest->uacsCodes : collect();
-
-      $qrCode = $this->generateDvQrCode($dvRequest->id, $dvRequest->dv_number);
-    
-    $data = [
-        'dvRequest' => $dvRequest,
-        'date' => $dvRequest->created_at->format('m/d/Y'),
-        'dv_no' => $dvRequest->dv_number,
-        'mode_of_payment' => $modeOfPayment?->mopname ?? 'Not specified',
-        'payee' => $dvRequest->payee_name ?? ($dvRequest->focalPerson ? 
-                trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')) : 'N/A'),
-        'tin' => $dvRequest->focalPerson->TIN_number ?? $dvRequest->focalPerson->tin_number ?? '___________',
-        'amount' => number_format($dvRequest->amount, 2),
-        'address' => $dvRequest->Address ?? $dvRequest->payee_address ?? 'DAVAO CITY',
-        'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
-        'respocenter_code' => $dvRequest->respocenter->rccode ?? '',
-        'respocenter_desc' => $dvRequest->respocenter->description ?? '',
-        'mfocode' => $orsRequest && $orsRequest->mfopap ? ($orsRequest->mfopap->mfocode ?? '') : '',
-        'mfodescription' => $orsRequest && $orsRequest->mfopap ? ($orsRequest->mfopap->mfodescription ?? '') : '',
-        'uacsCodes' => $uacsCodes,
-        'imsd_head' => 'Name of IMSD Head',
-        'accountant_name' => 'Name of Accountant',
-        'regional_director' => 'Name of Regional Director',
-        'bank_name' => $paymentDetail?->bank_name ?? '',
-        'bank_accnum' => $paymentDetail?->bank_accnum ?? '',
-        'bank_address' => $paymentDetail?->bank_address ?? '',
-        'ors_number' => $orsRequest->ors_number ?? '___________',
-        'imsd_head' => \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD'),
-        'accountant_name' => \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT'),
-        'regional_director' => \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR'),
-    ];
-
-    // ✅ Return view with prepared data
-    return view('Outgoing.previewdv', [
-    'data' => $data,
-    'dvRequest' => $dvRequest,
-    'orsRequest' => $orsRequest,
-    'uacsCodes' => $uacsCodes,
-    
-]);
 }
+
+// Add this method to your OutgoingDvController
+public function previewFromHistory($id)
+{
+    try {
+        $dvRequest = DvRequest::with([
+            'program',
+            'focalPerson',
+            'respocenter',
+            'orsRequest'
+        ])->findOrFail($id);
+
+        // Allow viewing from history even if not finalized
+        // But show a warning if not finalized
+        $warning = null;
+        if ($dvRequest->status !== 'Outgoing_finalized') {
+            $warning = 'Note: This DV request is not yet finalized.';
+        }
+
+        return view('Outgoing.history-preview', compact('dvRequest', 'warning'));
+        
+    } catch (\Exception $e) {
+        \Log::error('Error in previewFromHistory: ' . $e->getMessage());
+        return redirect()->route('dvrequests.dvloghistory')
+            ->with('error', 'Unable to view DV request: ' . $e->getMessage());
+    }
+}
+
 
 private function getValidatedDvRequest($id)
 {
@@ -814,25 +1093,96 @@ private function getValidatedDvRequest($id)
 
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
+    
+    public function history(Request $request)
+{
+    $query = OutgoingFinalizationHistory::with([
+        'dvRequest.program',
+        'dvRequest.focalPerson', 
+        'dvRequest.respocenter',
+        'verifier'
+    ])
+    ->where('verified_by', auth()->id());
 
-public function history()
-    {
-        $dvRequests = DvRequest::with([
-                'program',
-                'focalPerson',
-                'respocenter',
-                'accountingUnit',
-                'orsRequest',
-                'logs'
-            ])
-            ->where('status', 'Outgoing_finalized')
-            ->orderBy('updated_at', 'desc')
-            ->get();
-
-        return view('Outgoing.dvloghistory', compact('dvRequests'));
+    // Search by DV Number
+    if ($request->has('search') && $request->search) {
+        $query->whereHas('dvRequest', function($q) use ($request) {
+            $q->where('dv_number', 'like', '%' . $request->search . '%');
+        });
     }
 
- protected function logAction($dvRequestId, $action, $status, $remarks = null)
+    // Filter by Program
+    if ($request->has('program') && $request->program) {
+        $query->whereHas('dvRequest.program', function($q) use ($request) {
+            $q->where('prcode', $request->program);
+        });
+    }
+
+    // Filter by Verification Step
+    if ($request->has('step') && $request->step) {
+        $query->where('verification_step', $request->step);
+    }
+
+    // Date range filter
+    if ($request->has('date_from') && $request->date_from) {
+        $query->whereDate('verified_at', '>=', $request->date_from);
+    }
+
+    if ($request->has('date_to') && $request->date_to) {
+        $query->whereDate('verified_at', '<=', $request->date_to);
+    }
+
+     $verificationHistory = $query->orderBy('verified_at', 'desc')
+                                ->paginate(20)
+                                ->appends($request->all());
+
+    // Debug: Check what data you're getting
+    if ($verificationHistory->count() > 0) {
+        logger('First record data:', [
+            'dv_request_id' => $verificationHistory->first()->dv_request_id,
+            'has_dvRequest' => !is_null($verificationHistory->first()->dvRequest),
+            'has_program' => !is_null($verificationHistory->first()->dvRequest->program ?? null),
+            'has_focalPerson' => !is_null($verificationHistory->first()->dvRequest->focalPerson ?? null),
+            'verification_data' => $verificationHistory->first()->verification_data,
+        ]);
+    } else {
+        logger('No verification history records found for the given filters.');
+    }
+
+                                
+    return view('Outgoing.dvloghistory', compact('verificationHistory'));
+}
+
+    // ADD this new method for saving verification history
+   protected function saveOutgoingFinalizationHistory($dvRequest, $step, $remarks = null, $data = [])
+{ 
+    try{ 
+    OutgoingFinalizationHistory::create([
+       'dv_request_id'      => $dvRequest->id,
+                    'verified_by'        => auth()->id(),
+                    'verification_step'  => $step,
+                    'status_before'      => $data['status_before'] ?? $dvRequest->getOriginal('status'),
+                    'status_after'       => $data['status_after'] ?? $dvRequest->status,
+                    'verification_data'  => $data,
+                    'remarks'            => $remarks,
+                    'verified_at'        => now(),
+                ]);
+            
+            } catch (\Exception $e) {
+                \Log::error('Failed to save Incoming-GIP verification history', [
+                    'dv_request_id' => $dvRequest->id ?? null,
+                    'step' => $step,
+                    'error' => $e->getMessage(),
+                ]);
+
+                // Optionally, rethrow to ensure rollback inside DB::transaction
+                throw $e;
+            }
+        
+}
+
+
+    protected function logAction($dvRequestId, $action, $status, $remarks = null)
     {
         $logData = [
             'dv_request_id' => $dvRequestId,

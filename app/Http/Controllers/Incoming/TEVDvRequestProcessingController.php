@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
+use App\Models\IncomingTEVVerificationHistory;
 use App\Models\Notification;
 use App\Services\PusherService;
 use App\Models\TEVAttachment;
@@ -107,6 +108,8 @@ class TEVDvRequestProcessingController extends Controller
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
+        $statusBefore = $dvRequest->status;
+        $receivedAt = now();
         
         if ($dvRequest->status !== 'IMSD_verified') {
             return response()->json([
@@ -115,8 +118,7 @@ class TEVDvRequestProcessingController extends Controller
             ], 422);
         }
         
-        $receivedAt = now();
-        
+    
         $dvRequest->update([
             'status'           => 'Incoming-TEV_received',
             'accountingunit_id'=> auth()->id(),
@@ -125,6 +127,9 @@ class TEVDvRequestProcessingController extends Controller
             'locked_by'        => auth()->id(),
             'locked_at'        => $receivedAt,
         ]);
+    
+       
+        // Log the action
         $this->logAction(
             $dvRequest->id,
             'Incoming',
@@ -132,6 +137,17 @@ class TEVDvRequestProcessingController extends Controller
             'Request officially received by Incoming-TEV'
         );
         
+         $this->saveIncomingTEVVerificationHistory(
+            $dvRequest,
+            'receive',
+            'Request officially received by Incoming-TEV',
+            [
+                'status_before' => $statusBefore,
+                'status_after'  => 'Incoming-TEV_received',
+                'received_by'   => auth()->id(),
+                'received_at'   => $receivedAt->toISOString()
+            ]
+        );
        
         $focalId = $dvRequest->focalperson_id;
         Notification::create([
@@ -189,7 +205,8 @@ public function startProcessing(Request $request, $id)
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
-
+        $statusBefore = $dvRequest->status;
+        $startedAt = now();
         if ($dvRequest->status !== 'Incoming-TEV_received') {
             return response()->json([
                 'success' => false,
@@ -197,7 +214,7 @@ public function startProcessing(Request $request, $id)
             ], 422);
         }
 
-        $startedAt = now();
+    
 
         $dvRequest->update([
             'status'    => 'Incoming-TEV_in_process',
@@ -205,6 +222,7 @@ public function startProcessing(Request $request, $id)
             'locked_at' => $startedAt,
         ]);
 
+      
         // Log
         $this->logAction(
             $dvRequest->id,
@@ -212,6 +230,19 @@ public function startProcessing(Request $request, $id)
             'Incoming-TEV_in_process',
             'Processing started by Incoming-TEV',
         );
+
+          $this->saveIncomingTEVVerificationHistory(
+            $dvRequest,
+            'process',
+            'Processing started by Incoming-TEV',
+            [
+                'status_before' => $statusBefore,
+                'status_after'  => 'Incoming-TEV_in_process',
+                'processed_by'  => auth()->id(),
+                'started_at'    => $startedAt->toISOString()
+            ]
+        );
+
 
         // Notify focal person
         $focalId = $dvRequest->focalperson_id;
@@ -374,22 +405,36 @@ public function startProcessing(Request $request, $id)
     $dvRequest = DvRequest::with('tevAttachments')
         ->whereHas('program', fn($q) => $q->where('prcode', 'TEV')) 
         ->findOrFail($id);
-
+    $statusBefore = $dvRequest->status;
+    $verifiedAt = now(); // Define verifiedAt here
    
+    $attachmentData = [];
     if ($dvRequest->tev_modality) {
         // Get all submitted attachment IDs
         $submittedIds = $request->has('tev_attachments') 
             ? array_keys($request->tev_attachments) 
             : [];
 
-        // Update all attachments for this modality
+        // Update all attachments for this modality AND collect data for history
         $dvRequest->tevAttachments()
             ->where('modality', $dvRequest->tev_modality)
             ->get()
-            ->each(function($attachment) use ($submittedIds) {
+            ->each(function($attachment) use ($submittedIds, &$attachmentData) {
+                $isPresent = in_array($attachment->id, $submittedIds);
+                
+                // Update the attachment
                 $attachment->update([
-                    'is_present' => in_array($attachment->id, $submittedIds)
+                    'is_present' => $isPresent
                 ]);
+                
+                // Collect attachment data for verification history
+                $attachmentData[] = [
+                    'id' => $attachment->id,
+                    'name' => $attachment->name,
+                    'is_present' => $isPresent,
+                    'modality' => $attachment->modality,
+                    'type' => 'tev'
+                ];
             });
     }
                         
@@ -400,21 +445,41 @@ public function startProcessing(Request $request, $id)
         'locked_at'  => null,
     ]);
 
-    // Trigger Pusher notification to Budget Officer
-    $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
-        'dv_request_id' => $dvRequest->id,
-        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-        'program'       => $dvRequest->program->prcode ?? 'N/A',
-        'status'        => 'Incoming-TEV_verified',
-        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-    ]);
-
-    // Create notification for focal person
-    $focalId = $dvRequest->focalperson_id;
+    // Define remarks with proper fallback
+    $remarks = $request->remarks ?? 'DV Request approved and forwarded to Budget Officer.';
     $status = 'Incoming-TEV_verified';
     $action = 'Approved';
-    $remarks = $request->remarks ?? 'DV Request approved and forwarded to Budget Officer.';
+    $focalId = $dvRequest->focalperson_id;
 
+ 
+      // ✅ FIXED: Save verification history FIRST with proper data
+    $this->saveIncomingTEVVerificationHistory(
+        $dvRequest,
+        'verify',
+        $remarks, // Use the defined remarks variable
+        [
+            'status_before' => $statusBefore,
+            'status_after'  => 'Incoming-TEV_verified',
+            'verified_by'   => auth()->id(),
+            'attachments_checked' => $attachmentData,
+            'modality' => $dvRequest->tev_modality,
+            'verified_at' => $verifiedAt->toISOString()
+        ]
+    );
+
+    // ✅ FIXED: Log action with proper parameters
+    $this->logAction(
+        $dvRequest->id,
+        'Incoming-TEV',     // Department
+        'Approved',         // Action
+        'Incoming-TEV_verified', // Status
+        $remarks            // Remarks
+    );
+
+     
+
+
+    // Create notification for focal person
     Notification::create([
         'focalperson_id' => $focalId,
         'dv_request_id'  => $dvRequest->id,
@@ -423,36 +488,34 @@ public function startProcessing(Request $request, $id)
         'remarks'        => $remarks,
     ]);
 
-    // Trigger Pusher notification to focal person
-    if ($dvRequest->focalperson_id) {
-        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+    // Trigger Pusher notifications
+    $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
+        'dv_request_id' => $dvRequest->id,
+        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+        'program'       => $dvRequest->program->prcode ?? 'N/A',
+        'status'        => $status,
+        'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+    ]);
+
+    if ($focalId) {
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
             'isRejected'    => false,
             'remarks'       => $remarks,
-            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
     }
 
-    // Trigger Pusher notification to Incoming-TEV channel
     $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-verified', [
         'dv_request_id' => $dvRequest->id,
         'status'        => $status,
-        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
     ]);
-
-    // Log the action
-    $this->logAction(
-        $dvRequest->id,
-        'Incoming-TEV',
-        'Approved',
-        $remarks
-    );
 
     return redirect()->route('Incoming.TEV.index')
         ->with('success', 'DV Request has been verified and forwarded to Budget Officer.');
 }
-    
         public function reject(Request $request, $id)
 {
     try {
@@ -465,6 +528,7 @@ public function startProcessing(Request $request, $id)
         $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
                               ->findOrFail($id);
 
+        $statusBefore = $dvRequest->status;
         // ✅ Only allow rejection if status is currently in Incoming-TEV stage
         if (!in_array($dvRequest->status, ['Incoming-TEV_received', 'Incoming-TEV_in_process'])) {
             return response()->json([
@@ -483,6 +547,22 @@ public function startProcessing(Request $request, $id)
             'locked_by'  => null,
             'locked_at'  => null,
         ]);
+
+
+        $this->saveIncomingGIPVerificationHistory(
+                $dvRequest,
+                'reject',
+                $remarks,
+                [
+                    'status_before'   => $statusBefore,
+                    'status_after'    => 'Incoming-GIP_rejected',
+                    'action'          => 'rejected',
+                    'rejected_by'     => auth()->id(),
+                    'rejected_at'     => $rejectedAt->toISOString(),
+                    'rejection_reason'=> $remarks,
+                ]
+            );
+
 
         // ✅ Log rejection
         $this->logAction(
@@ -620,36 +700,78 @@ public function startProcessing(Request $request, $id)
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
 
-public function history()
-{
-    $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'accountingUnit'])
-        ->whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
-        ->where('status', 'Incoming-TEV_verified') 
-        ->orderBy('updated_at', 'desc')
-        ->get();
-
-    return view('Incoming.TEV.loghistory', compact('dvRequests'));
-}
-   protected function logAction($dvRequestId, $action, $status, $remarks = null)
+    public function history()
     {
-        $logData = [
-            'dv_request_id' => $dvRequestId,
-            'action'        => $action,
-            'status'        => $status,
-            'remarks'       => $remarks,
-        ];
+        $verificationHistory = IncomingTEVVerificationHistory::with([
+            'dvRequest.program',
+            'dvRequest.focalPerson',
+                    'dvRequest.respocenter',
+                    'verifier'
+                ])
+                ->where('verified_by', auth()->id())
+                ->orderBy('verified_at', 'desc')
+                ->paginate(20);
 
-        // Detect which guard is active
-        if (auth()->guard('focal')->check()) {
-            $logData['focalperson_id'] = auth()->id();
-        } elseif (auth()->guard('web')->check()) {
-            $logData['accountingunit_id'] = auth()->id();
-        } else {
-            $logData['external_actor'] = 'System';
+                return view('Incoming.TEV.loghistory', compact('verificationHistory'));
         }
 
-        DvRequestLog::create($logData);
-    }
+    protected function saveIncomingTEVVerificationHistory($dvRequest, $step, $remarks = null, $data = [])
+    {
+            try  {
+                IncomingTEVVerificationHistory::create([
+                   'dv_request_id'      => $dvRequest->id,
+                    'verified_by'        => auth()->id(),
+                    'verification_step'  => $step,
+                    'status_before'      => $data['status_before'] ?? $dvRequest->getOriginal('status'),
+                    'status_after'       => $data['status_after'] ?? $dvRequest->status,
+                    'verification_data'  => $data,
+                    'remarks'            => $remarks,
+                    'verified_at'        => now(),
+                ]);
 
+            } catch (\Exception $e) {
+                \Log::error('Failed to save Incoming-GIP verification history', [
+                    'dv_request_id' => $dvRequest->id ?? null,
+                    'step' => $step,
+                    'error' => $e->getMessage(),
+                ]);
 
+                // Optionally, rethrow to ensure rollback inside DB::transaction
+                throw $e;
+            }
+        }
+    protected function logAction($dvRequestId, $department, $action, $remarks = null)
+        {
+            try {
+                $logData = [
+                    'dv_request_id' => $dvRequestId,
+                    'action'        => $action,
+                    'remarks'       => $remarks,
+                    'created_at'    => now(),
+                    'updated_at'    => now(),
+                ];
+
+                // Set the correct user based on who is performing the action
+                if (auth()->guard('web')->check()) {
+                    // Accounting/Admin user - set accountingunit_id
+                    $logData['accountingunit_id'] = auth()->id();
+                    // Don't set focalperson_id for accounting users
+                } elseif (auth()->guard('focal')->check()) {
+                    // Focal person - set focalperson_id
+                    $logData['focalperson_id'] = auth()->id();
+                } else {
+                    // System or external actor
+                    $logData['external_actor'] = 'System';
+                }
+
+                DvRequestLog::create($logData);
+
+            } catch (\Exception $e) {
+                \Log::error('Failed to log action: ' . $e->getMessage(), [
+                    'dv_request_id' => $dvRequestId,
+                    'action' => $action,
+                ]);
+                // Don't throw error - just log and continue
+            }
+        }
 }

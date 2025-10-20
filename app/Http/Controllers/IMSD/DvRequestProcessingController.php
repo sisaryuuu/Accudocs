@@ -7,6 +7,7 @@ use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Services\PusherService;
 use App\Models\TUPADAttachment;
+use App\Models\IMSDVerificationHistory;
 use App\Models\TEVAttachment;
 use App\Models\Notification;
 use Illuminate\Http\Request;
@@ -52,9 +53,8 @@ class DvRequestProcessingController extends Controller
         }
 
         $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
-        $sidebarCounts = $this->getSidebarCounts();
-        
-        return view('RegionalOffices.IMSD.index', compact('dvRequests','sidebarCounts'));
+
+        return view('RegionalOffices.IMSD.index', compact('dvRequests'));
     }
 
 
@@ -191,6 +191,8 @@ class DvRequestProcessingController extends Controller
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
+        $statusBefore = $dvRequest->status;
+        $receivedAt = now();
         
         if ($dvRequest->status !== 'submitted') {
             return response()->json([
@@ -199,7 +201,7 @@ class DvRequestProcessingController extends Controller
             ], 422);
         }
         
-        $receivedAt = now();
+      
         
         $dvRequest->update([
             'status'           => 'IMSD_received',
@@ -210,6 +212,19 @@ class DvRequestProcessingController extends Controller
             'locked_at'        => $receivedAt,
         ]);
         
+
+        $this->saveVerificationHistory(
+            $dvRequest,
+            'receive',
+            'Request officially received by IMSD',
+            [
+                'status_before' => $statusBefore,
+                'status_after'  => 'IMSD_received',
+                'received_by'   => auth()->id(),
+                'received_at'   => $receivedAt->toISOString(),
+            ]
+        );
+
         // Log
         $this->logAction(
             $dvRequest->id,
@@ -276,7 +291,8 @@ class DvRequestProcessingController extends Controller
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
-
+        $statusBefore = $dvRequest->status;
+        $receivedAt = now();
         if ($dvRequest->status !== 'IMSD_received') {
             return response()->json([
                 'success' => false,
@@ -292,7 +308,21 @@ class DvRequestProcessingController extends Controller
             'locked_at' => $startedAt,
         ]);
 
-        // Log
+    
+
+        $this->saveVerificationHistory(
+            $dvRequest,
+            'process',
+            'Processing started by IMSD',
+            [
+                'action'        => 'processing_started',
+                'status_before' => $statusBefore,
+                'status_after'  => 'IMSD_processing',
+                'processed_by'  => auth()->id(),
+                'processed_at'  => $startedAt->toISOString(),
+            ]
+        );
+                // Log
         $this->logAction(
             $dvRequest->id,
             'IMSD',
@@ -397,7 +427,10 @@ public function verify(Request $request, $id)
     ]);
 
     $dvRequest = DvRequest::with(['gipAttachments', 'tupadAttachments', 'tevAttachments'])->findOrFail($id);
+    $statusBefore = $dvRequest->status;
 
+    
+    $attachmentData = [];
     // --- TUPAD ATTACHMENTS ---
     if ($dvRequest->program->prcode === 'TUPAD' && $request->filled('modality')) {
         $modality = $request->modality;
@@ -426,6 +459,13 @@ public function verify(Request $request, $id)
         foreach ($dvRequest->tupadAttachments()->where('modality', $modality)->get() as $attachment) {
             $isPresent = isset($request->attachments[$attachment->name]);
             $attachment->update(['is_present' => $isPresent]);
+
+              $attachmentData[] = [
+                'name' => $attachment->name,
+                'is_present' => $isPresent,
+                'modality' => $modality,
+                'type' => 'tupad'
+            ];
         }
     }
 
@@ -457,6 +497,13 @@ public function verify(Request $request, $id)
         foreach ($dvRequest->tevAttachments()->where('modality', $modality)->get() as $attachment) {
             $isPresent = isset($request->tev_attachments[$attachment->name]);
             $attachment->update(['is_present' => $isPresent]);
+
+             $attachmentData[] = [
+                'name' => $attachment->name,
+                'is_present' => $isPresent,
+                'modality' => $modality,
+                'type' => 'tev'
+            ];
         }
     }
 
@@ -472,15 +519,22 @@ public function verify(Request $request, $id)
             $isPresent = isset($request->attachments[$item]);
             $attachment = $dvRequest->gipAttachments()->firstOrCreate(['name' => $item]);
             $attachment->update(['is_present' => $isPresent]);
+                 $attachmentData[] = [
+                'name' => $item,
+                'is_present' => $isPresent,
+                'type' => 'gip'
+            ];
         }
     }
 
+        $verifiedAt = now();
     // --- Common Post-Verification Logic ---
     $dvRequest->update([
         'status' => 'IMSD_verified',
         'locked_by' => null,
         'locked_at' => null,
     ]);
+
 
     $focalId = $dvRequest->focalperson_id;
     $status = 'IMSD_verified';
@@ -519,6 +573,21 @@ public function verify(Request $request, $id)
             'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
     }
+
+    $this->saveVerificationHistory(
+        $dvRequest,
+        'verify',
+        $request->remarks ?? 'Request verified by IMSD',
+        [
+            'action'             => 'verified',
+            'status_before'      => $statusBefore,
+            'status_after'       => 'IMSD_verified',
+            'attachments_checked'=> $attachmentData,
+            'modality'           => $request->modality ?? $request->tev_modality ?? null,
+            'verified_by'        => auth()->id(),
+            'verified_at'        => $verifiedAt->toISOString(),
+        ]
+    );
 
     $this->logAction(
         $dvRequest->id,
@@ -563,6 +632,18 @@ public function reject(Request $request, $id)
             'locked_at'  => null,
         ]);
 
+
+          $this->saveVerificationHistory(
+            $dvRequest,
+            'reject', // ✅ Changed from 'process' to 'reject'
+            $remarks,
+            [
+                'action' => 'rejected',
+                'rejected_by' => auth()->id(),
+                'rejected_at' => $rejectedAt->toISOString(), // ✅ Use $rejectedAt, not $startedAt
+                'rejection_reason' => $remarks
+            ]
+        );
         // ✅ Log rejection
         $this->logAction(
             $dvRequest->id,
@@ -636,9 +717,6 @@ public function reject(Request $request, $id)
     }
 }
 
-
-
-        // Redirect to first pending DV request
     public function redirectToFirstPending()
 {
     $currentUserId = auth()->id();
@@ -703,16 +781,21 @@ public function reject(Request $request, $id)
     }
 
 
-    public function history()
+    public function verificationHistory()
     {
-        $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'accountingUnit', 'logs'])
-            ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD','TEV']))
-            ->where('status', 'IMSD_verified')
-            ->orderBy('updated_at', 'desc')
-            ->get();
+        $verificationHistory = IMSDVerificationHistory::with([
+            'dvRequest.program',
+            'dvRequest.focalPerson', 
+            'dvRequest.respocenter',
+            'verifier'
+        ])
+        ->where('verified_by', auth()->id()) // Only show current user's history
+        ->orderBy('verified_at', 'desc')
+        ->paginate(20);
 
-        return view('RegionalOffices.IMSD.loghistory', compact('dvRequests'));
+        return view('RegionalOffices.IMSD.loghistory', compact('verificationHistory'));
     }
+
     protected function logAction($dvRequestId, $action, $status, $remarks = null)
     {
         $logData = [
@@ -734,8 +817,22 @@ public function reject(Request $request, $id)
         DvRequestLog::create($logData);
     }
 
+protected function saveVerificationHistory($dvRequest, $step, $remarks = null, $data = [])
+{
+    $statusBefore = $data['status_before'] ?? ($dvRequest->getOriginal('status') ?? 'unknown');
+    $statusAfter  = $data['status_after'] ?? $dvRequest->status;
 
-
+    IMSDVerificationHistory::create([
+        'dv_request_id'      => $dvRequest->id,
+        'verified_by'        => auth()->id(),
+        'verification_step'  => $step,
+        'status_before'      => $statusBefore,
+        'status_after'       => $statusAfter,
+        'verification_data'  => $data,
+        'remarks'            => $remarks,
+        'verified_at'        => now(),
+    ]);
+}
 
     
 }

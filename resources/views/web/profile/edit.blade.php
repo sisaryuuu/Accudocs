@@ -49,6 +49,13 @@
                    class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
         </div>
 
+      <div>
+            <label class="block font-semibold text-gray-700">Phone Number</label>
+            <input type="number" name="phone" value="{{ old('phone', $user->phone) }}"
+                   class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+        </div>
+
+
         <!-- Password -->
         <div>
             <label class="block font-semibold text-gray-700">Password (leave blank to keep current)</label>

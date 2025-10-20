@@ -26,8 +26,8 @@
         <div>
             <span class="font-semibold">Email:</span> {{ $user->email }}
         </div>
-        <div>
-            <span class="font-semibold">Program:</span> {{ $user->program->prcode ?? 'N/A' }} - {{ $user->program->description ?? 'N/A'}}
+         <div>
+            <span class="font-semibold">Phone Number:</span> {{ $user->contactnumber }}
         </div>
     </div>
 

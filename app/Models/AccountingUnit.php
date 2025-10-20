@@ -21,11 +21,12 @@ class AccountingUnit extends Authenticatable
 
     protected $fillable = [
         'fname',
-        'mi',
+        'mi', 
         'lname',
         'email',
+        'phone',
         'password',
-        'program_id',
+        'status',
         'profile_image',
     ];
 
