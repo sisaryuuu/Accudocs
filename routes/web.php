@@ -4,13 +4,20 @@ use App\Http\Controllers\QRCode\DOLEQRController;
 use App\Http\Controllers\DVORS\VoucherController;
 use App\Http\Controllers\FocalPerson\DvRequestController;
 use App\Http\Controllers\BudgetOfficer\ObligateDVORSController;
+use App\Http\Controllers\BudgetOfficer\ORSRequestAgingController;
 use App\Http\Controllers\BudgetOfficer\ADLController;
 use App\Http\Controllers\Outgoing\OutgoingDvController;
+use App\Http\Controllers\Outgoing\OutgoingRequestAgingController;
 use App\Http\Controllers\AccountingIII\RANCAController;
+use App\Http\Controllers\AccountingIII\RANCARequestAgingController;
+use App\Http\Controllers\IMSD\DvRequestAgingController;
+use App\Http\Controllers\Incoming\GIPRequestAgingController;
 use App\Http\Controllers\IMSD\DvRequestProcessingController;
 use App\Http\Controllers\Incoming\GIPDvRequestProcessingController;
 use App\Http\Controllers\Incoming\TEVDvRequestProcessingController;
+use App\Http\Controllers\Incoming\TEVRequestAgingController;
 use App\Http\Controllers\Incoming\TupadDvRequestProcessingController;
+use App\Http\Controllers\Incoming\TUPADRequestAgingController;
 use App\Http\Controllers\Auth\FocalPersonController;
 use App\Http\Controllers\FocalPerson\FocalProfileController;
 use App\Http\Controllers\Auth\FocalPersonRegisterController;
@@ -233,43 +240,69 @@ Route::get('/dv/verify/{reference}', [DvRequestController::class, 'verifyQR'])->
 
 Route::post('/dv/verify/manual', [DvRequestController::class, 'verifyManual'])->name('dv.verify.manual');
 
-
 Route::middleware(['auth:web', 'role:Admin|IMSD'])->prefix('RegionalOffices/IMSD')->group(function () {
 
     // Index page — list all DV requests for IMSD
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
     ->name('RegionalOffices.IMSD.index');
+    
     Route::get('/dvrequests/fetchimsdRecent', [DvRequestProcessingController::class, 'fetchimsdRecent'])
     ->name('RegionalOffices.IMSD.dvrequests.fetchimsdRecent');
-   Route::get('/RegionalOffices/IMSD/fetchAll', [DvRequestProcessingController::class, 'fetchAll'])
+   
+    Route::get('/fetchAll', [DvRequestProcessingController::class, 'fetchAll']) // Remove duplicate prefix
     ->name('RegionalOffices.IMSD.fetchAll');
+    
     Route::get('/dvrequests/{id}', [DvRequestProcessingController::class, 'show'])
     ->name('RegionalOffices.IMSD.verifydv');
-     Route::post('/dvrequests/{id}/receive', [DvRequestProcessingController::class, 'receive'])
+    
+    Route::post('/dvrequests/{id}/receive', [DvRequestProcessingController::class, 'receive'])
     ->name('IMSD.dvrequests.receive');
-    Route::post('/dvrequests/{id}/start-processing', 
-    [DvRequestProcessingController::class, 'startProcessing'])->name('IMSD.dvrequests.startProcessing');
+    
+    Route::post('/dvrequests/{id}/start-processing', [DvRequestProcessingController::class, 'startProcessing'])
+    ->name('IMSD.dvrequests.startProcessing');
+    
     Route::post('/dvrequests/{id}/verify', [DvRequestProcessingController::class, 'verify'])
     ->name('IMSD.dvrequests.verify');
+    
     Route::post('/dvrequests/{id}/reject', [DvRequestProcessingController::class, 'reject'])
     ->name('IMSD.dvrequests.reject');
-   Route::get('/history', [DvRequestProcessingController::class, 'verificationHistory'])
+   
+    Route::get('/history', [DvRequestProcessingController::class, 'verificationHistory'])
     ->name('RegionalOffices.IMSD.history');
-    Route::get('/RegionalOffices/IMSD/load-form/{id}',[DvRequestProcessingController::class, 'loadForm'])
+    
+    Route::get('/load-form/{id}', [DvRequestProcessingController::class, 'loadForm']) // Remove duplicate prefix
     ->name('RegionalOffices.IMSD.loadForm');
+    
     Route::get('/redirect-to-first', [DvRequestProcessingController::class, 'redirectToFirstPending'])
     ->name('RegionalOffices.IMSD.redirectFirst');
+    
     Route::get('/dvrequests/{id}/attachments/edit', [DvRequestProcessingController::class, 'editAttachments'])
     ->name('dvRequest.editAttachments');
+    
     Route::put('/dvrequests/{id}/attachments', [DvRequestProcessingController::class, 'updateAttachments'])
     ->name('dvRequest.updateAttachments');
+    
     Route::post('/dvrequests/{id}/refresh-lock', [DvRequestProcessingController::class, 'refreshLock'])
     ->name('dvrequests.refreshLock');
+    
     Route::post('/dvrequests/{id}/release-lock', [DvRequestProcessingController::class, 'releaseLock'])
     ->name('dvrequests.releaseLock');
-    Route::get('/RegionalOffices/IMSD/dvrequests/{id}/tupad-attachments/{modality}', 
-    [DvRequestProcessingController::class, 'getTupadAttachmentsByModality'])
+    
+    Route::get('/dvrequests/{id}/tupad-attachments/{modality}', [DvRequestProcessingController::class, 'getTupadAttachmentsByModality']) // Remove duplicate prefix
     ->name('RegionalOffices.IMSD.dvrequests.tupadAttachments');
+    
+    // Aging routes
+    Route::get('/aging-documents', [DvRequestAgingController::class, 'getAgingDocuments'])
+    ->name('IMSD.aging.documents');
+    
+    Route::get('/aging-statistics', [DvRequestAgingController::class, 'getAgingStatistics'])
+    ->name('IMSD.aging.statistics');
+    
+    Route::post('/send-aging-alerts', [DvRequestAgingController::class, 'sendAgingAlerts'])
+    ->name('IMSD.aging.send');
+
+    Route::post('/aging-alerts/{id}/acknowledge', [DvRequestAgingController::class, 'acknowledgeAlert'])
+    ->name('IMSD.aging.acknowledge');
 });
 
 
@@ -313,6 +346,23 @@ Route::middleware(['auth:web', 'role:Admin|Incoming-GIP'])->prefix('Incoming/GIP
     Route::post('/dvrequests/{id}/release-lock', [GIPDvRequestProcessingController::class, 'releaseLock'])
     ->name('Incoming.GIP.dvrequests.releaseLock');
 
+     Route::get('/aging/documents', [GIPRequestAgingController::class, 'getAgingDocuments'])
+        ->middleware('permission:gip.view')
+        ->name('GIP.aging.documents');
+    
+    Route::get('/aging/statistics', [GIPRequestAgingController::class, 'getAgingStatistics'])
+        ->middleware('permission:gip.view')
+        ->name('GIP.aging.statistics');
+    
+    Route::post('/aging-alerts/{alertId}/acknowledge', [GIPRequestAgingController::class, 'acknowledgeAlert'])
+        ->middleware('permission:gip.approve')
+        ->name('GIP.aging.acknowledge');
+    
+    // Optional: Route to send aging alerts manually (for testing)
+    Route::post('/aging/send-alerts', [GIPRequestAgingController::class, 'sendAgingAlerts'])
+        ->middleware('permission:gip.approve')
+        ->name('GIP.aging.sendAlerts');
+
 });
 
 Route::middleware(['auth:web', 'role:Admin|Incoming-TUPAD'])->prefix('Incoming/TUPAD')->group(function () {
@@ -349,15 +399,20 @@ Route::middleware(['auth:web', 'role:Admin|Incoming-TUPAD'])->prefix('Incoming/T
     Route::get('/dvrequests/{id}/fetch', [TupadDvRequestProcessingController::class, 'fetch'])
     ->middleware('permission:tupad.view')
     ->name('Incoming.TUPAD.dvrequests.fetch');
-  Route::put('/dvrequests/{id}/attachments', [TupadDvRequestProcessingController::class, 'updateAttachments'])
+    Route::put('/dvrequests/{id}/attachments', [TupadDvRequestProcessingController::class, 'updateAttachments'])
         ->name('Incoming.TUPAD.dvrequests.updateAttachments');
-       Route::post('/dvrequests/{id}/refresh-lock', [TupadDvRequestProcessingController::class, 'refreshLock'])
+    Route::post('/dvrequests/{id}/refresh-lock', [TupadDvRequestProcessingController::class, 'refreshLock'])
     ->name('Incoming.TUPAD.dvrequests.refreshLock');
 
     Route::post('/dvrequests/{id}/release-lock', [TupadDvRequestProcessingController::class, 'releaseLock'])
     ->name('Incoming.TUPAD.dvrequests.releaseLock');
-
-  
+    // Aging routes
+  Route::get('/aging-documents', [TUPADRequestAgingController::class, 'getAgingDocuments'])
+    ->name('TUPAD.aging.documents');
+Route::get('/aging-statistics', [TUPADRequestAgingController::class, 'getAgingStatistics'])
+    ->name('TUPAD.aging.statistics');
+Route::post('/aging-alerts/{alert}/acknowledge', [TUPADRequestAgingController::class, 'acknowledgeAlert'])
+    ->name('TUPAD.aging.acknowledge');
 });
 Route::middleware(['auth:web', 'role:Admin|Incoming-TEV'])->prefix('Incoming/TEV')->group(function () {
     Route::get('/index', [TEVDvRequestProcessingController::class, 'index'])
@@ -387,7 +442,16 @@ Route::middleware(['auth:web', 'role:Admin|Incoming-TEV'])->prefix('Incoming/TEV
     Route::post('/dvrequests/{id}/release-lock', [TEVDvRequestProcessingController::class, 'releaseLock'])
     ->name('Incoming.TEV.dvrequests.releaseLock');
 
-  
+      // ============ TEV AGING ROUTES ============
+    Route::get('/aging/documents', [TEVRequestAgingController::class, 'getAgingDocuments'])
+        ->middleware('permission:tev.view')
+        ->name('TEV.aging.documents');
+    
+    Route::get('/aging/statistics', [TEVRequestAgingController::class, 'getAgingStatistics'])
+        ->middleware('permission:tev.view')
+        ->name('TEV.aging.statistics');
+    
+
 });
 Route::middleware(['auth:web', 'role:Admin|Budget_Officer'])->prefix('/BudgetOfficer')->name('BudgetOfficer.')->group(function () {
     
@@ -473,56 +537,120 @@ Route::middleware(['auth:web', 'role:Admin|Budget_Officer'])->prefix('/BudgetOff
     Route::get('/adl/check', [ObligateDVORSController::class, 'checkADLCode'])
         ->middleware('permission:budget.view')
         ->name('adl.check');
+
+         Route::prefix('ors-aging')->group(function () {
+        // Get ORS aging documents
+        Route::get('/documents', [ORSRequestAgingController::class, 'getAgingDocuments'])
+            ->middleware('permission:budget.view')
+            ->name('ors-aging.documents');
+            
+        // Get ORS aging statistics
+        Route::get('/statistics', [ORSRequestAgingController::class, 'getAgingStatistics'])
+            ->middleware('permission:budget.view')
+            ->name('ors-aging.statistics');
+            
+        // Get unacknowledged alerts count
+        Route::get('/unacknowledged-count', [ORSRequestAgingController::class, 'getUnacknowledgedCount'])
+            ->middleware('permission:budget.view')
+            ->name('ors-aging.unacknowledged-count');
+            
+        // Send aging alerts (admin/automated)
+        Route::post('/send-alerts', [ORSRequestAgingController::class, 'sendAgingAlerts'])
+            ->middleware('permission:budget.edit')
+            ->name('ors-aging.send-alerts');
+            
+        // Acknowledge an ORS aging alert
+        Route::post('/acknowledge/{dvRequest}', [ORSRequestAgingController::class, 'acknowledgeAlert'])
+            ->middleware('permission:budget.edit')
+            ->name('ors-aging.acknowledge');
+            
+        // Get ORS aging history
+        Route::get('/history', [ORSRequestAgingController::class, 'getAgingHistory'])
+            ->middleware('permission:budget.view')
+            ->name('ors-aging.history');
+    });
 });
                     
 Route::middleware(['auth:web','role:Admin|Outgoing'])->prefix('/Outgoing')->name('Outgoing.')->group(function () {
-        Route::get('/dvrequests', [OutgoingDvController::class, 'index'])
+    // Main DV Requests Routes
+    Route::get('/dvrequests', [OutgoingDvController::class, 'index'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.index');
-        Route::get('/dvrequests/fetch', [OutgoingDvController::class, 'fetchDvRequests'])
+    
+    Route::get('/dvrequests/fetch', [OutgoingDvController::class, 'fetchDvRequests'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.fetch');
-        Route::get('/dvrequests/recent', [OutgoingDvController::class, 'fetchDvRecent'])
+    
+    Route::get('/dvrequests/recent', [OutgoingDvController::class, 'fetchDvRecent'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.recent');
-        Route::get('/dvrequests/{id}/preview', [OutgoingDvController::class, 'previewDv'])->name('dvrequests.preview');
-
-        Route::get('/dvrequests/{id}/print', [OutgoingDvController::class, 'printOfficialDv'])->name('dvrequests.print');
-
-        Route::get('/dvrequests/{id}/generate-pdf', [OutgoingDvController::class, 'generatePdf'])->name('dvrequests.generate-pdf');
-
-                Route::get('/dvrequests/history-preview/{id}', [OutgoingDvController::class, 'previewFromHistory'])
-            ->name('dvrequests.previewFromHistory')
-            ->middleware('permission:outgoing.view');
-
-        Route::get('/dvrequests/dvloghistory', [OutgoingDvController::class, 'history'])
+    
+    Route::get('/dvrequests/{id}/preview', [OutgoingDvController::class, 'previewDv'])
+        ->name('dvrequests.preview');
+    
+    Route::get('/dvrequests/{id}/print', [OutgoingDvController::class, 'printOfficialDv'])
+        ->name('dvrequests.print');
+    
+    Route::get('/dvrequests/{id}/generate-pdf', [OutgoingDvController::class, 'generatePdf'])
+        ->name('dvrequests.generate-pdf');
+    
+    Route::get('/dvrequests/history-preview/{id}', [OutgoingDvController::class, 'previewFromHistory'])
+        ->name('dvrequests.previewFromHistory')
+        ->middleware('permission:outgoing.view');
+    
+    Route::get('/dvrequests/dvloghistory', [OutgoingDvController::class, 'history'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.dvloghistory');
-        Route::get('/dvrequests/verify', [OutgoingDvController::class, 'redirectToFirstPending'])
+    
+    Route::get('/dvrequests/verify', [OutgoingDvController::class, 'redirectToFirstPending'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.verifydv');
-        Route::get('/dvrequests/{id}', [OutgoingDvController::class, 'show'])
+    
+    Route::get('/dvrequests/{id}', [OutgoingDvController::class, 'show'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.withid');
-        Route::post('/dvrequests/{id}/receive', [OutgoingDvController::class, 'receive'])
+    
+    // DV Request Actions
+    Route::post('/dvrequests/{id}/receive', [OutgoingDvController::class, 'receive'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.receive');
-         Route::post('/dvrequests/{id}/start-processing', [OutgoingDvController::class, 'startProcessing'])
+    
+    Route::post('/dvrequests/{id}/start-processing', [OutgoingDvController::class, 'startProcessing'])
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.startProcessing');
-        Route::post('/dvrequests/{id}/finalize', [OutgoingDvController::class, 'finalize'])
-         ->middleware('permission:outgoing.approve')
-         ->name('dvrequests.finalize');
-        Route::post('/dvrequests/{id}/reject', [OutgoingDvController::class, 'reject'])
+    
+    Route::post('/dvrequests/{id}/finalize', [OutgoingDvController::class, 'finalize'])
+        ->middleware('permission:outgoing.approve')
+        ->name('dvrequests.finalize');
+    
+    Route::post('/dvrequests/{id}/reject', [OutgoingDvController::class, 'reject'])
         ->middleware('permission:outgoing.reject')
         ->name('dvrequests.reject');
-         Route::put('/dvrequests/{id}/attachments', [OutgoingDvController::class, 'updateAttachments'])
+    
+    Route::put('/dvrequests/{id}/attachments', [OutgoingDvController::class, 'updateAttachments'])
         ->name('dvrequests.updateAttachments');
-        Route::post('/dvrequests/{id}/refresh-lock', [OutgoingDvController::class, 'refreshLock'])
+    
+    Route::post('/dvrequests/{id}/refresh-lock', [OutgoingDvController::class, 'refreshLock'])
         ->name('dvrequests.refreshLock');
-        Route::post('/dvrequests/{id}/release-lock', [OutgoingDvController::class, 'releaseLock'])
+    
+    Route::post('/dvrequests/{id}/release-lock', [OutgoingDvController::class, 'releaseLock'])
         ->name('dvrequests.releaseLock');
+    
+    // ============ OUTGOING AGING ROUTES ============
+    Route::prefix('aging')->group(function () {
+        Route::get('/documents', [OutgoingRequestAgingController::class, 'getAgingDocuments'])
+            ->middleware('permission:outgoing.view')
+            ->name('aging.documents');
+        
+        Route::get('/statistics', [OutgoingRequestAgingController::class, 'getAgingStatistics'])
+            ->middleware('permission:outgoing.view')
+            ->name('aging.statistics');
+        
+        Route::post('/alerts/send', [OutgoingRequestAgingController::class, 'sendAgingAlerts'])
+            ->middleware('permission:outgoing.manage')
+            ->name('aging.alerts.send');
     });
+});
 
 //Accountant III
 //Accountant III
@@ -556,4 +684,20 @@ Route::middleware(['auth:web','role:Admin|Accounting_III'])->prefix('Accounting'
     ->name('dvrequests.releaseLock');
     Route::post('/dvrequests/{id}/refresh-lock', [RANCAController::class, 'refreshLock'])
     ->name('dvrequests.refreshLock');
-});
+
+    // ============ RANCA AGING ROUTES ============
+    Route::get('/aging/documents', [RANCARequestAgingController::class, 'getAgingDocuments'])
+    ->name('aging.documents');
+    
+    Route::get('/aging/statistics', [RANCARequestAgingController::class, 'getAgingStatistics'])
+    ->name('aging.statistics');
+    
+    Route::get('/aging/report', [RANCARequestAgingController::class, 'getAgingReport'])
+    ->name('aging.report');
+    
+    Route::post('/aging/alerts/send', [RANCARequestAgingController::class, 'sendAgingAlerts'])
+    ->name('aging.alerts.send');
+    
+    Route::post('/aging/alerts/cleanup', [RANCARequestAgingController::class, 'cleanupOldAlerts'])
+    ->name('aging.alerts.cleanup');
+});;

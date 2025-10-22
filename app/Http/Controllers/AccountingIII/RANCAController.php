@@ -192,100 +192,99 @@ class RANCAController extends Controller
         return view('Accounting.validatedv', compact('dvRequest', 'lastStep','selectedModality','attachments','tevSelectedModality','tevAttachments'));
     }
 
-    /** Receive DV */
-    public function receive(Request $request, $id)
-    {
-        try {
-            $dvRequest = DvRequest::findOrFail($id);
-            $statusBefore = $dvRequest->status;
-            $receivedAt = now();
+   public function receive(Request $request, $id)
+{
+    try {
+        $dvRequest = DvRequest::findOrFail($id);
+        $statusBefore = $dvRequest->status;
+        $receivedAt = now();
 
-            if ($dvRequest->status !== 'Outgoing_finalized') {
-                return response()->json(['success' => false, 'message' => 'Not ready for RANCA.'], 422);
-            }
+        if ($dvRequest->status !== 'Outgoing_finalized') {
+            return response()->json(['success' => false, 'message' => 'Not ready for RANCA.'], 422);
+        }
 
-            $dvRequest->update([
-                'status'            => 'RANCA_received',
-                'accountingunit_id' => auth()->id(),
-                'received_by'       => auth()->id(),
-                'received_at'       => $receivedAt,
-                'locked_by'         => auth()->id(),
-                'locked_at'         => $receivedAt,
+        $dvRequest->update([
+            'status'            => 'RANCA_received',
+            'accountingunit_id' => auth()->id(),
+            'received_by'       => auth()->id(),
+            'received_at'       => $receivedAt,
+            'locked_by'         => auth()->id(),
+            'locked_at'         => $receivedAt,
+        ]);
+
+        // ✅ SAVE VERIFICATION HISTORY
+        $this->saveRANCAValidationHistory(
+            $dvRequest,
+            'receive',
+            'DV Request received by RANCA for processing',
+            [
+                'status_before' => $statusBefore,
+                'status_after' =>'RANCA_received',
+                'received_by' => auth()->id(),
+                'received_at' => $receivedAt->toISOString(),
+                'amount' => $dvRequest->amount,
+                'dv_number' => $dvRequest->dv_number
+            ]
+        );
+
+        $this->logAction($dvRequest->id, 'Accounting_III', 'RANCA_received', 'Received by RANCA');
+
+        // Notify focal person
+        $focalId = $dvRequest->focalperson_id;
+        $remarks = 'DV Request received by RANCA for processing';
+
+        if ($focalId) {
+            Notification::create([
+                'focalperson_id' => $focalId,
+                'dv_request_id'  => $dvRequest->id,
+                'status'         => 'RANCA_received',
+                'action'         => 'Received',
+                'remarks'        => $remarks,
             ]);
 
-            // ✅ SAVE VERIFICATION HISTORY
-            $this->saveRANCAValidationHistory(
-                $dvRequest,
-                'receive',
-                'DV Request received by RANCA for processing',
-                [
-                    'status_before' => $statusBefore,
-                    'status_after' =>'RANCA_received',
-                    'received_by' => auth()->id(),
-                    'received_at' => $receivedAt->toISOString(),
-                    'amount' => $dvRequest->amount,
-                    'dv_number' => $dvRequest->dv_number
-                ]
-            );
-
-            $this->logAction($dvRequest->id, 'Accounting_III', 'RANCA_received', 'Received by RANCA');
-
-            // Notify focal person
-            $focalId = $dvRequest->focalperson_id;
-            $remarks = 'DV Request received by RANCA for processing';
-
-            if ($focalId) {
-                Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => 'RANCA_received',
-                    'action'         => 'Received',
-                    'remarks'        => $remarks,
-                ]);
-
-                // Real-time notification to focal person
-                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                    'dv_request_id' => $dvRequest->id,
-                    'status'        => 'RANCA_received',
-                    'remarks'       => $remarks,
-                    'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                ]);
-            }
-
-            // Real-time notification to RANCA channel for table update
-            $this->pusher->trigger('dv-requests-ranca', 'dv-request-received', [
+            // Real-time notification to focal person
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                 'dv_request_id' => $dvRequest->id,
                 'status'        => 'RANCA_received',
+                'remarks'       => $remarks,
                 'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
-
-            // JSON response
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true, 
-                    'message' => 'Document has been received by RANCA.',
-                    'data' => [
-                        'id' => $dvRequest->id,
-                        'status' => 'RANCA_received',
-                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                    ]
-                ]);
-            }
-
-            return redirect()->route('Accounting.dvrequests.index')
-                ->with('success', 'Document has been received by RANCA.');
-
-        } catch (\Exception $e) {
-            \Log::error('Error receiving DV in RANCA: ' . $e->getMessage());
-            
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
-            }
-
-            return redirect()->back()->with('error', 'An error occurred while processing the request.');
         }
-    }
 
+        // ✅ ADD action_performer_id
+        $this->pusher->trigger('dv-requests-ranca', 'dv-request-received', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => 'RANCA_received',
+            'action_performer_id' => auth()->id(), // ✅ ADDED
+            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        // JSON response
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true, 
+                'message' => 'Document has been received by RANCA.',
+                'data' => [
+                    'id' => $dvRequest->id,
+                    'status' => 'RANCA_received',
+                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
+        }
+
+        return redirect()->route('Accounting.dvrequests.index')
+            ->with('success', 'Document has been received by RANCA.');
+
+    } catch (\Exception $e) {
+        \Log::error('Error receiving DV in RANCA: ' . $e->getMessage());
+        
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while processing the request.');
+    }
+}
     /** Start processing */
     public function startProcessing(Request $request, $id)
     {
@@ -346,6 +345,7 @@ class RANCAController extends Controller
             $this->pusher->trigger('dv-requests-ranca', 'dv-request-processing', [
                 'dv_request_id' => $dvRequest->id,
                 'status'        => 'RANCA_in_process',
+                'action_performer_id' => auth()->id(), // ✅ ADDED
                 'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
@@ -588,6 +588,7 @@ class RANCAController extends Controller
             $this->pusher->trigger('dv-requests-ranca', 'dv-request-finalized', [
                 'dv_request_id' => $dvRequest->id,
                 'status'        => 'RANCA_validated',
+                'action_performer_id' => auth()->id(), // ✅ ADDED
                 'timestamp'     => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
@@ -685,6 +686,7 @@ class RANCAController extends Controller
             $this->pusher->trigger('dv-requests-ranca', 'dv-request-rejected', [
                 'dv_request_id' => $dvRequest->id,
                 'status'        => 'RANCA_rejected',
+                'action_performer_id' => auth()->id(), // ✅ ADDED
                 'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
@@ -750,21 +752,51 @@ class RANCAController extends Controller
     }
 
     /** History logs - UPDATED to use verification history */
-    public function history()
-    {
-        $verificationHistory = RANCAValidationHistory::with([
-            'dvRequest.program',
-            'dvRequest.focalPerson', 
-            'dvRequest.respocenter',
-            'dvRequest.orsRequest',
-            'verifier'
-        ])
-        ->where('verified_by', auth()->id())
-        ->orderBy('verified_at', 'desc')
-        ->paginate(20);
+   public function history(Request $request)
+{
+    $query = RANCAValidationHistory::with([
+        'dvRequest.program',
+        'dvRequest.focalPerson',
+        'dvRequest.respocenter',
+        'dvRequest.orsRequest',
+        'verifier'
+    ])
+    ->where('verified_by', auth()->id());
 
-        return view('Accounting.loghistory', compact('verificationHistory'));
+    // Search by DV Number
+    if ($request->has('search') && $request->search) {
+        $query->whereHas('dvRequest', function($q) use ($request) {
+            $q->where('accounting_control_number', 'like', '%' . $request->search . '%');
+        });
     }
+
+    // Filter by Program
+    if ($request->has('program') && $request->program) {
+        $query->whereHas('dvRequest.program', function($q) use ($request) {
+            $q->where('prcode', $request->program);
+        });
+    }
+
+    // Filter by Verification Step
+    if ($request->has('step') && $request->step) {
+        $query->where('verification_step', $request->step);
+    }
+
+    // Date range filter
+    if ($request->has('date_from') && $request->date_from) {
+        $query->whereDate('verified_at', '>=', $request->date_from);
+    }
+
+    if ($request->has('date_to') && $request->date_to) {
+        $query->whereDate('verified_at', '<=', $request->date_to);
+    }
+
+    $verificationHistory = $query->orderBy('verified_at', 'desc')
+                                ->paginate(20)
+                                ->appends($request->all());
+
+    return view('Accounting.loghistory', compact('verificationHistory'));
+}
 
     /** Logging helper */
     protected function logAction($dvRequestId, $action, $status, $remarks = null)

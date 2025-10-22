@@ -10,24 +10,89 @@
                 <h1 class="text-3xl font-bold text-gray-900">Received DV Requests</h1>
                 <p class="mt-2 text-sm text-gray-600">Manage and verify submitted disbursement voucher requests</p>
             </div>
-            <div class="mt-4 sm:mt-0">
+            <div class="mt-4 sm:mt-0 flex gap-2">
                 <span id="connection-status" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
                     <span class="w-2 h-2 mr-2 rounded-full bg-gray-400 animate-pulse"></span>
                     Connecting...
                 </span>
+                <button onclick="refreshAllData()" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Refresh
+                </button>
             </div>
         </div>
 
-        <!-- Toast Container -->
-        <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
-<!-- Search -->
+        <!-- Aging Alerts Container -->
+        <div id="aging-alerts-container" class="mb-6">
+            <!-- Alert will be populated by JavaScript -->
+        </div>
+
+        <!-- Aging Statistics Card -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border-l-4 border-red-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-red-700 text-sm font-semibold">Critical</p>
+                        <p id="stat-critical" class="text-2xl font-bold text-red-600">0</p>
+                        <p class="text-xs text-red-600">10+ days old</p>
+                    </div>
+                    <svg class="w-8 h-8 text-red-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border-l-4 border-orange-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-orange-700 text-sm font-semibold">High</p>
+                        <p id="stat-high" class="text-2xl font-bold text-orange-600">0</p>
+                        <p class="text-xs text-orange-600">7-10 days old</p>
+                    </div>
+                    <svg class="w-8 h-8 text-orange-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3m0 0v.01M2 15v3m0 0v.01"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border-l-4 border-yellow-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-yellow-700 text-sm font-semibold">Medium</p>
+                        <p id="stat-medium" class="text-2xl font-bold text-yellow-600">0</p>
+                        <p class="text-xs text-yellow-600">3-7 days old</p>
+                    </div>
+                    <svg class="w-8 h-8 text-yellow-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13 16H5v-4m0-5V7a1 1 0 012-1h6a1 1 0 012 1v1m0 5v4m0 0h2a1 1 0 001-1v-4a1 1 0 00-1-1h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 00-.293.707V12m0 0H9a1 1 0 001-1V9a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm0 5V9m0 8a2 2 0 100-4 2 2 0 000 4z"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border-l-4 border-blue-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-blue-700 text-sm font-semibold">Total Aging</p>
+                        <p id="stat-total" class="text-2xl font-bold text-blue-600">0</p>
+                        <p class="text-xs text-blue-600">3+ days old</p>
+                    </div>
+                    <svg class="w-8 h-8 text-blue-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path>
+                        <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 1 1 0 000-2H6a6 6 0 100 12H4a2 2 0 01-2-2V5zm11.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search -->
         <div class="mb-4">
             <input type="text" id="search-input" 
                    placeholder="🔍 Search DV Requests (Control No, ORS No, Program, Respocenter, Submitted By)..."
                    class="w-full md:w-1/2 px-4 py-2 border rounded-lg shadow-sm focus:ring focus:ring-blue-200 focus:outline-none">
         </div>
 
-     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div id="dv-table-container">
                 <div class="text-center py-16">
                     <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -42,6 +107,9 @@
     </div>
 </div>
 
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -49,8 +117,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('search-input');
     const toastContainer = document.getElementById('toast-container');
     const connectionStatus = document.getElementById('connection-status');
+    const agingAlertsContainer = document.getElementById('aging-alerts-container');
     let allRequests = [];
     let searchTerm = "";
+    let cachedAgingData = [];
 
     const statusColors = {
         'submitted': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
@@ -87,33 +157,87 @@ document.addEventListener('DOMContentLoaded', function() {
         updateConnectionStatus(states.current);
     });
 
-    // Subscribe to ALL focal person channels that might submit requests
-    // This listens for any new submissions or updates
+    // Subscribe to IMSD channel
     const generalChannel = pusher.subscribe('dv-requests-imsd');
 
-    // Listen for new DV request submissions from any focal person
-        generalChannel.bind('dv-request-submitted', function(data) {
+    // ============ PUSHER EVENT LISTENERS ============
+
+    // Listen for new DV request submissions
+    generalChannel.bind('dv-request-submitted', function(data) {
         console.log('New DV request submitted:', data);
         showToast(`New request from ${data.submitted_by}`, 'success');
-        fetchDvRequests(); // Refresh the table
-    });
-
-    // Listen for status updates
-    generalChannel.bind('status-updated', function(data) {
-        console.log('DV request status updated:', data);
         fetchDvRequests();
+        // Check if this new document affects aging
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
     });
 
     // Listen for request received events
     generalChannel.bind('dv-request-received', function(data) {
         console.log('DV request received:', data);
+        
+        let message = `Document ${data.control_number} received by ${data.received_by}`;
+        
+        showToast(message, 'success');
         fetchDvRequests();
+        // Update aging data since status changed
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
     });
 
     // Listen for processing started events
     generalChannel.bind('dv-request-processing', function(data) {
         console.log('DV request processing started:', data);
         fetchDvRequests();
+        // Update aging data since status changed
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
+    });
+
+    // Listen for verified events
+    generalChannel.bind('dv-request-verified', function(data) {
+        console.log('DV request verified:', data);
+        fetchDvRequests();
+        // Update aging data since document is completed
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
+    });
+
+    // Listen for status updates
+    generalChannel.bind('status-updated', function(data) {
+        console.log('DV request status updated:', data);
+        fetchDvRequests();
+        // Update aging data since status changed
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
+    });
+
+    // ============ AGING ALERTS ============
+    // Listen for aging document alerts
+    generalChannel.bind('document-aging-alert', function(data) {
+        console.log('IMSD Aging alert received:', data);
+        showToast(`Aging document: ${data.control_number} is ${data.days_old} days old`, 'warning');
+        // Refresh aging data immediately
+        fetchAgingDocuments();
+        updateStatistics();
+    });
+
+    // Listen for time-based aging updates (sent by scheduled task)
+    generalChannel.bind('imsd-aging-update', function(data) {
+        console.log('IMSD aging update received:', data);
+        showToast('Aging data updated', 'info');
+        fetchAgingDocuments();
+        updateStatistics();
     });
 
     // Toast notification function
@@ -183,8 +307,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
 
             if (response.ok && result.success) {
-                showToast(result.message || 'Document has been received by IMSD.', 'success');
-                // Pusher will handle the refresh automatically
+                let message = result.message || 'Document has been received by IMSD.';
+                
+                showToast(message, 'success');
+                
+                // Refresh all data
+                fetchDvRequests();
+                fetchAgingDocuments();
+                updateStatistics();
+                
             } else {
                 showToast(result.message || 'Failed to receive document.', 'error');
                 button.innerHTML = originalText;
@@ -196,6 +327,14 @@ document.addEventListener('DOMContentLoaded', function() {
             button.innerHTML = originalText;
             button.disabled = false;
         }
+    }
+
+    // Manual refresh function
+    window.refreshAllData = function() {
+        showToast('Refreshing all data...', 'info');
+        fetchDvRequests();
+        fetchAgingDocuments();
+        updateStatistics();
     }
 
     function renderTable(dvRequests) {
@@ -265,6 +404,205 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.handleReceiveAction = handleReceiveAction;
 
+    // ============ AGING DOCUMENTS FUNCTIONS ============
+    async function fetchAgingDocuments() {
+        try {
+            console.log('Fetching IMSD aging documents...');
+            
+            const res = await fetch('{{ route("IMSD.aging.documents") }}');
+            
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            
+            const data = await res.json();
+            console.log('IMSD aging documents response:', data);
+            
+            if (!data.success) {
+                throw new Error(data.message || 'Failed to fetch aging documents');
+            }
+            
+            cachedAgingData = data.documents || [];
+            renderAgingAlerts(data.documents, data.aging_count);
+            
+        } catch (err) {
+            console.error('Failed to fetch aging documents:', err);
+            showToast('Failed to load aging documents: ' + err.message, 'error');
+        }
+    }
+
+    async function updateStatistics() {
+        try {
+            const res = await fetch('{{ route("IMSD.aging.statistics") }}');
+            
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            
+            const data = await res.json();
+            
+            if (!data.success) {
+                throw new Error(data.message || 'Failed to fetch statistics');
+            }
+            
+            document.getElementById('stat-critical').textContent = data.critical || 0;
+            document.getElementById('stat-high').textContent = data.high || 0;
+            document.getElementById('stat-medium').textContent = data.medium || 0;
+            document.getElementById('stat-total').textContent = data.total_aging || 0;
+            
+        } catch (err) {
+            console.error('Failed to fetch statistics:', err);
+            // Don't show toast for statistics errors to avoid spam
+        }
+    }
+
+    function renderAgingAlerts(documents, count) {
+        if (!agingAlertsContainer) {
+            console.error('Aging alerts container is null');
+            return;
+        }
+
+        if (!documents || documents.length === 0) {
+            agingAlertsContainer.innerHTML = '';
+            return;
+        }
+
+        const agingDocs = documents.filter(doc => !['IMSD_verified', 'completed'].includes(doc.status));
+        
+        if (agingDocs.length === 0) {
+            agingAlertsContainer.innerHTML = '';
+            return;
+        }
+
+        function calculateUrgency(daysOld) {
+            const days = Math.abs(Number(daysOld)) || 0;
+            if (days >= 10) return 'critical';
+            if (days >= 7) return 'high';
+            if (days >= 3) return 'medium';
+            return 'low';
+        }
+
+        agingDocs.forEach(doc => {
+            doc.urgency = calculateUrgency(doc.days_old);
+        });
+
+        let urgencyIcon = {
+            'critical': '🚨',
+            'high': '⚠️',
+            'medium': '⏰',
+            'low': 'ℹ️'
+        };
+
+        let bgColor = {
+            'critical': 'bg-red-50 border-red-500',
+            'high': 'bg-orange-50 border-orange-500',
+            'medium': 'bg-yellow-50 border-yellow-500',
+            'low': 'bg-blue-50 border-blue-500'
+        };
+
+        let textColor = {
+            'critical': 'text-red-900',
+            'high': 'text-orange-900',
+            'medium': 'text-yellow-900',
+            'low': 'text-blue-900'
+        };
+
+        const highestUrgency = agingDocs.reduce((highest, doc) => {
+            const urgencyOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
+            return urgencyOrder[doc.urgency] > urgencyOrder[highest] ? doc.urgency : highest;
+        }, 'low');
+
+        let html = `
+            <div class="rounded-lg border-l-4 p-5 ${bgColor[highestUrgency]} shadow-md transition-all duration-300">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">${urgencyIcon[highestUrgency]}</span>
+                        <div>
+                            <h3 class="font-bold text-lg ${textColor[highestUrgency]}">Documents Need Processing</h3>
+                            <p class="text-sm opacity-80 ${textColor[highestUrgency]}">${agingDocs.length} document(s) older than 3 days</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="minimize-alerts" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg id="minimize-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                            <svg id="expand-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="alerts-content" class="transition-all duration-300 overflow-hidden">
+                    <div class="space-y-2 mt-4 max-h-64 overflow-y-auto">
+                        ${agingDocs.slice(0, 5).map(doc => {
+                            const docBgColor = {
+                                'critical': 'bg-red-100 border-red-200',
+                                'high': 'bg-orange-100 border-orange-200', 
+                                'medium': 'bg-yellow-100 border-yellow-200',
+                                'low': 'bg-blue-100 border-blue-200'
+                            };
+                            
+                            // Simplified status logic
+                            const isReceived = ['IMSD_received', 'IMSD_in_process'].includes(doc.status);
+                            const statusText = isReceived ? 'Received - Needs Processing' : 'Not Received';
+                            
+                            return `
+                            <div class="flex items-center justify-between p-3 ${docBgColor[doc.urgency]} border rounded-lg hover:opacity-90 transition-all duration-200">
+                                <div class="flex-1">
+                                    <p class="font-semibold text-sm ${textColor[doc.urgency]}">${doc.control_number}</p>
+                                    <p class="text-xs opacity-70 ${textColor[doc.urgency]}">${doc.submitted_by} • ${doc.program} • ${doc.status}</p>
+                                    <p class="text-xs font-medium mt-1 ${doc.days_old >= 10 ? 'text-red-700' : doc.days_old >= 7 ? 'text-orange-700' : 'text-yellow-700'}">
+                                        ${doc.days_old} days old • ${statusText}
+                                    </p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <a href="/RegionalOffices/IMSD/dvrequests/${doc.id}" 
+                                       class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors">
+                                        ${doc.status === 'submitted' ? 'Receive' : 'Process'}
+                                    </a>
+                                </div>
+                            </div>
+                        `}).join('')}
+                    </div>
+
+                    ${agingDocs.length > 5 ? `
+                        <p class="text-xs mt-3 opacity-75 ${textColor[highestUrgency]}">
+                            +${agingDocs.length - 5} more documents
+                        </p>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+
+        agingAlertsContainer.innerHTML = html;
+
+        // Add minimize/expand functionality
+        const minimizeButton = document.getElementById('minimize-alerts');
+        const minimizeIcon = document.getElementById('minimize-icon');
+        const expandIcon = document.getElementById('expand-icon');
+        const alertsContent = document.getElementById('alerts-content');
+
+        if (minimizeButton && alertsContent) {
+            minimizeButton.addEventListener('click', function() {
+                if (alertsContent.style.maxHeight === '0px' || alertsContent.style.display === 'none') {
+                    alertsContent.style.maxHeight = '1000px';
+                    alertsContent.style.display = 'block';
+                    minimizeIcon.classList.add('hidden');
+                    expandIcon.classList.remove('hidden');
+                } else {
+                    alertsContent.style.maxHeight = '0px';
+                    alertsContent.style.display = 'none';
+                    minimizeIcon.classList.remove('hidden');
+                    expandIcon.classList.add('hidden');
+                }
+            });
+        }
+    }
+
+    // ============ EVENT HANDLERS ============
+
     // Search with debounce
     let searchTimeout;
     searchInput.addEventListener('input', function() {
@@ -275,8 +613,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 300);
     });
 
+    // ============ AUTO-REFRESH ============
+
+    // Refresh aging data more frequently (every 2 minutes)
+    setInterval(fetchAgingDocuments, 2 * 60 * 1000);
+    setInterval(updateStatistics, 2 * 60 * 1000);
+    
+    // Refresh main table less frequently (every 5 minutes)
+    setInterval(fetchDvRequests, 5 * 60 * 1000);
+
+    // ============ INITIAL LOAD ============
+
     // Initial load
     fetchDvRequests();
+    fetchAgingDocuments();
+    updateStatistics();
 });
 </script>
 @endsection

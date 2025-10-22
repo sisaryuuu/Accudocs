@@ -8,6 +8,7 @@ use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Models\Notification;
 use App\Models\IncomingTUPADVerificationHistory;
+use App\Models\DocumentAgingAlert;
 use App\Models\TUPADAttachment;
 use App\Services\PusherService;
 use Illuminate\Support\Facades\Auth;
@@ -52,8 +53,7 @@ class TupadDvRequestProcessingController extends Controller
         }
 
         $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
-         $sidebarCounts = $this->getSidebarCounts();
-        return view('Incoming.TUPAD.index', compact('dvRequests','sidebarCounts'));
+        return view('Incoming.TUPAD.index', compact('dvRequests'));
     }
  public function show($id)
 {
@@ -108,40 +108,47 @@ class TupadDvRequestProcessingController extends Controller
 }
 
 
- public function receive(Request $request, $id)
+public function receive(Request $request, $id)
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
         $statusBefore = $dvRequest->status;
         $receivedAt = now();
+        $currentUserId = auth()->id();
+
+         
         if ($dvRequest->status !== 'IMSD_verified') {
             return response()->json([
                 'success' => false,
                 'message' => 'This request has already been received.'  
             ], 422);
         }
-        
-       
+
+        $controlNumber = $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) : 'Unknown';
+        $userName = auth()->user()->name ?? 'TUPAD User';
+
+        // Update the DV request status first
         $dvRequest->update([
             'status'           => 'Incoming-TUPAD_received',
-            'accountingunit_id'=> auth()->id(),
-            'received_by'      => auth()->id(),
+            'accountingunit_id'=> $currentUserId,
+            'received_by'      => $currentUserId,
             'received_at'      => $receivedAt,
-            'locked_by'        => auth()->id(),
+            'locked_by'        => $currentUserId,
             'locked_at'        => $receivedAt,
         ]);
 
+// Save history and send notifications
         $this->saveIncomingTUPADVerificationHistory(
             $dvRequest,
             'receive',
             'Request officially received by Incoming-TUPAD',
             [
                 'status_before' => $statusBefore,
-                'status_after' =>'Incoming-TUPAD_received',
-                    'received_by' => auth()->id(),
-                    'received_at' => $receivedAt->toISOString()
-                ]
-            );
+                'status_after' => 'Incoming-TUPAD_received',
+                'received_by' => $currentUserId,
+                'received_at' => $receivedAt->toISOString(),
+            ]
+        );
 
         $this->logAction(
             $dvRequest->id,
@@ -149,7 +156,7 @@ class TupadDvRequestProcessingController extends Controller
             'Incoming-TUPAD_received',
             'Request officially received by Incoming-TUPAD'
         );
-    
+
         $focalId = $dvRequest->focalperson_id;
         Notification::create([
             'focalperson_id' => $focalId,
@@ -158,56 +165,63 @@ class TupadDvRequestProcessingController extends Controller
             'action'         => 'Received',
             'remarks'        => 'Request officially received by Incoming-TUPAD',
         ]);
-        
+
+        // Pusher notifications
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
             'status'        => 'Incoming-TUPAD_received',
             'remarks'       => 'Request officially received by Incoming-TUPAD',
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
-        
-         // ✅ NEW: Broadcast to Incoming-GIP channel for real-time table updates
+
+        // ✅ FIX: Broadcast to TUPAD channel with proper acknowledged count
         $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-received', [
             'dv_request_id' => $dvRequest->id,
             'status'        => 'Incoming-TUPAD_received',
             'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+            'received_by'   => $userName,
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'action_performer_id' => $currentUserId, // ADD THIS
+            'received_by_user_id' => $currentUserId, // ADD THIS
         ]);
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Document has been received by  Incoming-TUPAD.',
+                'message' => 'Document has been received by Incoming-TUPAD.',
                 'data' => [
                     'id' => $dvRequest->id,
                     'status' => 'Incoming-TUPAD_received',
-                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]
             ]);
         }
-        
+
         return redirect()->route('Incoming.TUPAD.index')
             ->with('success', 'Document has been received by Incoming-TUPAD.');
-            
+
     } catch (\Exception $e) {
         \Log::error('Error receiving DV request: ' . $e->getMessage());
-        
+
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while processing the request.'
             ], 500);
         }
-        
+
         return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
 }
+
 public function startProcessing(Request $request, $id)
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
-         $statusBefore = $dvRequest->status;
-            $startedAt = now();
+        $statusBefore = $dvRequest->status;
+        $startedAt = now();
+        $currentUserId = auth()->id();
+            
         if ($dvRequest->status !== 'Incoming-TUPAD_received') {
             return response()->json([
                 'success' => false,
@@ -219,7 +233,7 @@ public function startProcessing(Request $request, $id)
 
         $dvRequest->update([
             'status'    => 'Incoming-TUPAD_in_process',
-            'locked_by' => auth()->id(),
+            'locked_by' =>  $currentUserId,
             'locked_at' => $startedAt,
         ]);
           $this->saveIncomingTUPADVerificationHistory(
@@ -229,7 +243,7 @@ public function startProcessing(Request $request, $id)
                 [
                     'status_before' => $statusBefore,
                     'status_after' => 'Incoming-TUPAD_in_process',
-                    'processed_by' => auth()->id(),
+                    'processed_by' =>  $currentUserId,
                     'processed_at' => $startedAt->toISOString()
                 ]
             );
@@ -268,6 +282,8 @@ public function startProcessing(Request $request, $id)
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
             'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'action_performer_id' => $currentUserId, // ADD THIS
+            'processed_by_user_id' => $currentUserId, // ADD THIS
         ]);
 
         // JSON response for AJAX
@@ -404,8 +420,8 @@ public function startProcessing(Request $request, $id)
         ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
         ->findOrFail($id);
     $statusBefore = $dvRequest->status;
-
     $verifiedAt = now();
+    $currentUserId = auth()->id();
     $attachmentData = [];
     
     // Update TUPAD attachments if any were checked/unchecked
@@ -476,6 +492,8 @@ public function startProcessing(Request $request, $id)
         'dv_request_id' => $dvRequest->id,
         'status'        => $status,
         'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        'action_performer_id' => $currentUserId, // ADD THIS
+        'verified_by_user_id' => $currentUserId, // ADD THIS
     ]);
   $attachmentData = [];
 
@@ -488,7 +506,7 @@ public function startProcessing(Request $request, $id)
                 'status_before' => $statusBefore,
                 'status_after'  => 'Incoming-TUPAD_verified',
                 'attachments_checked' => $attachmentData,
-                'verified_by' => auth()->id(),
+                'verified_by' => $currentUserId,
                 'verified_at' => $verifiedAt->toISOString()
             ]
         );
@@ -515,7 +533,9 @@ public function reject(Request $request, $id)
         // Find the DV request
         $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
                               ->findOrFail($id);
-    $statusBefore = $dvRequest->status;
+         $statusBefore = $dvRequest->status;
+        $currentUserId = auth()->id();
+    
         // ✅ Only allow rejection if status is currently in Incoming-TUPAD stage
         if (!in_array($dvRequest->status, ['Incoming-TUPAD_received', 'Incoming-TUPAD_in_process'])) {
             return response()->json([
@@ -542,7 +562,7 @@ public function reject(Request $request, $id)
                         'action' => 'rejected',
                         'status_before' => $statusBefore,
                         'status_after'  => 'Incoming-TUPAD_rejected',
-                        'rejected_by' => auth()->id(),
+                        'rejected_by' => $currentUserId,
                         'rejected_at' => $rejectedAt->toISOString(),
                         'rejection_reason' => $remarks
                     ]
@@ -578,6 +598,8 @@ public function reject(Request $request, $id)
                 'dv_request_id' => $dvRequest->id,
                 'status'        => 'Incoming-TUPAD_rejected',
                 'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'action_performer_id' => $currentUserId, // ADD THIS
+                'verified_by_user_id' => $currentUserId, // ADD THIS
             ]);
         }
 
@@ -683,20 +705,50 @@ public function reject(Request $request, $id)
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
 
-  public function history()
+    public function history(Request $request)
     {
-        $verificationHistory = IncomingTUPADVerificationHistory::with([
+        $query = IncomingTUPADVerificationHistory::with([
             'dvRequest.program',
             'dvRequest.focalPerson',
-                    'dvRequest.respocenter',
-                    'verifier'
-                ])
-                ->where('verified_by', auth()->id())
-                ->orderBy('verified_at', 'desc')
-                ->paginate(20);
+            'dvRequest.respocenter',
+            'verifier'
+        ])
+        ->where('verified_by', auth()->id());
 
-                return view('Incoming.TUPAD.loghistory', compact('verificationHistory'));
+        // Search by DV Number
+        if ($request->has('search') && $request->search) {
+            $query->whereHas('dvRequest', function($q) use ($request) {
+                $q->where('accounting_control_number', 'like', '%' . $request->search . '%');
+            });
         }
+
+        // Filter by Program
+        if ($request->has('program') && $request->program) {
+            $query->whereHas('dvRequest.program', function($q) use ($request) {
+                $q->where('prcode', $request->program);
+            });
+        }
+
+        // Filter by Verification Step
+        if ($request->has('step') && $request->step) {
+            $query->where('verification_step', $request->step);
+        }
+
+        // Date range filter
+        if ($request->has('date_from') && $request->date_from) {
+            $query->whereDate('verified_at', '>=', $request->date_from);
+        }
+
+        if ($request->has('date_to') && $request->date_to) {
+            $query->whereDate('verified_at', '<=', $request->date_to);
+        }
+
+        $verificationHistory = $query->orderBy('verified_at', 'desc')
+                                    ->paginate(20)
+                                    ->appends($request->all());
+
+        return view('Incoming.TUPAD.loghistory', compact('verificationHistory'));
+    }
 
  protected function saveIncomingTUPADVerificationHistory($dvRequest, $step, $remarks = null, $data = [])
         {

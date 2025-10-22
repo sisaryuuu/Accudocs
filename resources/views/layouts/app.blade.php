@@ -255,16 +255,17 @@
                 @php    
                     // Check if user is logged in as AccountingUnit or FocalPerson
                     $authUser = Auth::user() ?? Auth::guard('focal')->user();
+                       $profileImage = $authUser?->profile_image_url ?: asset('public/profiles/default.png');
                 @endphp
                 <span class="text-gray-600">Hello, {{ $authUser->lname ?? 'Guest' }}</span>
 
                 <!-- Profile Dropdown -->
                 <div x-data="{ open: false }" class="relative">
                     <button @click="open = !open" class="flex items-center space-x-2 focus:outline-none">
-                                        <img src="{{ $authUser?->profile_image_url }}" 
+                     <img src="{{ $profileImage }}" 
                         alt="Profile Image" 
                         class="h-12 w-12 rounded-full border object-cover"
-                        onerror="this.src='{{ asset('profiles/default.png') }}'">
+                        onerror="this.onerror=null; this.src='{{ asset('public/profiles/default.png') }}'">
                         <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                         </svg>                    </button>

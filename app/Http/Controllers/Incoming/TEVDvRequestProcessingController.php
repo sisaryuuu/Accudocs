@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Models\IncomingTEVVerificationHistory;
+use App\Models\DocumentAgingAlert;
 use App\Models\Notification;
 use App\Services\PusherService;
 use App\Models\TEVAttachment;
@@ -110,25 +111,28 @@ class TEVDvRequestProcessingController extends Controller
         $dvRequest = DvRequest::findOrFail($id);
         $statusBefore = $dvRequest->status;
         $receivedAt = now();
-        
+        $currentUserId = auth()->id();
+
         if ($dvRequest->status !== 'IMSD_verified') {
             return response()->json([
                 'success' => false,
                 'message' => 'This request has already been received.'  
             ], 422);
         }
-        
-    
+
+        // ✅ DEFINE VARIABLES FOR PUSHER
+        $controlNumber = $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) : 'Unknown';
+        $userName = auth()->user()->name ?? 'TEV User';
+
         $dvRequest->update([
             'status'           => 'Incoming-TEV_received',
-            'accountingunit_id'=> auth()->id(),
-            'received_by'      => auth()->id(),
+            'accountingunit_id'=> $currentUserId,
+            'received_by'      => $currentUserId,
             'received_at'      => $receivedAt,
-            'locked_by'        => auth()->id(),
+            'locked_by'        => $currentUserId,
             'locked_at'        => $receivedAt,
         ]);
     
-       
         // Log the action
         $this->logAction(
             $dvRequest->id,
@@ -137,15 +141,15 @@ class TEVDvRequestProcessingController extends Controller
             'Request officially received by Incoming-TEV'
         );
         
-         $this->saveIncomingTEVVerificationHistory(
+        $this->saveIncomingTEVVerificationHistory(
             $dvRequest,
             'receive',
             'Request officially received by Incoming-TEV',
             [
                 'status_before' => $statusBefore,
                 'status_after'  => 'Incoming-TEV_received',
-                'received_by'   => auth()->id(),
-                'received_at'   => $receivedAt->toISOString()
+                'received_by'   => $currentUserId,
+                'received_at'   => $receivedAt->toISOString(),
             ]
         );
        
@@ -165,18 +169,21 @@ class TEVDvRequestProcessingController extends Controller
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
         
-         // ✅ NEW: Broadcast to Incoming-GIP channel for real-time table updates
+        // ✅ ENHANCED: Broadcast to Incoming-TEV channel with acknowledgment info
         $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-received', [
             'dv_request_id' => $dvRequest->id,
-            'status'        => 'Incoming-TEV_received',
+            'control_number' => $controlNumber,
+            'received_by' => $userName,
+            'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'action_performer_id' => $currentUserId, // ADD THIS
+            'received_by_user_id' => $currentUserId, // ADD THIS
         ]);
-       
+
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Document has been received by  Incoming-TEV.',
+                'message' => 'Document has been received by Incoming-TEV.',
                 'data' => [
                     'id' => $dvRequest->id,
                     'status' => 'Incoming-TEV_received',
@@ -201,12 +208,16 @@ class TEVDvRequestProcessingController extends Controller
         return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
 }
+
 public function startProcessing(Request $request, $id)
 {
     try {
         $dvRequest = DvRequest::findOrFail($id);
         $statusBefore = $dvRequest->status;
         $startedAt = now();
+        $currentUserId = auth()->id();
+
+
         if ($dvRequest->status !== 'Incoming-TEV_received') {
             return response()->json([
                 'success' => false,
@@ -218,7 +229,7 @@ public function startProcessing(Request $request, $id)
 
         $dvRequest->update([
             'status'    => 'Incoming-TEV_in_process',
-            'locked_by' => auth()->id(),
+            'locked_by' => $currentUserId,
             'locked_at' => $startedAt,
         ]);
 
@@ -238,7 +249,7 @@ public function startProcessing(Request $request, $id)
             [
                 'status_before' => $statusBefore,
                 'status_after'  => 'Incoming-TEV_in_process',
-                'processed_by'  => auth()->id(),
+                'processed_by'  => $currentUserId,
                 'started_at'    => $startedAt->toISOString()
             ]
         );
@@ -270,6 +281,8 @@ public function startProcessing(Request $request, $id)
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
             'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'action_performer_id' => $currentUserId, // ADD THIS
+            'processed_by_user_id' => $currentUserId, // ADD THIS
         ]);
         // JSON response for AJAX
         if ($request->expectsJson() || $request->ajax()) {
@@ -407,7 +420,9 @@ public function startProcessing(Request $request, $id)
         ->findOrFail($id);
     $statusBefore = $dvRequest->status;
     $verifiedAt = now(); // Define verifiedAt here
-   
+    $currentUserId = auth()->id();
+
+
     $attachmentData = [];
     if ($dvRequest->tev_modality) {
         // Get all submitted attachment IDs
@@ -460,7 +475,7 @@ public function startProcessing(Request $request, $id)
         [
             'status_before' => $statusBefore,
             'status_after'  => 'Incoming-TEV_verified',
-            'verified_by'   => auth()->id(),
+            'verified_by'   => $currentUserId,
             'attachments_checked' => $attachmentData,
             'modality' => $dvRequest->tev_modality,
             'verified_at' => $verifiedAt->toISOString()
@@ -495,6 +510,7 @@ public function startProcessing(Request $request, $id)
         'program'       => $dvRequest->program->prcode ?? 'N/A',
         'status'        => $status,
         'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        
     ]);
 
     if ($focalId) {
@@ -511,6 +527,8 @@ public function startProcessing(Request $request, $id)
         'dv_request_id' => $dvRequest->id,
         'status'        => $status,
         'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        'action_performer_id' => $currentUserId, // ADD THIS
+        'verified_by_user_id' => $currentUserId, // ADD THIS
     ]);
 
     return redirect()->route('Incoming.TEV.index')
@@ -529,6 +547,7 @@ public function startProcessing(Request $request, $id)
                               ->findOrFail($id);
 
         $statusBefore = $dvRequest->status;
+         $currentUserId = auth()->id();
         // ✅ Only allow rejection if status is currently in Incoming-TEV stage
         if (!in_array($dvRequest->status, ['Incoming-TEV_received', 'Incoming-TEV_in_process'])) {
             return response()->json([
@@ -557,7 +576,7 @@ public function startProcessing(Request $request, $id)
                     'status_before'   => $statusBefore,
                     'status_after'    => 'Incoming-GIP_rejected',
                     'action'          => 'rejected',
-                    'rejected_by'     => auth()->id(),
+                    'rejected_by'     =>  $currentUserId,
                     'rejected_at'     => $rejectedAt->toISOString(),
                     'rejection_reason'=> $remarks,
                 ]
@@ -595,6 +614,8 @@ public function startProcessing(Request $request, $id)
                 'dv_request_id' => $dvRequest->id,
                 'status'        => 'Incoming-TEV_rejected',
                 'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'action_performer_id' => $currentUserId, // ADD THIS
+                'rejected_by_user_id' => $currentUserId, // ADD THIS
             ]);
         }
 
@@ -700,19 +721,49 @@ public function startProcessing(Request $request, $id)
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
 
-    public function history()
-    {
-        $verificationHistory = IncomingTEVVerificationHistory::with([
-            'dvRequest.program',
-            'dvRequest.focalPerson',
-                    'dvRequest.respocenter',
-                    'verifier'
-                ])
-                ->where('verified_by', auth()->id())
-                ->orderBy('verified_at', 'desc')
-                ->paginate(20);
+        public function history(Request $request)
+        {
+            $query = IncomingTEVVerificationHistory::with([
+                'dvRequest.program',
+                'dvRequest.focalPerson',
+                'dvRequest.respocenter',
+                'verifier'
+            ])
+            ->where('verified_by', auth()->id());
 
-                return view('Incoming.TEV.loghistory', compact('verificationHistory'));
+            // Search by DV Number
+            if ($request->has('search') && $request->search) {
+                $query->whereHas('dvRequest', function($q) use ($request) {
+                    $q->where('dv_number', 'like', '%' . $request->search . '%');
+                });
+            }
+
+            // Filter by Program
+            if ($request->has('program') && $request->program) {
+                $query->whereHas('dvRequest.program', function($q) use ($request) {
+                    $q->where('prcode', $request->program);
+                });
+            }
+
+            // Filter by Verification Step
+            if ($request->has('step') && $request->step) {
+                $query->where('verification_step', $request->step);
+            }
+
+            // Date range filter
+            if ($request->has('date_from') && $request->date_from) {
+                $query->whereDate('verified_at', '>=', $request->date_from);
+            }
+
+            if ($request->has('date_to') && $request->date_to) {
+                $query->whereDate('verified_at', '<=', $request->date_to);
+            }
+
+            $verificationHistory = $query->orderBy('verified_at', 'desc')
+                                        ->paginate(20)
+                                        ->appends($request->all());
+
+            return view('Incoming.TEV.loghistory', compact('verificationHistory'));
         }
 
     protected function saveIncomingTEVVerificationHistory($dvRequest, $step, $remarks = null, $data = [])

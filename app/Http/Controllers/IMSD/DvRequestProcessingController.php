@@ -7,6 +7,7 @@ use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Services\PusherService;
 use App\Models\TUPADAttachment;
+use App\Models\DocumentAgingAlert;
 use App\Models\IMSDVerificationHistory;
 use App\Models\TEVAttachment;
 use App\Models\Notification;
@@ -201,7 +202,9 @@ class DvRequestProcessingController extends Controller
             ], 422);
         }
         
-      
+        // ✅ DEFINE THESE VARIABLES BEFORE USING THEM
+        $controlNumber = $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) : 'Unknown';
+        $userName = auth()->user()->name ?? 'IMSD User';
         
         $dvRequest->update([
             'status'           => 'IMSD_received',
@@ -212,6 +215,14 @@ class DvRequestProcessingController extends Controller
             'locked_at'        => $receivedAt,
         ]);
         
+        // ✅ AUTO-ACKNOWLEDGE AGING ALERTS
+        $acknowledgedAlerts = DocumentAgingAlert::where('dv_request_id', $id)
+            ->where('acknowledged', false)
+            ->update([
+                'acknowledged' => true,
+                'acknowledged_at' => now(),
+                'acknowledged_by' => auth()->id(),
+            ]);
 
         $this->saveVerificationHistory(
             $dvRequest,
@@ -246,14 +257,18 @@ class DvRequestProcessingController extends Controller
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
             'status'        => 'IMSD_received',
-            'isRejected'    => false,  // ← ADD THIS
+            'isRejected'    => false,
             'remarks'       => 'Request officially received by IMSD',
             'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
         
-         $this->pusher->trigger('dv-requests-imsd', 'dv-request-received', [
-        'dv_request_id' => $dvRequest->id,
-        'status' => 'IMSD_received',
+        // ✅ NOW THESE VARIABLES ARE DEFINED
+        $this->pusher->trigger('dv-requests-imsd', 'dv-request-received', [
+            'dv_request_id' => $dvRequest->id,
+            'control_number' => $controlNumber,
+            'received_by' => $userName,
+            'received_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'acknowledged_alerts_count' => $acknowledgedAlerts,
         ]);
 
         // Check if request expects JSON (AJAX)
@@ -261,6 +276,7 @@ class DvRequestProcessingController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Document has been received by IMSD.',
+                'acknowledged_alerts' => $acknowledgedAlerts, // ✅ Include this in response
                 'data' => [
                     'id' => $dvRequest->id,
                     'status' => 'IMSD_received',
@@ -781,17 +797,47 @@ public function reject(Request $request, $id)
     }
 
 
-    public function verificationHistory()
+    public function verificationHistory(Request $request)
     {
-        $verificationHistory = IMSDVerificationHistory::with([
+        $query = IMSDVerificationHistory::with([
             'dvRequest.program',
-            'dvRequest.focalPerson', 
+            'dvRequest.focalPerson',
             'dvRequest.respocenter',
             'verifier'
         ])
-        ->where('verified_by', auth()->id()) // Only show current user's history
-        ->orderBy('verified_at', 'desc')
-        ->paginate(20);
+        ->where('verified_by', auth()->id());
+
+        // Search by DV Number
+        if ($request->has('search') && $request->search) {
+            $query->whereHas('dvRequest', function($q) use ($request) {
+                $q->where('accounting_control_number', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        // Filter by Program
+        if ($request->has('program') && $request->program) {
+            $query->whereHas('dvRequest.program', function($q) use ($request) {
+                $q->where('prcode', $request->program);
+            });
+        }
+
+        // Filter by Verification Step
+        if ($request->has('step') && $request->step) {
+            $query->where('verification_step', $request->step);
+        }
+
+        // Date range filter
+        if ($request->has('date_from') && $request->date_from) {
+            $query->whereDate('verified_at', '>=', $request->date_from);
+        }
+
+        if ($request->has('date_to') && $request->date_to) {
+            $query->whereDate('verified_at', '<=', $request->date_to);
+        }
+
+        $verificationHistory = $query->orderBy('verified_at', 'desc')
+                                    ->paginate(20)
+                                    ->appends($request->all());
 
         return view('RegionalOffices.IMSD.loghistory', compact('verificationHistory'));
     }

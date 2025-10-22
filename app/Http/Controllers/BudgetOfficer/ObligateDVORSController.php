@@ -7,9 +7,11 @@ use Illuminate\Http\Request;
 use App\Models\OrsRequest;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
+use App\Models\Program;
 use App\Services\PusherService;
 use App\Models\Notification;
 use App\Models\BudgetObligationHistory;
+use App\Models\DocumentAgingAlert;
 use App\Models\UacsCode;
 use App\Models\AdlCode;
 use App\Models\AllotmentClass;
@@ -55,7 +57,6 @@ class ObligateDVORSController extends Controller
                     'ORS_received',
                     'ORS_in_process',
                     'ORS_onhold',
-                    'ORS_obligated'
                 ])
                 ->where(function ($q) use ($currentUserId, $lockDuration) {
                     $q->whereNull('locked_by')
@@ -219,28 +220,51 @@ class ObligateDVORSController extends Controller
             'amount'              => $dvRequest->amount,
         ]);
     }
+public function receive(Request $request, $id)
+{
+    try {
+        $dvRequest = DvRequest::with(['orsRequest', 'focalPerson'])->findOrFail($id);
+        $statusBefore = $dvRequest->status;
+        $receivedAt = now();
+        $currentUserId = auth()->id();
 
-     public function receive(Request $request, $id)
-    {
-        try {
-            $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
-            $statusBefore = $dvRequest->status;
-            $receivedAt = now();
-
-            if (!in_array($dvRequest->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','Incoming-TEV_verified'])) {
+        // FIXED: Check if it's already received by Budget Officer, not just if it's not verified
+        if ($dvRequest->status === 'ORS_received') {
+            if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This request is not ready to be received by the Budget Officer.'
+                    'message' => 'This request has already been received by Budget Officer.'
                 ], 422);
             }
+            return redirect()->back()->with('error', 'This request has already been received by Budget Officer.');
+        }
 
+        // FIXED: Check if the request is in a state that can be received
+        if (!in_array($dvRequest->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','Incoming-TEV_verified'])) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This request cannot be received. Current status: ' . $statusBefore
+                ], 422);
+            }
+            return redirect()->back()->with('error', 'This request cannot be received. Current status: ' . $statusBefore);
+        }
+
+        // Use database transaction to ensure data consistency
+        DB::transaction(function () use (
+            $dvRequest, 
+            $statusBefore, 
+            $receivedAt, 
+            $request, 
+            $currentUserId
+        ) {
             // Update ORS Request first (if exists)
             if ($dvRequest->orsRequest) {
                 $dvRequest->orsRequest->update([
                     'status'            => 'ORS_received',
                     'gross'             => $request->input('amount', $dvRequest->amount),
-                    'accountingunit_id' => auth()->id(),
-                    'received_by'       => auth()->id(),
+                    'accountingunit_id' => $currentUserId,
+                    'received_by'       => $currentUserId,
                     'received_at'       => $receivedAt,
                 ]);
             }
@@ -249,14 +273,14 @@ class ObligateDVORSController extends Controller
             $dvRequest->update([
                 'status'            => 'ORS_received',
                 'gross'             => $request->input('amount', $dvRequest->amount),
-                'accountingunit_id' => auth()->id(),
-                'received_by'       => auth()->id(),
+                'accountingunit_id' => $currentUserId,
+                'received_by'       => $currentUserId,
                 'received_at'       => $receivedAt,
-                'locked_by'         => auth()->id(),
+                'locked_by'         => $currentUserId,
                 'locked_at'         => $receivedAt,
             ]);
 
-            // ✅ SAVE VERIFICATION HISTORY
+            // ✅ SAVE VERIFICATION HISTORY (NO ACKNOWLEDGMENT)
             $this->saveBudgetObligationHistory(
                 $dvRequest,
                 'receive',
@@ -264,7 +288,7 @@ class ObligateDVORSController extends Controller
                 [
                     'status_before' => $statusBefore,
                     'status_after'  => 'ORS_received',
-                    'received_by' => auth()->id(),
+                    'received_by' => $currentUserId,
                     'received_at' => $receivedAt->toISOString(),
                     'amount' => $dvRequest->amount,
                     'ors_request_id' => $dvRequest->orsRequest->id ?? null
@@ -297,41 +321,51 @@ class ObligateDVORSController extends Controller
                 'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
-            $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-received', [
+           $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-received', [
                 'dv_request_id' => $dvRequest->id,
-                'status'        => $dvRequest->status,
-                'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'control_number' => $dvRequest->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) : 'Unknown',
+                'status' => $dvRequest->status,
+                'submitted_by' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                'received_by' => auth()->user()->name ?? 'Budget Officer',
+                'timestamp' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'action_performer_id' => $currentUserId,
+                'received_by_user_id' => $currentUserId, 
             ]);
+        });
 
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Document has been received by Budget Officer (ORS).',
-                    'data' => [
-                        'id'          => $dvRequest->id,
-                        'status'      => $dvRequest->status,
-                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                    ]
-                ]);
-            }
-
-            return redirect()->route('BudgetOfficer.dvrequests.index')
-                ->with('success', 'Document has been received by Budget Officer (ORS).');
-
-        } catch (\Exception $e) {
-            \Log::error('Error receiving DV request: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An error occurred while processing the request: ' . $e->getMessage()
-                ], 500);
-            }
-
-            return redirect()->back()->with('error', 'An error occurred while processing the request.');
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Document has been received by Budget Officer (ORS).',
+                'data' => [
+                    'id'          => $dvRequest->id,
+                    'status'      => $dvRequest->status,
+                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
         }
+
+        return redirect()->route('BudgetOfficer.dvrequests.index')
+            ->with('success', 'Document has been received by Budget Officer (ORS).');
+
+    } catch (\Exception $e) {
+        \Log::error('Error receiving DV request in Budget Officer: ' . $e->getMessage(), [
+            'dv_request_id' => $id,
+            'user_id' => auth()->id(),
+            'exception' => $e->getTraceAsString()
+        ]);
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while processing the request: ' . $e->getMessage()
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
+}
 
     public function startProcessing(Request $request, $id)
     {
@@ -339,7 +373,9 @@ class ObligateDVORSController extends Controller
             $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
             $statusBefore = $dvRequest->status;
             $startedAt = now();
+            $currentUserId = auth()->id();
 
+            
             if ($dvRequest->status !== 'ORS_received') {
                 return response()->json([
                     'success' => false,
@@ -350,7 +386,7 @@ class ObligateDVORSController extends Controller
             $dvRequest->update([
                 'status'    => 'ORS_in_process',
                 'gross'     => $request->input('amount', $dvRequest->amount),
-                'locked_by' => auth()->id(),
+                'locked_by' => $currentUserId,
                 'locked_at' => $startedAt,
             ]);
 
@@ -368,7 +404,7 @@ class ObligateDVORSController extends Controller
                 [
                     'status_before' => $statusBefore,
                     'status_after'  => 'ORS_in_process',
-                    'processed_by' => auth()->id(),
+                    'processed_by' =>  $currentUserId,
                     'processed_at' => $startedAt->toISOString(),
                     'amount' => $dvRequest->amount,
                     'ors_request_id' => $dvRequest->orsRequest->id ?? null
@@ -408,6 +444,7 @@ class ObligateDVORSController extends Controller
                     'dv_request_id' => $dvRequest->id,
                     'status'        => $status,
                     'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'action_performer_id' => $currentUserId, // ✅ ADD THIS
                 ]);
             } catch (\Throwable $e) {
                 \Log::warning("Pusher failed during startProcessing: " . $e->getMessage());
@@ -540,6 +577,7 @@ class ObligateDVORSController extends Controller
                     'old_amount'    => number_format($oldAmount, 2),
                     'new_amount'    => number_format($newAmount, 2),
                     'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'action_performer_id' => $currentUserId,
                 ]);
             }
 
@@ -635,7 +673,8 @@ class ObligateDVORSController extends Controller
 
         $dvRequest = DvRequest::findOrFail($dvRequestId)->fresh();
         $statusBefore = $dvRequest->status;
-        
+        $currentUserId = auth()->id();
+
         $dvRequest->update([
             'status'    => 'ORS_obligated',
             'locked_by' => null,
@@ -646,7 +685,7 @@ class ObligateDVORSController extends Controller
         $orsRequest = null;
 
         DB::transaction(function () use ($request, $dvRequest, &$orsNumber, &$orsRequest) {
-            $orsNumber = $this->generateOrsNumber($request->allotment_class_id, $request->contcurrent_id);
+            $orsNumber = $this->generateOrsNumber($request->allotment_class_id, $request->contcurrent_id, $dvRequest);
             
             // Create ORS Request
             $orsRequest = OrsRequest::create([
@@ -745,8 +784,19 @@ class ObligateDVORSController extends Controller
             'ors_number'    => $orsNumber,
             'status'        => $status,
             'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'action_performer_id' => $currentUserId,
         ]);
-
+                $this->pusher->trigger('dv-requests-outgoing', 'dv-request-submitted', [
+            'dv_request_id' => $dvRequest->id,
+            'control_number' => $dvRequest->accounting_control_number,
+            'ors_number' => $orsRequest->ors_number,
+            'status' => 'ORS_obligated',
+            'submitted_by' => $dvRequest->focalPerson->fname . ' ' . $dvRequest->focalPerson->lname,
+            'program' => $dvRequest->program->prcode,
+            'amount' => $dvRequest->amount,
+            'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+        
         $this->logAction(
             $dvRequest->id,
             'Budget_Officer',
@@ -796,22 +846,55 @@ class ObligateDVORSController extends Controller
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
 
-   public function history()
-    {
-        $verificationHistory = BudgetObligationHistory::with([
-            'dvRequest.program',
-            'dvRequest.focalPerson', 
-            'dvRequest.respocenter',
-            'orsRequest',
-            'orsRequest.uacsCodes',
-            'verifier'
-        ])
-        ->where('verified_by', auth()->id())
-        ->orderBy('verified_at', 'desc')
-        ->paginate(20);
+  public function history(Request $request)
+{
+    $query = BudgetObligationHistory::with([
+        'dvRequest.program',
+        'dvRequest.focalPerson', 
+        'dvRequest.respocenter',
+        'orsRequest',
+        'orsRequest.uacsCodes',
+        'verifier'
+    ])
+    ->where('verified_by', auth()->id());
 
-        return view('BudgetOfficer.loghistory', compact('verificationHistory'));
+    // Search by DV Number
+    if ($request->has('search') && $request->search) {
+        $query->whereHas('dvRequest', function($q) use ($request) {
+            $q->where('accounting_control_number', 'like', '%' . $request->search . '%');
+        });
     }
+
+    // Filter by Program
+    if ($request->has('program') && $request->program) {
+        $query->whereHas('dvRequest.program', function($q) use ($request) {
+            $q->where('prcode', $request->program);
+        });
+    }
+
+    // Filter by Verification Step
+    if ($request->has('step') && $request->step) {
+        $query->where('verification_step', $request->step);
+    }
+
+    // Date range filter
+    if ($request->has('date_from') && $request->date_from) {
+        $query->whereDate('verified_at', '>=', $request->date_from);
+    }
+
+    if ($request->has('date_to') && $request->date_to) {
+        $query->whereDate('verified_at', '<=', $request->date_to);
+    }
+
+    $verificationHistory = $query->orderBy('verified_at', 'desc')
+                                ->paginate(20)
+                                ->appends($request->all());
+
+    // Get programs for filter dropdown
+    $programs = Program::all();
+
+    return view('BudgetOfficer.loghistory', compact('verificationHistory', 'programs'));
+}
     // VERIFICATION HISTORY HELPER METHOD
     protected function saveBudgetObligationHistory($dvRequest, $step, $remarks = null, $data = [])
     {
@@ -828,29 +911,32 @@ class ObligateDVORSController extends Controller
         ]);
     }
 
-   private function generateOrsNumber($allotmentClassId, $contcurrentId)
-{
-    $year  = now()->format('Y');
-    $month = now()->format('m');
+    private function generateOrsNumber($allotmentClassId, $contcurrentId, $dvRequest)
+    {
+        $year  = now()->format('Y');
+        $month = now()->format('m');
 
-    $allotment = AllotmentClass::findOrFail($allotmentClassId)->allotcode;
-    $ccode     = ContinuingOrCurrent::findOrFail($contcurrentId)->ccode;
+        $allotment = AllotmentClass::findOrFail($allotmentClassId)->allotcode;
+        $ccode     = ContinuingOrCurrent::findOrFail($contcurrentId)->ccode;
 
-    $series = OrsRequest::whereYear('created_at', $year)
-        ->whereMonth('created_at', $month)
-        ->where('allotment_class_id', $allotmentClassId)
-        ->where('contcurrent_id', $contcurrentId)
-        ->count() + 1;
+        // ✅ Use the accounting_control_number as the series
+        $series = $dvRequest->accounting_control_number; // fallback if null
+        $seriesFormatted = str_pad($series, 4, '0', STR_PAD_LEFT);
 
-    // Ensure uniqueness by looping until ORS number not yet used
-    do {
-        $orsNumber = "{$allotment}-{$ccode}-{$year}-{$month}-" . str_pad($series, 4, '0', STR_PAD_LEFT);
+        $orsNumber = "{$allotment}-{$ccode}-{$year}-{$month}-{$seriesFormatted}";
+
+        // ✅ Ensure uniqueness (just to be safe)
         $exists = OrsRequest::where('ors_number', $orsNumber)->exists();
-        $series++;
-    } while ($exists);
-
-    return $orsNumber;
+        if ($exists) {
+            // Append a suffix if duplicate found (shouldn't normally happen)
+            $orsNumber .= '-DUP';
+        }
+        if (empty($dvRequest->accounting_control_number)) {
+    return redirect()->back()->with('error', 'Accounting Control Number is required before obligation.');
 }
+        return $orsNumber;
+    }
+
 
     public function onhold(Request $request, $id)
     {
