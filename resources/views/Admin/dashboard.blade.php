@@ -66,6 +66,55 @@
     new Chart(ctx, {
         type: 'bar',
         data: data,
+        options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1,
+                    callback: function(value) {
+                        return Number.isInteger(value) ? value : null;
+                    }
+                }
+            }
+        }
+    }
+    });
+</script>
+
+<!-- Bar Chart: Budget Obligated per Program -->
+<div class="bg-white p-4 rounded-lg shadow">
+    <h2 class="text-lg font-semibold mb-2">Total Budget Obligated per Program</h2>
+    <canvas id="budgetPerProgram"></canvas>
+</div>
+
+<script>
+    const ctxBudget = document.getElementById('budgetPerProgram').getContext('2d');
+
+    const dataBudget = {
+        labels: @json($budgetPerProgram->keys()), // ['TUPAD','GIP','TEV']
+        datasets: [{
+            label: 'Total Budget Obligated',
+            data: @json($budgetPerProgram->values()), // [sum per program]
+            backgroundColor: ['#3b82f6','#10b981','#f59e0b'],
+        }]
+    };
+
+    new Chart(ctxBudget, {
+        type: 'bar',
+        data: dataBudget,
+        options: {
+            scales: {
+                y: {
+                    ticks: {
+                        callback: function(value) {
+                            return '₱' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
     });
 </script>
 
@@ -133,29 +182,35 @@
         type: 'line',
         data: monthlyData,
         options: {
-            responsive: true,
-            plugins: {
-                legend: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top',
+            }
+        },
+        scales: {
+            x: {
+                title: {
                     display: true,
-                    position: 'top',
+                    text: 'Month'
                 }
             },
-            scales: {
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Month'
-                    }
+            y: {
+                title: {
+                    display: true,
+                    text: 'Number of Requests'
                 },
-                y: {
-                    title: {
-                        display: true,
-                        text: 'Number of Requests'
-                    },
-                    beginAtZero: true
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1,
+                    callback: function(value) {
+                        return Number.isInteger(value) ? value : null;
+                    }
                 }
             }
         }
+    }
     });
 </script>
 
@@ -172,5 +227,30 @@
         @endforeach
     </ul>
 </div>
+
+
+<script src="https://js.pusher.com/8.2/pusher.min.js"></script>
+<script>
+    // Initialize pusher
+    var pusher = new Pusher("{{ env('PUSHER_APP_KEY') }}", {
+        cluster: "{{ env('PUSHER_APP_CLUSTER') }}",
+        forceTLS: true
+    });
+
+    // Subscribe to your channel
+    var channel = pusher.subscribe('dv-dashboard');
+
+    // Listen to the event
+    channel.bind('App\\Events\\DashboardDataUpdated', function(data) {
+        console.log("Realtime dashboard update:", data.payload);
+
+        // Update your charts in-place
+        myBarChart.data.datasets[0].data = data.payload.requestsPerProgram;
+        myBarChart.update();
+
+        myLineChart.data.datasets[0].data = data.payload.monthlyRequests;
+        myLineChart.update();
+    });
+</script>
 
 @endsection

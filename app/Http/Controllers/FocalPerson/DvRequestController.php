@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
+use App\Events\DashboardDataUpdated;
 
 class DvRequestController extends Controller
 {
@@ -36,8 +37,115 @@ class DvRequestController extends Controller
 
     public function index()
     {
-        if (!Auth::guard('focal')->check()) {
-            return redirect()->route('login')->with('error', 'Please log in first.');
+        $dvRequests = DvRequest::select('id', 'status', 'dv_number', 'updated_at')
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        return response()->json($dvRequests);
+    } 
+    public function create()
+    {
+        $focalPerson = Auth::guard('focal')->user(); // authenticated focal person
+        $programs = Program::all();
+        $mops = ModeOfPayment::all();
+        return view('FocalPerson.dvrequest.submitdvors', compact('programs','focalPerson','mops'));
+    }
+
+    /**
+     * Store a newly created DV Request.
+     */
+  public function store(Request $request)
+{
+    $request->validate([
+        'program_id'  => 'required|exists:programs,id',
+        'respocenter_id' =>'required|exists:responcenters,id',
+        'amount'      => 'required|numeric|min:0',
+        'particulars' => 'required|string|max:255',
+        'mode_of_payment_id' => 'required|exists:mode_of_payments,id',
+        'payment_details.bank_name'   => 'nullable|string|max:255',
+        'payment_details.bank_accnum' => 'nullable|string|max:255',
+        'payment_details.bank_address'=> 'nullable|string|max:255',
+    ]);
+
+    $focalpersonId = Auth::guard('focal')->id();
+
+    if (!$focalpersonId) {
+        abort(403, 'Only focal persons can submit DV requests.');
+    }
+
+    $dv = DB::transaction(function () use ($request, $focalpersonId) {
+        // global control number (accounting)
+        $nextControlNumber = (DvRequest::max('accounting_control_number') ?? 0) + 1;
+
+        // per-user sequence
+        $nextUserSequence = (DvRequest::where('focalperson_id', $focalpersonId)->max('user_sequence') ?? 0) + 1;
+
+        // generate a unique reference_number (very unlikely to loop, but we check existence)
+        do {
+            $referenceNumber = 'DVORS-' . strtoupper(Str::random(8)); // e.g. DV-8F3C9A2B
+        } while (DvRequest::where('reference_number', $referenceNumber)->exists());
+
+        // create DV
+        $dv = DvRequest::create([
+            'focalperson_id'            => $focalpersonId,
+            'reference_number'          => $referenceNumber,
+            'accounting_control_number' => $nextControlNumber,
+            'user_sequence'             => $nextUserSequence,
+            'program_id'                => $request->program_id,
+            'amount'                    => $request->amount,
+            'particulars'               => $request->particulars,
+            'fname'                     => $request->fname,
+            'mi'                        => $request->mi,
+            'lname'                     => $request->lname,
+            'tin_number'                => $request->tin,
+            'respocenter_id'            => $request->respocenter_id,
+            'address'                   => $request->address,
+            'status'                    => 'submitted',
+        ]);
+
+        // attach mode of payment
+        $dv->modeOfPayments()->attach($request->mode_of_payment_id);
+
+        // retrieve pivot and save payment details
+        $dvRequestMop = DvRequestModeOfPayment::where('dv_request_id', $dv->id)
+            ->where('mode_of_payment_id', $request->mode_of_payment_id)
+            ->first();
+
+        $dvRequestMop->paymentDetail()->create([
+            'bank_name'   => $request->input("payment_details.bank_name"),
+            'bank_accnum' => $request->input("payment_details.bank_accnum"),
+            'bank_address'=> $request->input("payment_details.bank_address"),
+        ]);
+
+        return $dv;
+    });
+
+    $this->logAction($dv, 'SUBMITTED', 'submitted', 'Request submitted by Focal Person');
+
+    return redirect()->route('FocalPerson.dvrequest.index')
+        ->with('success', 'DV Request submitted successfully!');
+
+
+
+
+    $dv = DVRequest::create($request->all());
+
+    // get updated chart data
+    $payload = [
+        'requestsPerProgram' => $this->getRequestsPerProgram(),
+        'monthlyRequests' => $this->getMonthlyRequests(),
+    ];
+
+    event(new DashboardDataUpdated($payload));
+
+    return response()->json(['success' => true]);
+}
+
+    public function show(DvRequest $dvRequest)
+    {
+       
+        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+            abort(403, 'Unauthorized access.');
         }
 
         $focalId = Auth::guard('focal')->id();

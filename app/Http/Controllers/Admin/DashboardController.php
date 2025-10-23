@@ -92,6 +92,21 @@ $monthlyRequests = DB::table('dv_requests')
         }
     
 
+
+        $budgetPerProgram = DB::table('dv_requests')
+    ->join('programs', 'dv_requests.program_id', '=', 'programs.id')
+    ->select('programs.prcode', DB::raw('SUM(dv_requests.amount) as total_budget'))
+    ->groupBy('programs.prcode')
+    ->pluck('total_budget', 'prcode');
+
+// Reorder manually para uniform (TUPAD, GIP, TEV)
+$orderedBudget = collect([
+    'TUPAD' => $budgetPerProgram->get('TUPAD', 0),
+    'GIP'   => $budgetPerProgram->get('GIP', 0),
+    'TEV'   => $budgetPerProgram->get('TEV', 0),
+]);
+
+
     return view('admin.dashboard', [
         'requestsPerProgram' => $orderedPrograms,
         'totalRequests'      => $totalRequests,
@@ -100,7 +115,8 @@ $monthlyRequests = DB::table('dv_requests')
         'averageProcessingTime' => $averageProcessingTime,
         'documentsPerRole'   => $documentsPerRole,
         'monthlyRequests' => $monthlyRequests,
-        'insights' => $insights
+        'insights' => $insights,
+        'budgetPerProgram' => $orderedBudget
     ]);
     }
 }
