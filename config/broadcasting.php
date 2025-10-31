@@ -14,6 +14,9 @@ return [
             'options' => [
                 'cluster' => env('PUSHER_APP_CLUSTER', 'ap3'), // Asia cluster
                 'useTLS' => true,
+                'host' => 'api-' . env('PUSHER_APP_CLUSTER') . '.pusher.com',
+        'port' => env('PUSHER_PORT', 443),
+        'scheme' => env('PUSHER_SCHEME', 'https'),
             ],
         ],
 

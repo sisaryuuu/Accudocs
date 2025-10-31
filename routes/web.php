@@ -32,6 +32,19 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AnalyticsController;
 
 
+
+Route::get('/admin/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
+Route::get('/admin/dashboard/fetch-data', [DashboardController::class, 'fetchData'])->name('admin.dashboard.fetch');
+
+Route::get('/admin/dashboard/data', [DashboardController::class, 'fetchData'])
+    ->name('admin.dashboard.data');
+
+
+Route::get('/admin/dashboard/filter', [App\Http\Controllers\Admin\DashboardController::class, 'filter'])
+    ->name('admin.dashboard.filter');
+
+
+
 Route::get('/test-chart', function () {
     return view('test-chart');
 });

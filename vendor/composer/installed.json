@@ -31,7 +31,7 @@
             },
             "time": "2022-12-07T17:46:57+00:00",
             "type": "library",
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "BaconQrCode\\": "src/"
@@ -99,7 +99,7 @@
                     "dev-master": "3.0-dev"
                 }
             },
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "Barryvdh\\DomPDF\\": "src"
@@ -528,7 +528,7 @@
             },
             "time": "2025-09-16T12:23:56+00:00",
             "type": "library",
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "DASPRiD\\Enum\\": "src/"
@@ -899,7 +899,7 @@
             },
             "time": "2025-09-23T03:06:41+00:00",
             "type": "library",
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "Dompdf\\": "src/"
@@ -950,7 +950,7 @@
             },
             "time": "2024-12-02T14:37:59+00:00",
             "type": "library",
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "FontLib\\": "src/FontLib"
@@ -999,7 +999,7 @@
             },
             "time": "2024-04-29T13:26:35+00:00",
             "type": "library",
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "Svg\\": "src/Svg"
@@ -3415,7 +3415,7 @@
                     "dev-master": "2.7-dev"
                 }
             },
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "Masterminds\\": "src"
@@ -7068,7 +7068,7 @@
                     "dev-main": "9.0.x-dev"
                 }
             },
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "Sabberworm\\CSS\\": "src/"
@@ -8163,7 +8163,7 @@
                     ]
                 }
             },
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "SimpleSoftwareIO\\QrCode\\": "src"
