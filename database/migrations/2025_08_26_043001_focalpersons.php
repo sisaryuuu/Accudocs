@@ -11,23 +11,26 @@ return new class extends Migration
      */
     public function up(): void
     {
-      Schema::create('focalpersons', function (Blueprint $table) {
+        Schema::create('focalpersons', function (Blueprint $table) {
             $table->id();
-            $table->string('fname',100); 
-            $table->string('mi',10); 
-            $table->string('lname',100);
-            $table->string('TIN_number',15)->unique();
+            $table->string('fname', 100); 
+            $table->string('mi', 50)->nullable(); // Made nullable for consistency
+            $table->string('lname', 100);
+            $table->string('TIN_number', 15)->unique();
             $table->string('Address')->nullable();
             $table->string('email')->unique();
             $table->string('profile_image')->default('default.png');
             $table->string('password');
-            $table->string('contactnumber',11)->unique();
+            $table->string('contactnumber', 11)->unique();
             $table->unsignedBigInteger('respocenter_id')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
+            
+            // ✅ Add remember token for "remember me" functionality
+            $table->rememberToken();
+            
             $table->foreign('respocenter_id')->references('id')->on('responcenters')->onDelete('cascade');
-
             $table->timestamps();
-});
-
+        });
     }
 
     /**
@@ -35,6 +38,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-         Schema::dropIfExists('focalpersons');
+        Schema::dropIfExists('focalpersons');
     }
 };

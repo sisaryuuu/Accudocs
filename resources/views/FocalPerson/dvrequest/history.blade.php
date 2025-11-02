@@ -60,7 +60,7 @@
                     <div class="relative">
                         <input type="text" 
                                id="searchInput" 
-                               placeholder="Search by control number, particulars, amount, program..." 
+                               placeholder="Search by control number, ORS number, particulars, amount, program..." 
                                class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200">
                         <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -98,6 +98,7 @@
                         <thead>
                             <tr class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Control #</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ORS #</th> <!-- NEW COLUMN -->
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Program</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Particulars</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Amount</th>
@@ -118,6 +119,19 @@
                                                 </span>
                                             </div>
                                         </div>
+                                    </td>
+
+                                    <!-- ORS Number --> <!-- NEW COLUMN -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        @if($request->orsRequest && $request->orsRequest->ors_number)
+                                            <div class="bg-blue-50 px-3 py-1 rounded-lg">
+                                                <span class="text-sm font-medium text-blue-700">
+                                                    {{ $request->orsRequest->ors_number }}
+                                                </span>
+                                            </div>
+                                        @else
+                                            <span class="text-sm text-gray-400">No ORS</span>
+                                        @endif
                                     </td>
 
                                     <!-- Program -->
@@ -248,7 +262,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (requests.length === 0) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="px-6 py-12 text-center">
+                    <td colspan="8" class="px-6 py-12 text-center"> <!-- Changed colspan to 8 -->
                         <div class="flex flex-col items-center">
                             <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -297,6 +311,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const formattedDate = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             const formattedTime = createdDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
+            // ORS Number display
+            const orsNumber = request.ors_request?.ors_number ? 
+                `<div class="bg-blue-50 px-3 py-1 rounded-lg">
+                    <span class="text-sm font-medium text-blue-700">${request.ors_request.ors_number}</span>
+                </div>` : 
+                `<span class="text-sm text-gray-400">No ORS</span>`;
+
             return `
                 <tr class="hover:bg-gray-50 transition-colors duration-150">
                     <td class="px-6 py-4 whitespace-nowrap">
@@ -307,6 +328,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </span>
                             </div>
                         </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        ${orsNumber}
                     </td>
                     <td class="px-6 py-4">
                         <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">

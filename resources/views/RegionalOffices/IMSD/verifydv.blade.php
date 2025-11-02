@@ -236,9 +236,7 @@
             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
             Verify
         </button>
-    </div>
     </form> 
-<div class="flex justify-end space-x-3 mt-3" id="outside-form-buttons">
     <button type="button"
         onclick="openRejectModal()"
         class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
@@ -277,7 +275,7 @@
         </form>
     @endif
 </div>
-
+</div>
 
           <!-- Sidebar -->
         <div class="lg:col-span-1">

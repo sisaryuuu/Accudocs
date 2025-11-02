@@ -26,7 +26,8 @@ class DatabaseSeeder extends Seeder
             ADLNumberSeeder::class,
             TUPADAttachmentSeeder::class,
             TEVAttachmentSeeder::class,
-            UACSCodeSeeder::class,   // Seed UACS codes
+            UACSCodeSeeder::class,
+            DummyDataSeeder::class,   // Seed UACS codes
         ]);
     }
 }

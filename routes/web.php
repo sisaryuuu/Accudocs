@@ -28,7 +28,11 @@ use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\FocalPerson\NotificationController;
 use App\Http\Controllers\AccountingUnitProfileController;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
+use App\Http\Requests\FocalEmailVerificationRequest;
+use App\Http\Requests\AccountingUnitEmailVerificationRequest;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use App\Http\Controllers\AnalyticsController;
 
 
@@ -66,54 +70,108 @@ Route::get('/auth/focalpersonregister', [FocalPersonRegisterController::class, '
 Route::post('/auth/focalpersonregister', [FocalPersonRegisterController::class, 'register'])->name('focalperson.register');
 
 
-Route::middleware(['auth:web'])->group(function (){
+Route::middleware(['auth:web', 'verified'])->group(function (){
     Route::get('profile', [AccountingUnitProfileController::class, 'show'])->name('web.profile.show');
     Route::get('profile/edit', [AccountingUnitProfileController::class, 'edit'])->name('web.profile.edit');
     Route::post('profile/update', [AccountingUnitProfileController::class, 'update'])->name('web.profile.update');
 });
 
 
-Route::get('/home', function () {
-    return view('home');
-})->name('home')->middleware('auth');
 
-
-Route::middleware(['auth', 'role:Admin|Accounting_III'])->group(function () {
+Route::middleware(['auth:web','verified', 'role:Admin|Accounting_III'])->group(function () {
     Route::get('/Admin/dashboard', [DashboardController::class, 'index'])
         ->name('Admin.dashboard');
 
     Route::resource('admin/accountingunits', AccountingUnitController::class)
         ->names('admin.accountingunits');
 });
-
-Route::middleware(['auth','role:Admin'])->group(function () {
-
-
-    Route::get('admin/accountingunits/{accountingunit}', [AccountingUnitController::class, 'show'])->name('admin.accountingunits.show');
-    Route::post('admin/accountingunits/bulk-action', [AccountingUnitController::class, 'bulkAction'])->name('admin.accountingunits.bulk-action');
-    Route::get('admin/accountingunits/search', [AccountingUnitController::class, 'search'])->name('admin.accountingunits.search');
-    Route::put('/admin/accountingunits/{accountingunit}', [AccountingUnitController::class, 'update'])->name('admin.accountingunits.update');
-
-    Route::resource('roles', RoleController::class)
-    ->names('admin.roles');
-    Route::get('permissions', [RoleController::class, 'permissionsIndex'])->name('admin.permissions.index');
-    Route::get('permissions/create', [RoleController::class, 'permissionsCreate'])->name('admin.permissions.create');
-    Route::post('permissions', [RoleController::class, 'permissionsStore'])->name('admin.permissions.store');
-    Route::get('permissions/{permission}/edit', [RoleController::class, 'permissionsEdit'])->name('admin.permissions.edit');
-    Route::put('permissions/{permission}', [RoleController::class, 'permissionsUpdate'])->name('admin.permissions.update');
-    Route::delete('permissions/{permission}', [RoleController::class, 'permissionsDestroy'])->name('admin.permissions.destroy');
-    Route::get('admin/settings', [SettingsController::class, 'edit'])->name('admin.settings.edit');
-    Route::post('admin/settings', [SettingsController::class, 'update'])->name('admin.settings.update');
+Route::middleware(['auth:web', 'verified', 'role:Admin'])->group(function () {
     
+    // Accounting Units routes
+    Route::get('admin/accountingunits/{accountingunit}', [AccountingUnitController::class, 'show'])
+        ->name('admin.accountingunits.show');
+    Route::post('admin/accountingunits/bulk-action', [AccountingUnitController::class, 'bulkAction'])
+        ->name('admin.accountingunits.bulk-action');
+    Route::get('admin/accountingunits/search', [AccountingUnitController::class, 'search'])
+        ->name('admin.accountingunits.search');
+    Route::put('/admin/accountingunits/{accountingunit}', [AccountingUnitController::class, 'update'])
+        ->name('admin.accountingunits.update');
+    
+    // ✅ Add resend verification route
+    Route::post('/admin/accountingunits/{accountingunit}/resend-verification', 
+        [AccountingUnitController::class, 'resendVerification'])
+        ->name('admin.accountingunits.resend-verification');
+
+    // ✅ Roles routes
+    Route::resource('admin/roles', RoleController::class)
+        ->names('admin.roles');
+    
+    // ✅ Permissions routes (ADD THESE)
+    Route::get('admin/permissions', [RoleController::class, 'permissionsIndex'])
+        ->name('admin.permissions.index');
+    Route::get('admin/permissions/create', [RoleController::class, 'permissionsCreate'])
+        ->name('admin.permissions.create');
+    Route::post('admin/permissions', [RoleController::class, 'permissionsStore'])
+        ->name('admin.permissions.store');
+    Route::get('admin/permissions/{permission}/edit', [RoleController::class, 'permissionsEdit'])
+        ->name('admin.permissions.edit');
+    Route::put('admin/permissions/{permission}', [RoleController::class, 'permissionsUpdate'])
+        ->name('admin.permissions.update');
+    Route::delete('admin/permissions/{permission}', [RoleController::class, 'permissionsDestroy'])
+        ->name('admin.permissions.destroy');
+    
+    // Settings routes
+    Route::get('admin/settings', [SettingsController::class, 'edit'])
+        ->name('admin.settings.edit');
+    Route::post('admin/settings', [SettingsController::class, 'update'])
+        ->name('admin.settings.update');
 });
 
+Route::middleware(['auth:web'])->group(function () {
+    Route::get('/accountingunit/email/verify', function () {
+        return view('auth.accunitverifyemail');
+    })->name('accountingunit.verification.notice');
+
+    Route::post('/accountingunit/email/verification-notification', function (Request $request) {
+        $request->user('web')->sendEmailVerificationNotification();
+        return back()->with('success', 'Verification link sent!');
+    })->middleware('throttle:6,1')->name('accountingunit.verification.send');
+});
+
+Route::get('/accountingunit/email/verify/{id}/{hash}', function (AccountingUnitEmailVerificationRequest $request) {
+    $request->fulfill();
+    return redirect()->route('login')
+        ->with('success', 'Email verified successfully!');
+})->middleware(['auth:web'])->name('accountingunit.verification.verify');
 
 
-    Route::middleware(['auth:focal', 'role:Focal_Person'])->group(function () {
+
+Route::get('/focal/email/verify', function () {
+    return view('auth.focalverifyemail');
+})->middleware(['auth:focal'])->name('verification.notice');
+
+Route::get('/focal/email/verify/{id}/{hash}', function (FocalEmailVerificationRequest $request) {
+    $request->fulfill();
+    
+    return redirect()->route('FocalPerson.dvrequest.index')
+        ->with('success', 'Email verified successfully!');
+})->middleware(['auth:focal'])->name('focal.verification.verify');
+
+Route::post('/focal/email/verification-notification', function (Request $request) {
+    $request->user('focal')->sendEmailVerificationNotification();
+    
+    return back()->with('success', 'Verification link sent!');
+})->middleware(['auth:focal', 'throttle:6,1'])->name('focal.verification.send');
+
+
+// Protected routes that require email verification
+Route::middleware(['auth:focal', 'verified', 'role:Focal_Person'])->group(function () {
+    // History routes
     Route::get('/dvrequest/history', [DvRequestController::class, 'history'])
         ->name('FocalPerson.dvrequest.history');
     Route::get('/dvrequest/history/search', [DvRequestController::class, 'searchHistory'])  
         ->name('FocalPerson.dvrequest.history.search');
+    
     Route::get('/FocalPerson/dvrequest/index', [DvRequestController::class, 'index'])
         ->middleware('permission:focalperson.view')
         ->name('FocalPerson.dvrequest.index');
@@ -144,21 +202,28 @@ Route::middleware(['auth','role:Admin'])->group(function () {
         Route::get('/{dvRequest}/logs', [DvRequestController::class, 'logs'])
             ->middleware('permission:focalperson.view')
             ->name('logs');
-        
-        // 🆕 QR CODE ROUTE - i-add diri
+      
         Route::get('/{dv}/qr', [DvRequestController::class, 'showQR'])
             ->middleware('permission:focalperson.view')
             ->name('qr');
         
+        Route::post('/{dvRequest}/confirm-receipt', [DvRequestController::class, 'confirmReceipt'])
+            ->middleware('permission:focalperson.edit')
+            ->name('confirmReceipt');
+
         Route::delete('/{dvRequest}', [DvRequestController::class, 'destroy'])
             ->middleware('permission:focalperson.delete')
             ->name('destroy');
 
-        //Javascript Route
+        // Javascript Routes
         Route::get('/{dvRequest}/latest-step', [DvRequestController::class, 'latestStep'])
             ->name('latestStep');
         Route::get('/refresh', [DvRequestController::class, 'refresh'])
             ->name('refresh');
+        Route::post('/{dvRequest}/auto-complete', [DvRequestController::class, 'autoComplete'])
+            ->name('autoComplete');
+        Route::post('/move-rejected-to-history', [DvRequestController::class, 'moveRejectedToHistory'])
+            ->name('moveRejectedToHistory');
     });
     
     Route::prefix('FocalPerson/profile')->name('FocalPerson.profile.')->group(function () {
@@ -217,26 +282,29 @@ Route::get('/dv/verify/{reference}', [DOLEQRController::class, 'verifyDv'])
 Route::get('/dv/{id}/generate-qr', [DOLEQRController::class, 'generateQrCode'])
     ->name('dv.generate-qr');
 
-
-Route::prefix('regional-director')->name('regional.director.')->middleware(['auth', 'role:Regional_Director'])->group(function () {
+Route::get('/api/dv/{id}/qr-code', [DOLEQRController::class, 'getQrCode'])
+    ->name('dv.get-qr');
+    
+Route::prefix('regional-director')->name('regional.director.')->middleware(['auth:web','verified', 'role:Regional_Director'])->group(function () {
     Route::get('/dashboard', [DOLEQRController::class, 'regionalDirectorDashboard'])->name('dashboard');
+    Route::get('/scanner', [DOLEQRController::class, 'regionalDirectorScanner'])->name('scanner');
+    Route::get('/scannable-dvs', [DOLEQRController::class, 'scannableDvs'])->name('scannable-dvs');
+    Route::post('/bulk-receive', [DOLEQRController::class, 'bulkReceiveDVs'])->name('bulk-receive');
+    Route::get('/history', [DOLEQRController::class, 'regionalDirectorHistory'])->name('history');
+
 });
 
 // Cashier Routes  
-Route::prefix('cashier')->name('cashier.')->middleware(['auth', 'role:Cashier'])->group(function () {
+Route::prefix('cashier')->name('cashier.')->middleware(['auth:web', 'verified', 'role:Cashier'])->group(function () {
     Route::get('/dashboard', [DOLEQRController::class, 'cashierDashboard'])->name('dashboard');
-});
-Route::prefix('regional-director')->name('regional.director.')->middleware(['auth', 'role:Regional_Director'])->group(function () {
-    Route::get('/scanner', [DOLEQRController::class, 'regionalDirectorScanner'])->name('scanner');
-    Route::get('/scannable-dvs', [DOLEQRController::class, 'scannableDvs'])->name('scannable-dvs');
-});
-
-// Cashier Scanner Routes  
-Route::prefix('cashier')->name('cashier.')->middleware(['auth', 'role:Cashier'])->group(function () {
     Route::get('/scanner', [DOLEQRController::class, 'cashierScanner'])->name('scanner');
     Route::get('/todays-transactions', [DOLEQRController::class, 'getTodaysTransactions'])->name('todays-transactions');
     Route::get('/pending-payments', [DOLEQRController::class, 'cashierDashboard'])->name('pending-payments');
+    Route::post('/bulk-receive', [DOLEQRController::class, 'cashierBulkReceive'])->name('bulk-receive');
+    Route::get('/history', [DOLEQRController::class, 'cashierHistory'])->name('history');
+
 });
+
 
 
 
@@ -253,7 +321,7 @@ Route::get('/dv/verify/{reference}', [DvRequestController::class, 'verifyQR'])->
 
 Route::post('/dv/verify/manual', [DvRequestController::class, 'verifyManual'])->name('dv.verify.manual');
 
-Route::middleware(['auth:web', 'role:Admin|IMSD'])->prefix('RegionalOffices/IMSD')->group(function () {
+Route::middleware(['auth:web', 'verified', 'role:Admin|IMSD'])->prefix('RegionalOffices/IMSD')->group(function () {
 
     // Index page — list all DV requests for IMSD
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
@@ -319,7 +387,7 @@ Route::middleware(['auth:web', 'role:Admin|IMSD'])->prefix('RegionalOffices/IMSD
 });
 
 
-Route::middleware(['auth:web', 'role:Admin|Incoming-GIP'])->prefix('Incoming/GIP')->group(function () {
+Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-GIP'])->prefix('Incoming/GIP')->group(function () {
      Route::get('/index', [GIPDvRequestProcessingController::class, 'index'])
     ->middleware('permission:gip.view')
     ->name('Incoming.GIP.index');
@@ -378,7 +446,7 @@ Route::middleware(['auth:web', 'role:Admin|Incoming-GIP'])->prefix('Incoming/GIP
 
 });
 
-Route::middleware(['auth:web', 'role:Admin|Incoming-TUPAD'])->prefix('Incoming/TUPAD')->group(function () {
+Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TUPAD'])->prefix('Incoming/TUPAD')->group(function () {
     Route::get('/index', [TupadDvRequestProcessingController::class, 'index'])
     ->middleware('permission:tupad.view')
     ->name('Incoming.TUPAD.index');
@@ -427,7 +495,7 @@ Route::get('/aging-statistics', [TUPADRequestAgingController::class, 'getAgingSt
 Route::post('/aging-alerts/{alert}/acknowledge', [TUPADRequestAgingController::class, 'acknowledgeAlert'])
     ->name('TUPAD.aging.acknowledge');
 });
-Route::middleware(['auth:web', 'role:Admin|Incoming-TEV'])->prefix('Incoming/TEV')->group(function () {
+Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TEV'])->prefix('Incoming/TEV')->group(function () {
     Route::get('/index', [TEVDvRequestProcessingController::class, 'index'])
     ->name('Incoming.TEV.index');
     Route::get('/dvrequests/verify', [TEVDvRequestProcessingController::class, 'redirectToFirstPending'])
@@ -466,7 +534,7 @@ Route::middleware(['auth:web', 'role:Admin|Incoming-TEV'])->prefix('Incoming/TEV
     
 
 });
-Route::middleware(['auth:web', 'role:Admin|Budget_Officer'])->prefix('/BudgetOfficer')->name('BudgetOfficer.')->group(function () {
+Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix('/BudgetOfficer')->name('BudgetOfficer.')->group(function () {
     
     // ====================================
     // DV REQUESTS ROUTES
@@ -517,6 +585,13 @@ Route::middleware(['auth:web', 'role:Admin|Budget_Officer'])->prefix('/BudgetOff
         ->middleware('permission:budget.approve')
         ->name('dvrequests.store');
         
+    
+    Route::get('/dv-requests/{id}/preview-ors', [ObligateDVORSController::class, 'previewOrs'])
+    ->name('dvrequests.previewOrs');
+
+    Route::post('/dvrequests/{id}/reject', [ObligateDVORSController::class, 'reject'])
+    ->name('dvrequests.reject');
+
     Route::post('/dvrequests/{id}/onhold', [ObligateDVORSController::class, 'onhold'])
         ->middleware('permission:budget.onhold')
         ->name('dvrequests.onhold');
@@ -572,19 +647,14 @@ Route::middleware(['auth:web', 'role:Admin|Budget_Officer'])->prefix('/BudgetOff
             ->middleware('permission:budget.edit')
             ->name('ors-aging.send-alerts');
             
-        // Acknowledge an ORS aging alert
-        Route::post('/acknowledge/{dvRequest}', [ORSRequestAgingController::class, 'acknowledgeAlert'])
-            ->middleware('permission:budget.edit')
-            ->name('ors-aging.acknowledge');
-            
         // Get ORS aging history
         Route::get('/history', [ORSRequestAgingController::class, 'getAgingHistory'])
             ->middleware('permission:budget.view')
             ->name('ors-aging.history');
     });
 });
-                    
-Route::middleware(['auth:web','role:Admin|Outgoing'])->prefix('/Outgoing')->name('Outgoing.')->group(function () {
+
+Route::middleware(['auth:web', 'verified', 'role:Admin|Outgoing'])->prefix('/Outgoing')->name('Outgoing.')->group(function () {
     // Main DV Requests Routes
     Route::get('/dvrequests', [OutgoingDvController::class, 'index'])
         ->middleware('permission:outgoing.view')
@@ -665,9 +735,9 @@ Route::middleware(['auth:web','role:Admin|Outgoing'])->prefix('/Outgoing')->name
     });
 });
 
+
 //Accountant III
-//Accountant III
-Route::middleware(['auth:web','role:Admin|Accounting_III'])->prefix('Accounting')->name('Accounting.')->group(function () {
+Route::middleware(['auth:web', 'verified', 'role:Admin|Accounting_III'])->prefix('Accounting')->name('Accounting.')->group(function () {
     // Fix the history route - remove duplicate prefix
     Route::get('/history', [RANCAController::class, 'history'])->name('history');
     
@@ -691,8 +761,9 @@ Route::middleware(['auth:web','role:Admin|Accounting_III'])->prefix('Accounting'
     Route::put('/dvrequests/{id}/update-amount', [RANCAController::class, 'updateAmount'])
     ->name('dvrequests.updateAmount');
     Route::post('/dvrequests/{id}/validate', [RANCAController::class, 'validateDV'])
-    ->name('dvrequests.validate');
-
+    ->name('dvrequests.validate'); 
+    Route::post('/dvrequests/{id}/reject', [RANCAController::class, 'reject'])
+    ->name('dvrequests.reject');
     Route::post('/dvrequests/{id}/release-lock', [RANCAController::class, 'releaseLock'])   
     ->name('dvrequests.releaseLock');
     Route::post('/dvrequests/{id}/refresh-lock', [RANCAController::class, 'refreshLock'])
@@ -713,4 +784,4 @@ Route::middleware(['auth:web','role:Admin|Accounting_III'])->prefix('Accounting'
     
     Route::post('/aging/alerts/cleanup', [RANCARequestAgingController::class, 'cleanupOldAlerts'])
     ->name('aging.alerts.cleanup');
-});;
+});

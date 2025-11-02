@@ -11,7 +11,9 @@ use App\Models\Program;
 use App\Models\ModeOfPayment;
 use App\Models\PaymentDetail;
 use App\Models\DvRequestModeOfPayment;
+use App\Models\DvRequestHistory;
 use App\Services\PusherService;
+use App\Services\DvRequestArchiveService;
 use App\Models\Notification;
 use App\Events\DashboardUpdated;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -36,53 +38,63 @@ class DvRequestController extends Controller
     {
         $this->pusher = $pusher;
     }
+public function index()
+{ 
+    \Log::info('Focal Person Auth Check', [
+        'is_authenticated' => Auth::guard('focal')->check(),
+        'user_id' => Auth::guard('focal')->id(),
+        'session_id' => session()->getId(),
+        'session_data' => session()->all()
+    ]);
 
-    public function index()
-    {
-        if (!Auth::guard('focal')->check()) {
-            return redirect()->route('login')->with('error', 'Please log in first.');
-        }
+    if (!Auth::guard('focal')->check()) {
+        \Log::warning('Focal Person not authenticated, redirecting to login');
+        return redirect()->route('login')->with('error', 'Please log in first.');
+    }
+    
+    $focalId = Auth::guard('focal')->id();
 
-        $focalId = Auth::guard('focal')->id();
-
-        try {
-            $dvRequests = DvRequest::with(['focalperson', 'program','respocenter', 'modeOfPayments'])
-                            ->where('focalperson_id', $focalId)
-                            ->where('status','not like',['%_rejected', 'Completed'])
-                            ->latest()
-                            ->get();
-        } catch (\Exception $e) {
-            return back()->with('error', 'Database error: ' . $e->getMessage());
-        }
-
-        return view('FocalPerson.dvrequest.index', compact('dvRequests'));
+    try {
+        $dvRequests = DvRequest::with(['focalperson', 'program', 'respocenter', 'modeOfPayments'])
+            ->where('focalperson_id', $focalId)
+            ->whereNotIn('status', ['Completed']) // Still exclude old Completed status
+            ->where('status', '!=', 'Cashier_released') // Exclude Cashier_released as it's now completed
+            ->where(function ($query) {
+                $query->where('status', 'not like', '%_rejected');
+            })
+            ->latest()
+            ->get();
+    } catch (\Exception $e) {
+        return back()->with('error', 'Database error: ' . $e->getMessage());
     }
 
-    public function history()
-    {
-        if (!Auth::guard('focal')->check()) {
-            return redirect()->route('login')->with('error', 'Please log in first.');
-        }
-
-        $focalId = Auth::guard('focal')->id();
-
-        try {
-            $dvRequests = DvRequest::with(['focalperson', 'program','respocenter', 'modeOfPayments'])
-                            ->where('focalperson_id', $focalId)
-                            ->where(function($query) {
-                                $query->where('status', 'rejected')
-                                      ->orWhere('status', 'completed')
-                                      ->orWhere('status', 'like', '%rejected%');
-                            })
-                            ->latest()
-                            ->get();
-        } catch (\Exception $e) {
-            return back()->with('error', 'Database error: ' . $e->getMessage());
-        }
-
-        return view('FocalPerson.dvrequest.history', compact('dvRequests'));
+    return view('FocalPerson.dvrequest.index', compact('dvRequests'));
+}
+public function history()
+{
+    if (!Auth::guard('focal')->check()) {
+        return redirect()->route('login')->with('error', 'Please log in first.');
     }
 
+    $focalId = Auth::guard('focal')->id();
+
+    try {
+        $dvRequests = DvRequest::with(['focalperson', 'program','respocenter', 'modeOfPayments'])
+            ->where('focalperson_id', $focalId)
+            ->where(function($query) {
+                $query->where('status', 'rejected')
+                      ->orWhere('status', 'completed')
+                      ->orWhere('status', 'Cashier_released') // Include Cashier_released in history
+                      ->orWhere('status', 'like', '%rejected%');
+            })
+            ->latest()
+            ->get();
+    } catch (\Exception $e) {
+        return back()->with('error', 'Database error: ' . $e->getMessage());
+    }
+
+    return view('FocalPerson.dvrequest.history', compact('dvRequests'));
+}
     public function searchHistory(Request $request)
     {
         if (!Auth::guard('focal')->check()) {
@@ -600,13 +612,13 @@ broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashb
             ->with('success', 'DV Request deleted successfully.');
     }
 
-    public function logs(DvRequest $dvRequest, Request $request)
+   public function logs(DvRequest $dvRequest, Request $request)
 {
-    // FIXED: Eager load roles for both focalperson and accountingUnit
+    // Eager load roles for both focalperson and accountingUnit
     $logs = $dvRequest->logs()
         ->with([
-            'focalperson.roles', // Load Spatie roles for focal person
-            'accountingUnit.roles' // Load Spatie roles for accounting unit
+            'focalperson.roles',
+            'accountingUnit.roles'
         ])
         ->orderBy('created_at', 'desc')
         ->get();
@@ -619,35 +631,32 @@ broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashb
             $profileImage = asset('storage/profiles/default.png');
             $roleOrDepartment = $log->department ?? 'System';
             
-            // FIXED: Get role from Spatie roles
+            // FIXED: Properly handle actor names
             if ($log->focalperson) {
                 $actorName = trim($log->focalperson->fname . ' ' . ($log->focalperson->mi ?? '') . ' ' . $log->focalperson->lname);
                 if ($log->focalperson->profile_image) {
                     $profileImage = asset('storage/profiles/' . $log->focalperson->profile_image);
                 }
-                // FIXED: Get role from Spatie
                 if ($log->focalperson->roles->first()) {
                     $roleOrDepartment = $log->focalperson->roles->first()->name;
                 }
             } elseif ($log->accountingUnit) {
-                $actorName = ($log->accountingUnit->fname ?? '') . ' ' . ($log->accountingUnit->lname ?? '');
+                $actorName = trim(($log->accountingUnit->fname ?? '') . ' ' . ($log->accountingUnit->lname ?? ''));
                 if ($log->accountingUnit->profile_image) {
                     $profileImage = asset('storage/profiles/' . $log->accountingUnit->profile_image);
                 }
-                // FIXED: Get role from Spatie
                 if ($log->accountingUnit->roles->first()) {
                     $roleOrDepartment = $log->accountingUnit->roles->first()->name;
                 }
             } elseif ($log->external_actor) {
                 $actorName = $log->external_actor;
+                $roleOrDepartment = 'External Actor';
             }
             
-            $html .= '<tr class="hover:bg-gray-50 transition-colors duration-150">';
-            $html .= '<td class="px-6 py-4 whitespace-nowrap">';
-            $html .= '<div class="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">';
-            $html .= ($index + 1);
-            $html .= '</div></td>';
+            // Clean up actor name - remove extra spaces
+            $actorName = preg_replace('/\s+/', ' ', $actorName);
             
+            $html .= '<tr class="hover:bg-gray-50 transition-colors duration-150">';
             $html .= '<td class="px-6 py-4"><div class="flex items-center">';
             $html .= '<div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">';
             
@@ -662,12 +671,10 @@ broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashb
             
             $html .= '</div><div class="ml-3">';
             $html .= '<div class="text-sm font-medium text-gray-900">' . htmlspecialchars($actorName) . '</div>';
-            // FIXED: Show role/department instead of action
             $html .= '<div class="text-xs text-gray-500">' . htmlspecialchars($roleOrDepartment) . '</div>';
             $html .= '</div></div></td>';
             
             $html .= '<td class="px-6 py-4">';
-            // FIXED: Better remarks handling
             if ($log->remarks && trim($log->remarks) !== '') {
                 $html .= '<div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">';
                 $html .= '<p class="text-gray-700">' . htmlspecialchars(ucfirst($log->remarks)) . '</p></div>';
@@ -691,10 +698,21 @@ broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashb
             'logs' => $logs->map(function($log) {
                 // For JavaScript side if needed
                 $role = null;
-                if ($log->focalperson && $log->focalperson->roles->first()) {
-                    $role = $log->focalperson->roles->first()->name;
-                } elseif ($log->accountingUnit && $log->accountingUnit->roles->first()) {
-                    $role = $log->accountingUnit->roles->first()->name;
+                $actorName = 'System';
+                
+                if ($log->focalperson) {
+                    $actorName = trim($log->focalperson->fname . ' ' . ($log->focalperson->mi ?? '') . ' ' . $log->focalperson->lname);
+                    if ($log->focalperson->roles->first()) {
+                        $role = $log->focalperson->roles->first()->name;
+                    }
+                } elseif ($log->accountingUnit) {
+                    $actorName = trim(($log->accountingUnit->fname ?? '') . ' ' . ($log->accountingUnit->lname ?? ''));
+                    if ($log->accountingUnit->roles->first()) {
+                        $role = $log->accountingUnit->roles->first()->name;
+                    }
+                } elseif ($log->external_actor) {
+                    $actorName = $log->external_actor;
+                    $role = 'External Actor';
                 }
                 
                 return [
@@ -703,10 +721,12 @@ broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashb
                     'remarks' => $log->remarks,
                     'department' => $log->department,
                     'role' => $role,
+                    'actor_name' => $actorName,
                     'created_at_human' => $log->created_at->diffForHumans(),
                     'focal_person' => $log->focalperson ? [
                         'fname' => $log->focalperson->fname,
                         'lname' => $log->focalperson->lname,
+                        'mi' => $log->focalperson->mi ?? '',
                         'profile_image' => $log->focalperson->profile_image
                     ] : null,
                     'accounting_unit' => $log->accountingUnit ? [
@@ -719,10 +739,82 @@ broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashb
         ]);
     }
 
-    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing','Accountant III','Regional Director','Cashier', 'Completed'];
+    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing','Accountant III','Regional Director','Cashier'];
     
     return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs', 'steps'));
 }
+
+
+        // Add this method to your FocalPersonController or relevant controller
+
+    public function confirmReceipt(DVRequest $dvRequest)
+    {
+        try {
+            // Verify the request belongs to the authenticated focal person
+            if ($dvRequest->focalperson_id !== auth()->id()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access'
+                ], 403);
+            }
+            
+            // Verify the status is Cashier_released
+            if ($dvRequest->status !== 'Cashier_released') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This request is not ready for confirmation'
+                ], 400);
+            }
+            
+            // Update the DV request status to Completed
+            $dvRequest->update([
+                'status' => 'Completed',
+                'confirmed_by_focal_person' => true,
+                'confirmed_at' => now()
+            ]);
+            
+            // Create a log entry for the confirmation
+            DVRequestLog::create([
+                'dv_request_id' => $dvRequest->id,
+                'focalperson_id' => auth()->id(),
+                'action' => 'Completed',
+                'remarks' => 'Receipt of payment confirmed by focal person',
+                'created_at' => now()
+            ]);
+            
+            $this->pusher->trigger(
+                'dv-requests-' . $dvRequest->focalperson_id,
+                'status-updated',
+                [
+                    'dvRequestId' => $dvRequest->id,
+                    'status' => 'Completed',
+                    'actor_name' => auth()->user()->fname . ' ' . auth()->user()->lname,
+                    'actor_avatar' => auth()->user()->profile_image 
+                        ? asset('storage/profiles/' . auth()->user()->profile_image)
+                        : asset('storage/profiles/default.png'),
+                    'remarks' => 'Receipt of payment confirmed by focal person',
+                    'action' => 'Completed',
+                    'isRejected' => false,
+                    'lastStep' => 'Completed'
+                ]
+            );
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Receipt confirmed successfully',
+                'status' => 'Completed'
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Confirmation error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while confirming receipt'
+            ], 500);
+        }
+    }
+
 
     protected function logAction(DvRequest $dvRequest, string $status, string $action, string $remarks): void
     {
@@ -788,68 +880,82 @@ broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashb
         ]);
     }
 
-    public function latestStep(DvRequest $dvRequest)
-    {
-        $lastLog = $dvRequest->logs()->latest()->first();
-        $lastAction = $lastLog ? $lastLog->action : 'submitted';
-        $currentStatus = $dvRequest->status;
+   public function latestStep(DvRequest $dvRequest)
+{
+    $lastLog = $dvRequest->logs()->latest()->first();
+    $lastAction = $lastLog ? $lastLog->action : 'submitted';
+    $currentStatus = $dvRequest->status;
 
-        $statusToStepMap = [
-            'submitted' => 'Submitted',
-            'IMSD_received' => 'IMSD',
-            'IMSD_in_process' => 'IMSD',
-            'IMSD_verified' => 'IMSD',
-            'IMSD_rejected' => 'IMSD',
-            'Incoming-TUPAD_received' => 'Incoming',
-            'Incoming-TUPAD_in_process' => 'Incoming',
-            'Incoming-TUPAD_verified' => 'Incoming',
-            'Incoming-TUPAD_rejected' => 'Incoming',
-            'Incoming-GIP_received' => 'Incoming',
-            'Incoming-GIP_in_process' => 'Incoming',
-            'Incoming-GIP_verified' => 'Incoming',
-            'Incoming-GIP_rejected' => 'Incoming',
-            'Incoming-TEV_received' => 'Incoming',
-            'Incoming-TEV_in_process' => 'Incoming',
-            'Incoming-TEV_verified' => 'Incoming',
-            'Incoming-TEV_rejected' => 'Incoming',
-            'ORS_received' => 'Budget_Officer',
-            'ORS_in_process' => 'Budget_Officer',
-            'ORS_obligated' => 'Budget_Officer',
-            'ORS_onhold' => 'Budget_Officer',
-            'ORS_for_revision' => 'Budget_Officer',
-            'Outgoing_received' => 'Outgoing',
-            'Outgoing_in_process' => 'Outgoing',
-            'Outgoing_finalized' => 'Outgoing',
-            'Outgoing_rejected' => 'Outgoing',
-            'RANCA_received' => 'Accounting_III',
-            'RANCA_in_process' => 'Accounting_III',
-            'RANCA_validated' => 'Accounting_III',
-            'RANCA_amount_updated' => 'Accounting_III',
-        ];
+    $statusToStepMap = [
+        'submitted' => 'Submitted',
+        'IMSD_received' => 'IMSD',
+        'IMSD_in_process' => 'IMSD',
+        'IMSD_verified' => 'IMSD',
+        'IMSD_rejected' => 'IMSD',
+        'Incoming-TUPAD_received' => 'Incoming',
+        'Incoming-TUPAD_in_process' => 'Incoming',
+        'Incoming-TUPAD_verified' => 'Incoming',
+        'Incoming-TUPAD_rejected' => 'Incoming',
+        'Incoming-GIP_received' => 'Incoming',
+        'Incoming-GIP_in_process' => 'Incoming',
+        'Incoming-GIP_verified' => 'Incoming',
+        'Incoming-GIP_rejected' => 'Incoming',
+        'Incoming-TEV_received' => 'Incoming',
+        'Incoming-TEV_in_process' => 'Incoming',
+        'Incoming-TEV_verified' => 'Incoming',
+        'Incoming-TEV_rejected' => 'Incoming',
+        'ORS_received' => 'Budget_Officer',
+        'ORS_in_process' => 'Budget_Officer',
+        'ORS_obligated' => 'Budget_Officer',
+        'ORS_rejected' => 'Budget_Officer',
+        'ORS_onhold' => 'Budget_Officer',
+        'ORS_for_revision' => 'Budget_Officer',
+        'Outgoing_received' => 'Outgoing',
+        'Outgoing_in_process' => 'Outgoing',
+        'Outgoing_finalized' => 'Outgoing',
+        'Outgoing_rejected' => 'Outgoing',
+        'RANCA_received' => 'Accounting_III',
+        'RANCA_in_process' => 'Accounting_III',
+        'RANCA_validated' => 'Accounting_III',
+        'RANCA_rejected' => 'Accounting_III',
+        'RANCA_amount_updated' => 'Accounting_III', 
+        'Regional_Director_received' => 'Regional_Director',
+        'Regional_Director_signed_approved' => 'Regional_Director',
+        'Cashier_received' => 'Cashier',
+        'Cashier_released' => 'Cashier',
+    ];
 
-        $lastStep = $statusToStepMap[$currentStatus] ?? $statusToStepMap[$lastAction] ?? $lastAction;
+    $lastStep = $statusToStepMap[$currentStatus] ?? $statusToStepMap[$lastAction] ?? $lastAction;
 
-        $isRejected = stripos($currentStatus, 'rejected') !== false || 
-                      stripos($lastAction, 'rejected') !== false;
+    $isRejected = stripos($currentStatus, 'rejected') !== false || 
+                  stripos($lastAction, 'rejected') !== false;
 
-        $isStepCompleted = stripos($currentStatus, '_verified') !== false ||
-                          stripos($currentStatus, '_obligated') !== false ||
-                          stripos($currentStatus, '_finalized') !== false ||
-                          stripos($currentStatus, '_validated') !== false;
+    // Cashier_released is now considered a completed status
+    $isStepCompleted = $currentStatus === 'Cashier_released' ||
+                      stripos($currentStatus, '_verified') !== false ||
+                      stripos($currentStatus, '_obligated') !== false ||
+                      stripos($currentStatus, '_finalized') !== false ||
+                      stripos($currentStatus, '_validated') !== false;
 
-        return response()->json([
-            'lastStep' => $lastStep,
-            'isRejected' => $isRejected,
-            'isStepCompleted' => $isStepCompleted,
-            'debug' => [
-                'currentStatus' => $currentStatus,
-                'lastAction' => $lastAction,
-                'mappedStep' => $lastStep,
-                'statusHasRejected' => stripos($currentStatus, 'rejected') !== false,
-                'actionHasRejected' => stripos($lastAction, 'rejected') !== false,
-            ]
-        ]);
-    }
+    // CRITICAL: Add isCompleted flag
+    $isCompleted = $currentStatus === 'Cashier_released';
+
+    return response()->json([
+        'lastStep' => $lastStep,
+        'isRejected' => $isRejected,
+        'isStepCompleted' => $isStepCompleted,
+        'isCompleted' => $isCompleted, // ← Add this!
+        'currentStatus' => $currentStatus, // ← Add for debugging
+        'debug' => [
+            'currentStatus' => $currentStatus,
+            'lastAction' => $lastAction,
+            'mappedStep' => $lastStep,
+            'statusHasRejected' => stripos($currentStatus, 'rejected') !== false,
+            'actionHasRejected' => stripos($lastAction, 'rejected') !== false,
+            'isCompleted' => $isCompleted, // ← Add for debugging
+        ]
+    ]);
+}
 
     public function getLogs(DvRequest $dvRequest)
     {
@@ -893,4 +999,206 @@ broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashb
             'isStepCompleted' => $isStepCompleted
         ]);
     }
+public function autoComplete(DvRequest $dvRequest)
+{
+    try {
+        \Log::info('🔍 Auto-complete called', [
+            'dv_id' => $dvRequest->id,
+            'current_status' => $dvRequest->status,
+            'confirmed' => $dvRequest->confirmed_by_focal_person ?? 'column_missing',
+            'user_id' => auth()->guard('focal')->id()
+        ]);
+
+        // Verify user owns this request
+        if ($dvRequest->focalperson_id !== auth()->guard('focal')->id()) {
+            \Log::warning('⚠️ Unauthorized auto-complete attempt', [
+                'dv_id' => $dvRequest->id,
+                'request_owner' => $dvRequest->focalperson_id,
+                'attempting_user' => auth()->guard('focal')->id()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
+        // Check if status is Cashier_released
+        if ($dvRequest->status !== 'Cashier_released') {
+            \Log::warning('⚠️ Invalid status for auto-complete', [
+                'dv_id' => $dvRequest->id,
+                'current_status' => $dvRequest->status
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Request cannot be auto-completed. Current status: ' . $dvRequest->status
+            ], 400);
+        }
+
+        // Check if columns exist (safety check)
+        $tableColumns = \Schema::getColumnListing('dv_requests');
+        $hasConfirmedColumn = in_array('confirmed_by_focal_person', $tableColumns);
+        $hasConfirmedAtColumn = in_array('confirmed_at', $tableColumns);
+
+        if (!$hasConfirmedColumn || !$hasConfirmedAtColumn) {
+            \Log::error('❌ Database columns missing', [
+                'has_confirmed_by_focal_person' => $hasConfirmedColumn,
+                'has_confirmed_at' => $hasConfirmedAtColumn,
+                'available_columns' => $tableColumns
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Database schema error. Please run migrations: php artisan migrate'
+            ], 500);
+        }
+
+        // Check if already confirmed (prevent duplicate processing)
+        if ($hasConfirmedColumn && $dvRequest->confirmed_by_focal_person) {
+            \Log::info('✅ Already confirmed', [
+                'dv_id' => $dvRequest->id,
+                'confirmed_at' => $dvRequest->confirmed_at
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Request already confirmed',
+                'already_confirmed' => true
+            ]);
+        }
+
+        // Perform the auto-completion
+        DB::transaction(function () use ($dvRequest) {
+            // Update the DV request
+            $updateData = [
+                'confirmed_by_focal_person' => true,
+                'confirmed_at' => now(),
+            ];
+            
+            $dvRequest->update($updateData);
+
+            // Create completion log
+            DvRequestLog::create([
+                'dv_request_id' => $dvRequest->id,
+                'focalperson_id' => auth()->guard('focal')->id(),
+                'action' => 'Cashier_released',
+                'remarks' => 'Payment released by cashier and automatically confirmed as completed',
+                'created_at' => now()
+            ]);
+
+            \Log::info('✅ Auto-completion successful', [
+                'dv_id' => $dvRequest->id,
+                'confirmed_at' => now()
+            ]);
+        });
+
+        // Refresh the model to get updated data
+        $dvRequest->refresh();
+
+        // Trigger Pusher event for real-time updates
+        try {
+            $user = auth()->guard('focal')->user();
+            
+            $this->pusher->trigger(
+                'dv-requests-' . $dvRequest->focalperson_id,
+                'status-updated',
+                [
+                    'dvRequestId' => $dvRequest->id,
+                    'status' => 'Cashier_released',
+                    'actor_name' => $user->fname . ' ' . $user->lname,
+                    'actor_avatar' => $user->profile_image 
+                        ? asset('storage/profiles/' . $user->profile_image)
+                        : asset('storage/profiles/default.png'),
+                    'remarks' => 'Payment released and automatically confirmed',
+                    'action' => 'Cashier_released',
+                    'isRejected' => false,
+                    'isStepCompleted' => true,
+                    'lastStep' => 'Cashier'
+                ]
+            );
+            
+            \Log::info('📡 Pusher event triggered', [
+                'dv_id' => $dvRequest->id,
+                'channel' => 'dv-requests-' . $dvRequest->focalperson_id
+            ]);
+            
+        } catch (\Exception $pusherError) {
+            \Log::error('⚠️ Pusher event failed (non-fatal)', [
+                'error' => $pusherError->getMessage(),
+                'line' => $pusherError->getLine()
+            ]);
+            // Don't fail the whole request if Pusher fails
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Request automatically confirmed as completed',
+            'confirmed_at' => $dvRequest->confirmed_at->format('Y-m-d H:i:s')
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('❌ Auto-completion failed', [
+            'dv_id' => $dvRequest->id ?? 'unknown',
+            'error' => $e->getMessage(),
+            'line' => $e->getLine(),
+            'file' => $e->getFile(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Server error: ' . $e->getMessage(),
+            'error_details' => config('app.debug') ? [
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ] : null
+        ], 500);
+    }
+}
+   public function moveRejectedToHistory()
+{
+    if (!Auth::guard('focal')->check()) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $focalId = Auth::guard('focal')->id();
+    $movedCount = 0;
+
+    $rejectedRequests = DvRequest::with('orsRequest') // Eager load ORS relationship
+        ->where('focalperson_id', $focalId)
+        ->where(function($query) {
+            $query->where('status', 'like', '%rejected%')
+                  ->orWhere('status', 'like', '%onhold%')
+                  ->orWhere('status', 'like', '%for_revision%');
+        })
+        ->get();
+
+    foreach ($rejectedRequests as $request) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $focalId, &$movedCount) {
+            
+            // Copy to history with ORS number
+            $historyData = $request->toArray();
+            $historyData['history_reason'] = 'Rejected request moved to history';
+            $historyData['moved_to_history_at'] = now();
+            $historyData['moved_by'] = $focalId;
+            $historyData['ors_number'] = $request->ors_number; // Include ORS number
+            unset($historyData['id']);
+
+            DvRequestHistory::create($historyData);
+
+            // Delete from main table
+            DvRequestLog::where('dv_request_id', $request->id)->delete();
+            $request->delete();
+
+            $movedCount++;
+        });
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => "Moved {$movedCount} rejected requests to history",
+        'moved_count' => $movedCount
+    ]);
+}
 }

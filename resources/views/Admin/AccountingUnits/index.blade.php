@@ -38,6 +38,33 @@
         .table-row:hover {
             background-color: #f9fafb;
         }
+        .verification-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .verification-badge:hover {
+            transform: translateY(-1px);
+        }
+        .verified {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        .unverified {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .pulse-icon {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -49,7 +76,6 @@
                 <p class="text-gray-600 mt-2">Manage accounting staff and their permissions</p>
             </div>
             
-            <!-- Show Add button only if user has permission -->
             @can('accunit.create')
             <a href="{{ route('admin.accountingunits.create') }}" 
                class="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-5 py-3 rounded-lg shadow-md hover:from-blue-600 hover:to-indigo-700 flex items-center action-btn">
@@ -64,7 +90,7 @@
                 <div class="flex justify-between items-center">
                     <div>
                         <p class="text-sm text-gray-500">Total Staff</p>
-                        <p class="text-2xl font-bold text-gray-800">{{ $users->whereNotIn('roles', ['Admin'])->count() }}</p>
+                        <p class="text-2xl font-bold text-gray-800">{{ $users->count() }}</p>
                     </div>
                     <div class="bg-blue-100 p-3 rounded-full">
                         <i class="fas fa-users text-blue-500 text-xl"></i>
@@ -74,11 +100,22 @@
             <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-green-500">
                 <div class="flex justify-between items-center">
                     <div>
-                        <p class="text-sm text-gray-500">Active</p>
-                        <p class="text-2xl font-bold text-gray-800">{{ $users->whereNotIn('roles', ['Admin'])->where('status', 'active')->count() }}</p>
+                        <p class="text-sm text-gray-500">Verified</p>
+                        <p class="text-2xl font-bold text-gray-800">{{ $users->filter(fn($u) => $u->hasVerifiedEmail())->count() }}</p>
                     </div>
                     <div class="bg-green-100 p-3 rounded-full">
-                        <i class="fas fa-user-check text-green-500 text-xl"></i>
+                        <i class="fas fa-check-circle text-green-500 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-amber-500">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <p class="text-sm text-gray-500">Unverified</p>
+                        <p class="text-2xl font-bold text-gray-800">{{ $users->filter(fn($u) => !$u->hasVerifiedEmail())->count() }}</p>
+                    </div>
+                    <div class="bg-amber-100 p-3 rounded-full">
+                        <i class="fas fa-exclamation-triangle text-amber-500 text-xl pulse-icon"></i>
                     </div>
                 </div>
             </div>
@@ -86,21 +123,10 @@
                 <div class="flex justify-between items-center">
                     <div>
                         <p class="text-sm text-gray-500">Roles</p>
-                        <p class="text-2xl font-bold text-gray-800">{{ $users->whereNotIn('roles', ['Admin'])->pluck('roles')->unique()->count() }}</p>
+                        <p class="text-2xl font-bold text-gray-800">{{ $users->pluck('roles')->flatten()->unique('id')->count() }}</p>
                     </div>
                     <div class="bg-purple-100 p-3 rounded-full">
                         <i class="fas fa-user-tag text-purple-500 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-amber-500">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-sm text-gray-500">This Month</p>
-                        <p class="text-2xl font-bold text-gray-800">+2</p>
-                    </div>
-                    <div class="bg-amber-100 p-3 rounded-full">
-                        <i class="fas fa-chart-line text-amber-500 text-xl"></i>
                     </div>
                 </div>
             </div>
@@ -111,14 +137,16 @@
             <div class="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
                 <div class="w-full md:w-auto">
                     <div class="relative">
-                        <input type="text" placeholder="Search accounting units..." class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <input type="text" id="searchInput" placeholder="Search accounting units..." class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                         <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
                     </div>
                 </div>
                 <div class="flex space-x-2">
-                    <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center">
-                        <i class="fas fa-filter mr-2"></i> Filter
-                    </button>
+                    <select id="verificationFilter" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="all">All Status</option>
+                        <option value="verified">Verified Only</option>
+                        <option value="unverified">Unverified Only</option>
+                    </select>
                     <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center">
                         <i class="fas fa-sort mr-2"></i> Sort
                     </button>
@@ -137,13 +165,14 @@
                         <tr>
                             <th class="px-6 py-4 text-left font-medium">Staff Member</th>
                             <th class="px-6 py-4 text-left font-medium">Contact Information</th>
+                            <th class="px-6 py-4 text-left font-medium">Email Status</th>
                             <th class="px-6 py-4 text-left font-medium">Role</th>   
                             <th class="px-6 py-4 text-right font-medium">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
-                        @forelse($users->whereNotIn('roles', ['Admin']) as $unit)
-                            <tr class="table-row">
+                        @forelse($users as $unit)
+                            <tr class="table-row" data-verification-status="{{ $unit->hasVerifiedEmail() ? 'verified' : 'unverified' }}">
                                 <td class="px-6 py-4">
                                     <div class="flex items-center">
                                         <div class="user-avatar bg-blue-500 mr-3">
@@ -156,11 +185,38 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <div class="text-gray-900">{{ $unit->email }}</div>
+                                    <div class="text-gray-900 flex items-center">
+                                        <i class="fas fa-envelope mr-2 text-gray-400"></i>
+                                        {{ $unit->email }}
+                                    </div>
                                     <div class="text-gray-500 text-xs mt-1 flex items-center">
-                                        <i class="fas fa-phone-alt mr-1"></i>
+                                        <i class="fas fa-phone-alt mr-2"></i>
                                         {{ $unit->phone ?? 'No phone provided' }}
                                     </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    @if($unit->hasVerifiedEmail())
+                                        <span class="verification-badge verified" title="Email verified on {{ $unit->email_verified_at->format('M d, Y') }}">
+                                            <i class="fas fa-check-circle mr-1"></i>
+                                            Verified
+                                        </span>
+                                    @else
+                                        <span class="verification-badge unverified" title="Email not verified yet">
+                                            <i class="fas fa-exclamation-circle mr-1 pulse-icon"></i>
+                                            Pending
+                                        </span>
+                                        @can('accunit.edit')
+                                        <form action="{{ route('admin.accountingunits.resend-verification', $unit) }}" method="POST" class="inline-block mt-1">
+                                            @csrf
+                                            <button type="submit" 
+                                                    class="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center"
+                                                    title="Resend verification email">
+                                                <i class="fas fa-paper-plane mr-1"></i>
+                                                Resend
+                                            </button>
+                                        </form>
+                                        @endcan
+                                    @endif
                                 </td>
                                 <td class="px-6 py-4">
                                     @if($unit->roles && $unit->roles->count() > 0)
@@ -177,21 +233,21 @@
                                 </td>
                                 <td class="px-6 py-4 text-right">
                                     <div class="flex justify-end space-x-2">
-                                        <!-- Edit button: only if user has permission -->
                                         @can('accunit.edit')
                                             <a href="{{ route('admin.accountingunits.edit', $unit) }}" 
-                                               class="bg-blue-100 text-blue-600 hover:bg-blue-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center action-btn">
+                                               class="bg-blue-100 text-blue-600 hover:bg-blue-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center action-btn"
+                                               title="Edit user">
                                                 <i class="fas fa-edit mr-1"></i> Edit
                                             </a>
                                         @endcan
 
-                                        <!-- Delete button: only if user has permission -->
                                         @can('accunit.delete')
                                             <form action="{{ route('admin.accountingunits.destroy', $unit) }}" method="POST" class="inline">
                                                 @csrf @method('DELETE')
                                                 <button type="submit" 
                                                         class="bg-red-100 text-red-600 hover:bg-red-200 px-3 py-2 rounded-lg text-sm font-medium flex items-center action-btn"
-                                                        onclick="return confirm('Are you sure you want to delete this accounting unit?')">
+                                                        onclick="return confirm('Are you sure you want to delete this accounting unit?')"
+                                                        title="Delete user">
                                                     <i class="fas fa-trash-alt mr-1"></i> Delete
                                                 </button>
                                             </form>
@@ -201,7 +257,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="px-6 py-12 text-center">
+                                <td colspan="5" class="px-6 py-12 text-center">
                                     <div class="flex flex-col items-center justify-center text-gray-500">
                                         <i class="fas fa-user-times text-4xl mb-4 text-gray-300"></i>
                                         <p class="text-lg">No accounting units found</p>
@@ -218,32 +274,37 @@
                     </tbody>
                 </table>
             </div>
-            
-           
         </div>
     </div>
 @endsection
-    <script>
-        // Simple search functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const searchInput = document.querySelector('input[type="text"]');
-            const tableRows = document.querySelectorAll('tbody tr');
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const verificationFilter = document.getElementById('verificationFilter');
+    const tableRows = document.querySelectorAll('tbody tr[data-verification-status]');
+    
+    function filterTable() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const filterValue = verificationFilter.value;
+        
+        tableRows.forEach(row => {
+            const name = row.cells[0].textContent.toLowerCase();
+            const email = row.cells[1].textContent.toLowerCase();
+            const verificationStatus = row.getAttribute('data-verification-status');
             
-            searchInput.addEventListener('input', function() {
-                const searchTerm = this.value.toLowerCase();
-                
-                tableRows.forEach(row => {
-                    if (row.cells.length < 3) return; // Skip empty row
-                    
-                    const name = row.cells[0].textContent.toLowerCase();
-                    const email = row.cells[1].textContent.toLowerCase();
-                    
-                    if (name.includes(searchTerm) || email.includes(searchTerm)) {
-                        row.style.display = '';
-                    } else {
-                        row.style.display = 'none';
-                    }
-                });
-            });
+            const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
+            const matchesFilter = filterValue === 'all' || filterValue === verificationStatus;
+            
+            if (matchesSearch && matchesFilter) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
         });
-    </script>
+    }
+    
+    searchInput.addEventListener('input', filterTable);
+    verificationFilter.addEventListener('change', filterTable);
+});
+</script>

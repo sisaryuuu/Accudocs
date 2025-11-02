@@ -35,7 +35,7 @@ class DvRequestAgingController extends Controller
             $agingRequests = DvRequest::with(['focalPerson', 'program', 'respocenter'])
                 ->whereIn('status', ['submitted', 'IMSD_received'])
                 ->where('created_at', '<=', $cutoffTime)
-                ->orderBy('created_at', 'asc')
+                ->orderBy('created_at', 'asc')  
                 ->get()
                 ->map(function ($request) {
                     $daysOld = now()->diffInDays($request->created_at);

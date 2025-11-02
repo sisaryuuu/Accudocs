@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-
 class DvRequest extends Model
 {
     use HasFactory;
@@ -31,6 +30,8 @@ class DvRequest extends Model
         'status',
         'tupad_modality',
         'tev_modality',
+         'confirmed_by_focal_person',
+    'confirmed_at',
         'locked_at',
         'locked_by',
     ];
@@ -39,6 +40,8 @@ class DvRequest extends Model
         'qr_code_generated_at' => 'datetime',
         'locked_at' => 'datetime',
         'amount' => 'decimal:2',
+        'confirmed_by_focal_person' => 'boolean',
+        'confirmed_at' => 'datetime',
     ];
 
 
@@ -122,5 +125,24 @@ public function modeOfPaymentsWithDetails()
         return $this->belongsTo(AccountingUnit::class, 'accountingunit_id');
     }
 
-    
+     public function regionalDirectorHistory()
+    {
+        return $this->hasMany(RegionalDirectorApprovedHistory::class);
+    }
+
+    /**
+     * Cashier release history
+     */
+    public function cashierHistory()
+    {
+        return $this->hasMany(CashierReleasedHistory::class);
+    }
+
+    /**
+     * RANCA validation history
+     */
+    public function rancaHistory()
+    {
+        return $this->hasMany(RANCAValidationHistory::class);
+    }
 }

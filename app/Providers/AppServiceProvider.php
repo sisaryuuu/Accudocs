@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use App\Models\DvRequest;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -20,8 +21,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (str_contains(config('app.url'), 'ngrok-free.dev')) {
+        // ✅ Always force HTTPS (most reliable solution)
         URL::forceScheme('https');
-    }
+        
+        // Alternative: Check environment
+        // if ($this->app->environment('production') || 
+        //     str_contains(env('APP_URL', ''), 'ngrok-free.dev')) {
+        //     URL::forceScheme('https');
+        // }
     }
 }

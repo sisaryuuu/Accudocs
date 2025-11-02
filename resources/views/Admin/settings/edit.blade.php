@@ -42,6 +42,12 @@
         @error('regional_director') <div class="error">{{ $message }}</div> @enderror
     </div>
 
+    <div class="form-group">
+        <label for="budget_officer">Budget Officer</label>
+        <input id="budget_officer" type="text" name="budget_officer" value="{{ old('budget_officer', $budgetofficer ?? '') }}">
+        @error('budget_officer') <div class="error">{{ $message }}</div> @enderror
+    </div>
+
     <button type="submit" class="btn btn-save">Save</button>
     <a href="{{ route('Admin.dashboard') }}" style="margin-left:8px;color:#374151">Back</a>
 </form>

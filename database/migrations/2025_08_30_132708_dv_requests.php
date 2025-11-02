@@ -31,7 +31,6 @@ return new class extends Migration
                   ->constrained('programs')
                   ->onDelete('cascade');
             
-
             $table->foreignId('respocenter_id')
                 ->nullable()
                 ->constrained('responcenters')

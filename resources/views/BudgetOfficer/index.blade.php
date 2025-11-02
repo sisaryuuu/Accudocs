@@ -4,6 +4,7 @@
 
 
 @section('content')
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <div class="min-h-screen bg-gray-50 py-8">
   <div class="max-w-[95rem] mx-auto px-6">
         <!-- Header -->
@@ -111,12 +112,7 @@
 <!-- Toast Container -->
 <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col space-y-2"></div>
 
-<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
-// ====================================
-// GLOBAL FUNCTION DECLARATIONS
-// ====================================
-
 function showToast(message, type = 'success') {
     const toastId = 'toast-' + Date.now();
     const isSuccess = type === 'success';
@@ -392,18 +388,6 @@ function renderOrsAgingAlerts(documents, count) {
                                     ${doc.days_in_status || 0} days old • ${statusLabels[doc.current_status] || doc.current_status}
                                 </p>
 
-                            </div>
-                            <div class="flex gap-2">
-                                ${doc.current_status === 'Incoming-GIP_verified' || doc.current_status === 'Incoming-TUPAD_verified' || doc.current_status === 'Incoming-TEV_verified'
-                                    ? `<button onclick="handleReceiveAction(${doc.id}, this)" 
-                                           class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors">
-                                        Receive
-                                    </button>`
-                                    : `<a href="/BudgetOfficer/dvrequests/${doc.id}" 
-                                           class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors">
-                                        Process ORS
-                                    </a>`
-                                }
                             </div>
                         </div>
                     `}).join('')}

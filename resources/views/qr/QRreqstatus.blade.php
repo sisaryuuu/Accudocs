@@ -4,7 +4,7 @@
 
 @section('content')
 @php
-    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget_Officer', 'Outgoing', 'Accounting_III', 'Regional Director', 'Cashier', 'Completed'];
+    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget_Officer', 'Outgoing', 'Accounting_III', 'Regional_Director', 'Cashier', 'Completed'];
     
     $statusToStepMap = [
         'submitted' => 'Submitted',
@@ -37,17 +37,23 @@
         'RANCA_in_process' => 'Accounting_III',
         'RANCA_validated' => 'Accounting_III',
         'RANCA_amount_updated' => 'Accounting_III',
-
-          'Regional_Director_received' => 'Regional_Director',
+        'Regional_Director_received' => 'Regional_Director',
         'Regional_Director_signed_approved' => 'Regional_Director',
-
-        // Cashier statuses
         'Cashier_received' => 'Cashier',
         'Cashier_released' => 'Cashier',
+        'completed' => 'Completed'
     ];
     
     $currentStep = $statusToStepMap[$dv->status] ?? 'Submitted';
+    
+    // Debug: Check what values we have
+    // dd($dv->status, $currentStep, $steps);
+    
+    // Find the current step index
     $currentStepIndex = array_search($currentStep, $steps);
+    if ($currentStepIndex === false) {
+        $currentStepIndex = 0; // Default to first step if not found
+    }
     
     $isRejected = stripos($dv->status, 'rejected') !== false;
 @endphp
@@ -64,7 +70,6 @@
                         <p class="text-blue-100 text-sm mt-1">Control Number: {{ $dv->accounting_control_number }}</p>
                     </div>
                     
-                    {{-- FIXED: Changed from $dv->focalPerson->qr_code_path to $dv->qr_code_path --}}
                     @if($dv->qr_code_path)
                     <div class="bg-white p-4 rounded-lg shadow-lg">
                         <img src="{{ Storage::url($dv->qr_code_path) }}" 
@@ -82,38 +87,47 @@
                 </div>
             </div>
 
-            <!-- Status Badge -->
-            <div class="px-6 py-4 bg-gray-50 border-b">
-                <div class="flex items-center justify-between flex-wrap gap-4">
-                    <div class="flex items-center gap-3">
-                        <span class="text-sm font-medium text-gray-600">Current Status:</span>
-                        @if($isRejected)
-                            <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold bg-red-100 text-red-800 border border-red-300">
-                                <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                                </svg>
-                                Rejected
-                            </span>
-                        @else
-                            <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 border border-blue-300">
-                                <svg class="w-4 h-4 mr-2 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                                    <circle cx="10" cy="10" r="3"/>
-                                </svg>
-                                {{ ucfirst(str_replace('_', ' ', $dv->status)) }}
-                            </span>
-                        @endif
+           <!-- Status Badge -->
+                <div class="px-6 py-4 bg-gray-50 border-b">
+                    <div class="flex items-center justify-between flex-wrap gap-4">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-medium text-gray-600">Current Status:</span>
+                            @if($isRejected)
+                                <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold bg-red-100 text-red-800 border border-red-300">
+                                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Rejected
+                                </span>
+                            @else
+                                <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 border border-blue-300">
+                                    <svg class="w-4 h-4 mr-2 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                                        <circle cx="10" cy="10" r="3"/>
+                                    </svg>
+                                    {{-- FIXED: Properly capitalize each word --}}
+                                    @php
+                                        $formattedStatus = str_replace('_', ' ', $dv->status);
+                                        $formattedStatus = ucwords($formattedStatus);
+                                    @endphp
+                                    {{ $formattedStatus }}
+                                </span>
+                            @endif
+                        </div>
+                        
+                        <a href="{{ route('qr.scanner') }}" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                            ← Scan Another QR
+                        </a>
                     </div>
-                    
-                    <a href="{{ route('qr.scanner') }}" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                        ← Scan Another QR
-                    </a>
                 </div>
-            </div>
-        </div>
 
         <!-- Progress Tracker -->
         <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
             <h2 class="text-xl font-bold text-gray-900 mb-6">Progress Tracker</h2>
+            
+            <!-- Debug info (remove in production) -->
+            <div class="text-xs text-gray-500 mb-4">
+                Debug: Status: {{ $dv->status }}, Current Step: {{ $currentStep }}, Step Index: {{ $currentStepIndex }}
+            </div>
             
             <div class="flex items-center justify-between w-full overflow-x-auto pb-4">
                 @foreach($steps as $index => $step)

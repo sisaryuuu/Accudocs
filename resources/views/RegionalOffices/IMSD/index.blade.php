@@ -289,102 +289,157 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Handle receive action
-    async function handleReceiveAction(requestId, button) {
-        const originalText = button.innerHTML;
-        button.innerHTML = 'Processing...';
-        button.disabled = true;
+   async function handleReceiveAction(requestId, button) {
+    const originalText = button.innerHTML;
+    const originalState = button.disabled;
+    
+    button.innerHTML = `
+        <svg class="w-4 h-4 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        Processing...
+    `;
+    button.disabled = true;
 
-        try {
-            const response = await fetch(`/RegionalOffices/IMSD/dvrequests/${requestId}/receive`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                    'Accept': 'application/json'
-                }
-            });
+    try {
+        const response = await fetch(`/RegionalOffices/IMSD/dvrequests/${requestId}/receive`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({}) // Send empty JSON body
+        });
 
-            const result = await response.json();
+        const result = await response.json();
 
-            if (response.ok && result.success) {
-                let message = result.message || 'Document has been received by IMSD.';
-                
-                showToast(message, 'success');
-                
-                // Refresh all data
-                fetchDvRequests();
-                fetchAgingDocuments();
-                updateStatistics();
-                
-            } else {
-                showToast(result.message || 'Failed to receive document.', 'error');
-                button.innerHTML = originalText;
-                button.disabled = false;
-            }
-        } catch (error) {
-            console.error('Error receiving document:', error);
-            showToast('An error occurred while processing the request.', 'error');
+        if (response.ok && result.success) {
+            let message = result.message || 'Document has been received by IMSD.';
+            
+            showToast(message, 'success');
+            
+            // Refresh all data
+            fetchDvRequests();
+            fetchAgingDocuments();
+            updateStatistics();
+            
+        } else {
+            const errorMessage = result.message || `Failed to receive document. (Status: ${response.status})`;
+            showToast(errorMessage, 'error');
             button.innerHTML = originalText;
-            button.disabled = false;
+            button.disabled = originalState;
         }
+    } catch (error) {
+        console.error('Error receiving document:', error);
+        showToast('Network error occurred while processing the request.', 'error');
+        button.innerHTML = originalText;
+        button.disabled = originalState;
     }
+}
 
+    
     // Manual refresh function
-    window.refreshAllData = function() {
-        showToast('Refreshing all data...', 'info');
-        fetchDvRequests();
-        fetchAgingDocuments();
-        updateStatistics();
+   window.refreshAllData = function() {
+ 
+    // Show loading state
+    const tableContainer = document.getElementById('dv-table-container');
+    if (tableContainer) {
+        tableContainer.innerHTML = `
+            <div class="text-center py-16">
+                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </div>
+                <p class="text-gray-500">Refreshing requests...</p>
+            </div>
+        `;
     }
+    
+    // Clear search and cached data
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
+    
+    if (typeof allRequests !== 'undefined') allRequests = [];
+    if (typeof cachedAgingData !== 'undefined') cachedAgingData = [];
+    if (typeof searchTerm !== 'undefined') searchTerm = "";
+    
+    // Refresh all data
+    fetchDvRequests();
+    fetchAgingDocuments();
+    updateStatistics();
+    
+    // Refresh recent requests if available
+    if (typeof loadRecentRequests === 'function') {
+        setTimeout(loadRecentRequests, 500);
+    }
+}
 
+    // ============ TABLE RENDERING ============
     function renderTable(dvRequests) {
-        if (!dvRequests.length) {
-            tableContainer.innerHTML = `<div class="text-center py-16 text-gray-500">No DV requests found.</div>`;
+        if (dvRequests.length === 0) {
+            tableContainer.innerHTML = `
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                    <p class="text-gray-500">Try adjusting your search filter.</p>
+                </div>
+            `;
             return;
         }
 
-        let html = `<div class="overflow-x-auto">
-                  <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
-                 <thead class="bg-gray-50 text-[13px]">
+        let html = `
+            <div class="overflow-x-auto">
+                <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
+                    <thead class="bg-gray-50 text-[13px]">
                         <tr>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                        <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
-                        <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                            <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                       <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">` ;
+                    <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
+        `;
 
         dvRequests.forEach(request => {
             const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
-            html += `<tr class="hover:bg-gray-50 transition-colors duration-150">
-                        <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                            ${request.accounting_control_number}
-                        </td>
-                        <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
-                        <td class="px-6 py-4 text-sm text-gray-600"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span></td>
-                        <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
-                        <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
-                            <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}</span></td>
-                        <td class="px-6 py-4 text-sm text-gray-600">${request.date}</td>
-                      <td class="px-5 py-4 text-center text-sm font-medium">
-                            ${
-                                request.status === 'submitted'
-                                ? `<button type="button" 
-                                        onclick="handleReceiveAction(${request.id}, this)"
-                                         class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">
-                                        Receive
-                                </button>`    
-                                : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" 
-                                        class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
-                                        View / Process
-                                </a>`
-                            }
-                        </td>
-                     </tr>`;
+            html += `
+                <tr class="hover:bg-gray-50 transition-colors duration-150">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                        ${request.accounting_control_number}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span></td>
+                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
+                    <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
+                        <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}</span></td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${request.date}</td>
+                    <td class="px-5 py-4 text-center text-sm font-medium">
+                        ${
+                            request.status === 'submitted'
+                            ? `<button type="button" 
+                                    onclick="handleReceiveAction(${request.id}, this)"
+                                    class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">
+                                    Receive
+                            </button>`    
+                            : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" 
+                                    class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
+                                    View / Process
+                            </a>`
+                        }
+                    </td>
+                </tr>`;
         });
 
         html += `</tbody></table></div>`;
@@ -556,12 +611,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <p class="text-xs font-medium mt-1 ${doc.days_old >= 10 ? 'text-red-700' : doc.days_old >= 7 ? 'text-orange-700' : 'text-yellow-700'}">
                                         ${doc.days_old} days old • ${statusText}
                                     </p>
-                                </div>
-                                <div class="flex gap-2">
-                                    <a href="/RegionalOffices/IMSD/dvrequests/${doc.id}" 
-                                       class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors">
-                                        ${doc.status === 'submitted' ? 'Receive' : 'Process'}
-                                    </a>
                                 </div>
                             </div>
                         `}).join('')}

@@ -465,6 +465,38 @@
                 gap: 8px;
             }
         }
+
+        .border-t {
+            border-top: 1px solid #e9ecef;
+        }
+
+        .pt-6 {
+            padding-top: 24px;
+        }
+
+        .mt-6 {
+            margin-top: 24px;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-lg {
+            font-size: 18px;
+        }
+
+        .font-semibold {
+            font-weight: 600;
+        }
+
+        .text-gray-700 {
+            color: #374151;
+        }
+
+        .mb-3 {
+            margin-bottom: 12px;
+        }
     </style>
 </head>
 <body>
@@ -545,23 +577,29 @@
                         @if(auth()->user()->hasRole('Regional_Director'))
                             @if($dvRequest->status === 'RANCA_validated')
                                 <div class="action-buttons">
-                                    <button class="btn btn-receive" onclick="updateStatus('rd_receive')">
-                                        <span>✅ Mark as Received</span>
+                                    <button class="btn btn-receive" onclick="updateStatus('receive')">
+                                        <span>📥 Receive Document</span>
                                         <span class="role-badge">RD</span>
                                     </button>
                                     <button class="btn btn-scan" onclick="scanAnotherQR()">
                                         <span>📷 Scan Another QR</span>
                                     </button>
                                 </div>
-                            @elseif($dvRequest->status === 'RD_received')
+                                <div class="status-message info" style="margin-top: 15px;">
+                                    <p><strong>Next Action:</strong> Scan again after receiving to sign and approve</p>
+                                </div>
+                            @elseif($dvRequest->status === 'Regional_Director_received')
                                 <div class="action-buttons">
-                                    <button class="btn btn-approve" onclick="updateStatus('rd_approve')">
+                                    <button class="btn btn-approve" onclick="updateStatus('approve')">
                                         <span>✍️ Sign and Approve</span>
                                         <span class="role-badge">RD</span>
                                     </button>
                                     <button class="btn btn-scan" onclick="scanAnotherQR()">
                                         <span>📷 Scan Another QR</span>
                                     </button>
+                                </div>
+                                <div class="status-message info" style="margin-top: 15px;">
+                                    <p><strong>Note:</strong> This is your second scan to complete the approval process</p>
                                 </div>
                             @else
                                 <div class="status-message success">
@@ -583,23 +621,29 @@
                         @if(auth()->user()->hasRole('Cashier'))
                             @if($dvRequest->status === 'Regional_Director_signed_approved')
                                 <div class="action-buttons">
-                                    <button class="btn btn-receive" onclick="updateStatus('cashier_receive')">
-                                        <span>✅ Receive for Processing</span>
+                                    <button class="btn btn-receive" onclick="updateStatus('receive')">
+                                        <span>📥 Receive for Processing</span>
                                         <span class="role-badge">Cashier</span>
                                     </button>
                                     <button class="btn btn-scan" onclick="scanAnotherQR()">
                                         <span>📷 Scan Another QR</span>
                                     </button>
                                 </div>
+                                <div class="status-message info" style="margin-top: 15px;">
+                                    <p><strong>Next Action:</strong> Scan again after processing to mark as completed</p>
+                                </div>
                             @elseif($dvRequest->status === 'Cashier_received')
                                 <div class="action-buttons">
-                                    <button class="btn btn-approve" onclick="updateStatus('cashier_complete')">
-                                        <span>✅ Mark as Completed</span>
+                                    <button class="btn btn-approve" onclick="updateStatus('complete')">
+                                        <span>✅ Release Payment</span>
                                         <span class="role-badge">Cashier</span>
                                     </button>
                                     <button class="btn btn-scan" onclick="scanAnotherQR()">
                                         <span>📷 Scan Another QR</span>
                                     </button>
+                                </div>
+                                <div class="status-message info" style="margin-top: 15px;">
+                                    <p><strong>Note:</strong> This is your second scan to complete the transaction</p>
                                 </div>
                             @else
                                 <div class="status-message info">
@@ -688,6 +732,7 @@
             button.disabled = true;
             button.classList.add('loading');
 
+            // Simple POST without action parameter - backend handles based on current status
             fetch('{{ route("dv.qr.update-status", $token) }}', {
                 method: 'POST',
                 headers: {
@@ -695,7 +740,7 @@
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({ action: action })
+                body: JSON.stringify({}) // No action parameter needed - backend handles logic
             })
             .then(response => response.json())
             .then(data => {
@@ -730,6 +775,7 @@
                         <div class="status-message error">
                             <h4>❌ Error</h4>
                             <p>${data.message}</p>
+                            ${data.current_status ? `<p><strong>Current Status:</strong> ${data.current_status}</p>` : ''}
                             ${data.login_required ? '<p><a href="{{ route("login") }}" class="login-btn">Please login here</a></p>' : ''}
                         </div>
                     `;

@@ -276,11 +276,9 @@
                 class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
             Finalize
         </button>
-    </div>
-    </form> <!-- ✅ CLOSE FORM HERE BEFORE REJECT/CANCEL -->
     
+    </form> <!-- ✅ CLOSE FORM HERE BEFORE REJECT/CANCEL -->
     <!-- Reject and Cancel buttons OUTSIDE the form -->
-    <div class="flex justify-end space-x-3 mt-3" id="outside-form-buttons">
         <button 
             type="button"
             onclick="openRejectModal({{ $dvRequest->id }})"
@@ -292,7 +290,6 @@
             Cancel
         </a>
     </div>
-    
 @else
     <!-- Default mode -->
     <div id="button-container" class="flex justify-end space-x-3">
@@ -307,16 +304,9 @@
 </div>
         <!-- Sidebar -->
         <div class="lg:col-span-1">
-            <div class="bg-white shadow-md rounded-xl p-6">
-                <h2 class="text-lg font-semibold mb-4">Recent DV Requests</h2>
-                <ul id="recent-requests" class="space-y-3">
-                    <li class="text-sm text-gray-500">Loading...</li>
-                </ul>
-            </div>
+
         </div>
-</div>
-    </div>
-</div>
+
 
 <!-- Reject Modal -->
 <div id="rejectModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -750,7 +740,7 @@ function updateButtonsToStartProcessingMode(dvRequestId) {
     }
 }
 
-function updateButtonsToVerifyMode(dvRequestId) {
+function updateButtonsToVerifyMode(dvRequestId) {   
     const buttonContainer = document.getElementById('button-container');
     const form = buttonContainer.closest('form');
     

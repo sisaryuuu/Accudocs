@@ -42,10 +42,9 @@ class ORSRequestAgingController extends Controller
             ->map(function ($request) {
                 $daysOld = now()->diffInDays($request->created_at);
                 
-                // ✅ Get the LATEST alert status (not just today's)
+                // Get the latest alert for this DV request if it exists
                 $latestAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
-                    ->where('acknowledged', true)
-                    ->latest('acknowledged_at')
+                    ->orderBy('created_at', 'desc')
                     ->first();
                 
                 return [
@@ -60,9 +59,6 @@ class ORSRequestAgingController extends Controller
                     'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                     'days_in_status' => $daysOld,
                     'urgency' => $this->getUrgencyLevel($daysOld),
-                    'acknowledged' => !is_null($latestAlert), // ✅ TRUE if any alert is acknowledged
-                    'acknowledged_at' => $latestAlert ? $latestAlert->acknowledged_at : null,
-                    'acknowledged_by' => $latestAlert ? ($latestAlert->acknowledgedBy->name ?? null) : null,
                 ];
             });
 

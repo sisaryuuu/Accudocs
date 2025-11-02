@@ -248,27 +248,62 @@
                     DV Log History
                 </a>
             @endrole
+        @role('Regional_Director')
+            <a href="{{ route('regional.director.dashboard') }}" 
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('regional.director.dashboard') ? 'bg-gray-200 font-semibold' : '' }}">
+              Regional Director Dashboard
+            </a>
+            <a href="{{ route('regional.director.scanner') }}"
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('regional.director.scanner') ? 'bg-gray-200 font-semibold' : '' }}">
+              Regional Director QR Scanner
+            </a>
+            <a href="{{ route('regional.director.history') }}" 
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('regional.director.history') ? 'bg-gray-200 font-semibold' : '' }}">
+              Regional Director Approved History
+            </a>
+        @endrole
+
+        @role('Cashier')
+            <a href="{{ route('cashier.dashboard') }}" 
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('cashier.dashboard') ? 'bg-gray-200 font-semibold' : '' }}">
+                Cashier Dashboard
+            </a>
+            <a href="{{ route('cashier.scanner') }}"
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('cashier.scanner') ? 'bg-gray-200 font-semibold' : '' }}">
+              Cashier QR Scanner
+            </a>
+            <a href="{{ route('cashier.history') }}" 
+            class="block py-2 px-4 rounded hover:bg-gray-200 {{ request()->routeIs('cashier.history') ? 'bg-gray-200 font-semibold' : '' }}">
+              Cashier Released History
+            </a>
+        @endrole
 
 
             <!-- Right Section -->
-            <div class="flex items-center space-x-4">
-                @php    
-                    // Check if user is logged in as AccountingUnit or FocalPerson
-                    $authUser = Auth::user() ?? Auth::guard('focal')->user();
-                       $profileImage = $authUser?->profile_image_url ?: asset('public/profiles/default.png');
-                @endphp
-                <span class="text-gray-600">Hello, {{ $authUser->lname ?? 'Guest' }}</span>
+        <div class="flex items-center space-x-4">
+    @php
+        // Check authenticated user
+        $authUser = Auth::user() ?? Auth::guard('focal')->user();
 
-                <!-- Profile Dropdown -->
-                <div x-data="{ open: false }" class="relative">
-                    <button @click="open = !open" class="flex items-center space-x-2 focus:outline-none">
-                     <img src="{{ $profileImage }}" 
-                        alt="Profile Image" 
-                        class="h-12 w-12 rounded-full border object-cover"
-                        onerror="this.onerror=null; this.src='{{ asset('public/profiles/default.png') }}'">
-                        <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                        </svg>                    </button>
+        // Generate correct storage path or fallback
+        $profileImage = $authUser && $authUser->profile_image
+            ? asset('storage/profiles/' . $authUser->profile_image)
+            : asset('storage/profiles/default.png');
+    @endphp
+
+    <span class="text-gray-600">Hello, {{ $authUser->lname ?? 'Guest' }}</span>
+
+    <!-- Profile Dropdown -->
+    <div x-data="{ open: false }" class="relative">
+        <button @click="open = !open" class="flex items-center space-x-2 focus:outline-none">
+            <img src="{{ $profileImage }}"
+                 alt="Profile Image"
+                 class="h-12 w-12 rounded-full border object-cover"
+                 onerror="this.onerror=null; this.src='{{ asset('storage/profiles/default.png') }}'">
+            <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
                     
                     <div x-show="open" @click.away="open = false" x-transition
                          class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2">

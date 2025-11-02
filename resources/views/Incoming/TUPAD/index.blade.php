@@ -670,19 +670,6 @@ tupadChannel.bind('TUPAD-aging-update', function(data) {
                                         ${doc.days_old} days old • ${statusText}
                                     </p>
                                 </div>
-                              <div class="flex gap-2">
-    ${doc.status === 'IMSD_verified' 
-        ? `<button type="button" 
-                onclick="handleReceiveAction(${doc.id}, this)"
-                class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors">
-                Receive
-          </button>`
-        : `<a href="/Incoming/GIP/dvrequests/${doc.id}" 
-                class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors">
-                Process
-          </a>`
-    }
-</div>
                             </div>
                         `}).join('')}
                     </div>

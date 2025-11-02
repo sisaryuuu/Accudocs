@@ -8,6 +8,10 @@ use App\Models\Program;
 use App\Models\ResponCenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use App\Rules\EmailReputationCheck;
+use Illuminate\Auth\Events\Registered;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 
 class FocalPersonRegisterController extends Controller
 {
@@ -23,24 +27,37 @@ class FocalPersonRegisterController extends Controller
     }
 
     /**
-     * Handle focal person registration.
+     * Handle registration of focal persons.
      */
     public function register(Request $request)
     {
-        // ✅ Validate input
+        // ✅ Validate input with email reputation check
         $validated = $request->validate([
             'fname'          => 'required|string|max:100',
-            'mi'             => 'nullable|string|max:10',
+            'mi'             => 'nullable|string|max:50',
             'lname'          => 'required|string|max:100',
             'TIN_number'     => 'required|string|max:15|unique:focalpersons',
             'Address'        => 'nullable|string|max:255',
-            'email'          => 'required|string|email|max:255|unique:focalpersons',
+            'email'          => [
+                'required', 
+                'string', 
+                'email', 
+                'max:255', 
+                'unique:focalpersons',
+                new EmailReputationCheck
+            ],
             'password'       => 'required|string|min:8|confirmed',
-            'contactnumber'  => 'required|string|max:11|unique:focalpersons',
+            'contactnumber'  => [
+                'required',
+                'regex:/^[0-9]{11}$/',
+                'unique:focalpersons',
+            ],
             'respocenter_id' => 'nullable|exists:responcenters,id',
+        ], [
+            'contactnumber.regex' => 'The contact number must be exactly 11 digits and contain numbers only.',
         ]);
 
-        // ✅ Create focal person (model mutator handles password hashing)
+        // ✅ Create focal person with hashed password
         $focalPerson = FocalPerson::create([
             'fname'          => $validated['fname'],
             'mi'             => $validated['mi'] ?? null,
@@ -48,20 +65,25 @@ class FocalPersonRegisterController extends Controller
             'TIN_number'     => $validated['TIN_number'],
             'Address'        => $validated['Address'] ?? null,
             'email'          => $validated['email'],
-            'password'       => $validated['password'], // hashed in model
+            'password'       => Hash::make($validated['password']),
             'contactnumber'  => $validated['contactnumber'],
             'respocenter_id' => $validated['respocenter_id'] ?? null,
-            'profile_image'  => 'default.png', // ✅ enforce default
+            'profile_image'  => 'default.png',
+            'email_verified_at' => null,
         ]);
 
-        // ✅ Assign Focal Person role (make sure it exists in roles table)
+        // ✅ Assign role
         $focalPerson->assignRole('Focal_Person');
 
-        // ✅ Log the focal person in using their guard
+        // ✅ Send verification email
+        if ($focalPerson instanceof MustVerifyEmail) {
+            $focalPerson->sendEmailVerificationNotification();
+        }
+
+        // ✅ Login user
         Auth::guard('focal')->login($focalPerson);
 
-        // ✅ Redirect to focal person dashboard
-        return redirect()->route('FocalPerson.dvrequest.index')
-            ->with('success', 'Focal Person registered successfully!');
+        return redirect()->route('verification.notice')
+            ->with('success', 'Registration completed! Please check your email to verify your account before logging in.');
     }
 }

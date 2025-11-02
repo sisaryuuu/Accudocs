@@ -41,7 +41,7 @@
                 <div class="flex items-center space-x-4">
                     <div class="text-right">
                         <p class="text-sm font-medium text-gray-700">IMSD Verifier</p>
-                        <p class="text-xs text-gray-500">{{ auth()->user()->name ?? 'User' }}</p>
+                        <strong><p class="text-xs text-gray-500">{{ auth()->user()->name ?? 'User' }}</p></strong>
                     </div>
                     <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
                         <span class="text-indigo-800 font-medium">{{ substr(auth()->user()->name ?? 'IM', 0, 2) }}</span>
@@ -169,7 +169,6 @@
                             <th class="px-4 py-3">Date & Time</th>
                             <th class="px-4 py-3">Remarks</th>
                             <th class="px-4 py-3">Attachments Checked</th>
-                            <th class="px-4 py-3">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -197,11 +196,11 @@
                                 </td>
                                 
                                 <!-- Status Before -->
-                                <td class="px-4 py-3">
-                                    <span class="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                                        {{ $history->status_before ?? 'N/A' }}
-                                    </span>
-                                </td>
+                               <td class="px-4 py-3">
+                                <span class="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                                    {{ ucwords(str_replace('_', ' ', $history->status_before ?? 'N/A')) }}
+                                </span>
+                            </td>           
                                 
                                 <!-- Status After -->
                                 <td class="px-4 py-3">
@@ -214,9 +213,9 @@
                                         ];
                                         $statusColor = $statusColors[$history->status_after] ?? 'bg-gray-100 text-gray-800';
                                     @endphp
-                                    <span class="px-2 py-1 text-xs font-medium rounded-full {{ $statusColor }}">
-                                        {{ $history->status_after ?? 'N/A' }}
-                                    </span>
+                                <span class="px-2 py-1 text-xs font-medium rounded-full {{ $statusColor }}">
+                                    {{ ucwords(str_replace('_',' ', $history->status_after ?? 'N/A')) }}
+                                </span>
                                 </td>
                                 
                                 <!-- Program -->

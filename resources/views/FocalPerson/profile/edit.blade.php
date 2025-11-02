@@ -47,7 +47,7 @@
 
                 <!-- Middle Initial -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Middle Initial</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
                     <input type="text" name="mi" value="{{ old('mi', $user->mi) }}"
                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
                 </div>
@@ -90,16 +90,17 @@
                 <!-- Password -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                    <input type="password" name="password" placeholder="Leave blank to keep current"
+                    <input type="password" id="password" name="password"  placeholder="Leave blank to keep current"
                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
                 </div>
 
                 <!-- Confirm Password -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-                    <input type="password" name="password_confirmation"
+                    <input type="password" id="password_confirmation" name="password_confirmation"
                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
                 </div>
+                  <p id="password-error" class="text-red-500 text-sm mt-2 hidden">Passwords do not match.</p>
             </div>
         </div>
 
@@ -139,4 +140,27 @@
     </form>
    
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const password = document.getElementById('password');
+    const confirm = document.getElementById('password_confirmation');
+    const errorMsg = document.getElementById('password-error');
+
+    function validatePassword() {
+        if (confirm.value && password.value !== confirm.value) {
+            confirm.classList.add('border-red-500', 'focus:border-red-500', 'focus:ring-red-200');
+            confirm.classList.remove('border-gray-300', 'focus:border-blue-400', 'focus:ring-blue-200');
+            errorMsg.classList.remove('hidden');
+        } else {
+            confirm.classList.remove('border-red-500', 'focus:border-red-500', 'focus:ring-red-200');
+            confirm.classList.add('border-gray-300', 'focus:border-blue-400', 'focus:ring-blue-200');
+            errorMsg.classList.add('hidden');
+        }
+    }
+
+    password.addEventListener('input', validatePassword);
+    confirm.addEventListener('input', validatePassword);
+});
+</script>
 @endsection

@@ -146,13 +146,13 @@
                                         {{ Str::limit($request->particulars ?? '', 50) }}
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                <span id="status-{{ $request->id }}" 
-                                    data-status="{{ $request->status }}" 
-                                    class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-center">
-                                    <span class="status-label">{{ ucfirst(str_replace('_', ' ', $request->status)) }}</span>
-                                </span>
-                                </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span id="status-{{ $request->id }}" 
+                                            data-status="{{ $request->status }}" 
+                                            class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-center">
+                                            <span class="status-label">{{ ucwords(str_replace('_', ' ', $request->status)) }}</span>
+                                        </span>
+                                    </td>
                                 <td class="px-6 py-4 text-sm text-gray-500">
                                     {{ $request->created_at->format('M d, Y') }}
                                 </td>

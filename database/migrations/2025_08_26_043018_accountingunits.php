@@ -14,6 +14,7 @@ return new class extends Migration
             $table->string('mi',1); 
             $table->string('lname',100);
             $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
             $table->string('phone',11)->nullable();
             $table->string('password');
             $table->string('profile_image')->default('default.png');

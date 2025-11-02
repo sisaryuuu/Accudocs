@@ -185,25 +185,25 @@
                 <!-- Action Buttons -->
                 
                     @if($dvRequest->status === 'Incoming-TUPAD_in_process')
+                    <td>
                         <div id="button-container" class="flex justify-end space-x-3">
                         <button type="submit"
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                             Verify
                         </button>
-                       </div>
-                    </form>
-                    <div class="flex justify-end space-x-3 mt-3" id="outside-form-buttons">
+                        </form> 
                         <button 
                             type="button"
                             onclick="openRejectModal()"
                             class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                             Reject
                         </button>
-                        <a href="{{ route('Incoming.GIP.index') }}"
+                        <a href="{{ route('Incoming.TUPAD.index') }}"
                         class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
                             Back
                         </a>
                     </div>
+                    </td>
                      @elseif($dvRequest->status === 'IMSD_verified')
                        <div id="button-container" class="flex justify-end space-x-3">
                         <button type="button"
@@ -248,8 +248,7 @@
                         </a>
                     </form>
                     @endif
-                </div>
-
+</div>
         <!-- Right Sidebar -->
         <div class="lg:col-span-1">
             <div class="bg-white shadow-md rounded-xl p-6 sticky top-24">
@@ -260,7 +259,6 @@
             </div>
         </div>
     </div>
-</div>
 
 
 <!-- Reject Modal -->
@@ -659,28 +657,63 @@ function updateButtonsToStartProcessingMode(dvRequestId) {
         </a>
     `;
 }
-
 function updateButtonsToVerifyMode(dvRequestId) {
-    location.reload();
+    const buttonContainer = document.getElementById('button-container');
+    buttonContainer.innerHTML = `
+    <td>
+        <div class="flex justify-end space-x-3">
+            <button type="submit" 
+                    class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                Verify
+            </button>
+            <button type="button"
+                    onclick="openRejectModal(${dvRequestId})"
+                    class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                Reject
+            </button>
+            <a href="/Incoming/TUPAD"
+               onclick="releaseLock(event, ${dvRequestId})"
+               class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                Cancel
+            </a>
+        </div>
+    </td>
+        `;
 }
 
-window.releaseLock = function(event, id) {
-    event.preventDefault();
+document.addEventListener("DOMContentLoaded", () => {
+    const dvRequestId = "{{ $dvRequest->id }}";
 
-    fetch(`/Incoming/TUPAD/dvrequests/${id}/release-lock`, {
-        method: "POST",
-        headers: {
-            "X-CSRF-TOKEN": "{{ csrf_token() }}",
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-        }
-    }).then(() => {
-        window.location.href = "{{ route('Incoming.TUPAD.index') }}";
-    }).catch(err => {
-        console.error("Release lock failed:", err);
-        window.location.href = "{{ route('Incoming.TUPAD.index') }}";
+    // 🔄 Auto-refresh lock every 2 minutes
+    const refreshInterval = setInterval(() => {
+        fetch(`/Incoming/TUPAD/dvrequests/${dvRequestId}/refresh-lock`, {
+            method: "POST",
+            headers: {
+                "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                "Accept": "application/json"
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                console.log("🔒 Lock refreshed at:", data.locked_at);
+            } else {
+                console.warn("⚠️ Lock not refreshed:", data.error);
+            }
+        })
+        .catch(err => console.error("Refresh lock failed:", err));
+    }, 120000); // every 2 minutes (120,000 ms)
+
+    // 🧹 Release lock when user leaves the page
+    window.addEventListener("beforeunload", () => {
+        navigator.sendBeacon(`/Incoming/TUPAD/dvrequests/${dvRequestId}/release-lock`, 
+            JSON.stringify({ _token: "{{ csrf_token() }}" }));
     });
-};
+});
+
 
 async function loadRecentRequests() {
     try {

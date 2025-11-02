@@ -961,15 +961,12 @@ trait EnumeratesValues
     public function jsonSerialize(): array
     {
         return array_map(function ($value) {
-            if ($value instanceof JsonSerializable) {
-                return $value->jsonSerialize();
-            } elseif ($value instanceof Jsonable) {
-                return json_decode($value->toJson(), true);
-            } elseif ($value instanceof Arrayable) {
-                return $value->toArray();
-            }
-
-            return $value;
+            return match (true) {
+                $value instanceof JsonSerializable => $value->jsonSerialize(),
+                $value instanceof Jsonable => json_decode($value->toJson(), true),
+                $value instanceof Arrayable => $value->toArray(),
+                default => $value,
+            };
         }, $this->all());
     }
 
@@ -982,6 +979,17 @@ trait EnumeratesValues
     public function toJson($options = 0)
     {
         return json_encode($this->jsonSerialize(), $options);
+    }
+
+    /**
+     * Get the collection of items as pretty print formatted JSON.
+     *
+     * @param  int  $options
+     * @return string
+     */
+    public function toPrettyJson(int $options = 0)
+    {
+        return $this->toJson(JSON_PRETTY_PRINT | $options);
     }
 
     /**

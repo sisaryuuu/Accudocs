@@ -1,98 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <title>Document</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Create Accounting Unit</title>
+
+  <style>
+    body {
+      background: linear-gradient(135deg, #e0e7ff, #f8fafc);
+    }
+  </style>
 </head>
-<body>
-   
-<div class="max-w-4xl mx-auto py-10">
-    <h1 class="text-2xl font-bold mb-6">Create Accounting Unit</h1>
+<body class="min-h-screen flex items-center justify-center">
 
-    <form action="{{ route('admin.accountingunits.store') }}" method="POST" class="bg-white shadow-md rounded-lg p-6 space-y-6">
-        @csrf
+  <div class="w-full max-w-3xl bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-gray-100">
+    
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-800">Create Accounting Unit</h1>
+      <p class="text-gray-500 mt-2">Fill in the details below to add a new accounting unit</p>
+    </div>
 
-        {{-- Name Fields --}}
-        <div class="grid grid-cols-3 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700">First Name</label>
-                <input type="text" name="fname" value="{{ old('fname') }}" required 
-                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                @error('fname') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700">Middle Initial</label>
-                <input type="text" name="mi" value="{{ old('mi') }}" maxlength="1"
-                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700">Last Name</label>
-                <input type="text" name="lname" value="{{ old('lname') }}" required 
-                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                @error('lname') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-            </div>
+    <form action="{{ route('admin.accountingunits.store') }}" method="POST" class="space-y-8">
+      @csrf
+
+      <!-- Name Fields -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">First Name</label>
+          <input type="text" name="fname" value="{{ old('fname') }}" required
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+          @error('fname') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
         </div>
 
-       
-         {{-- Email --}}
         <div>
-       <label class="block text-sm font-medium text-gray-700">Email</label>
-            <input type="email" name="email" value="{{ old('email') }}" required 
-                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-            @error('email') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-        </div>     
-
-          {{-- Email --}}
-        <div>
-       <label class="block text-sm font-medium text-gray-700">Phone Number</label>
-            <input type="number" name="phone" value="{{ old('phone') }}" required 
-                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-            @error('phone') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-        </div>    
-
-        {{-- Password --}}
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" name="password" required
-                        class="mt-1 block w-full border-gray-300 rounded-md shadow-sm 
-                                focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    @error('password') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Confirm Password</label>
-                    <input type="password" name="password_confirmation" required
-                        class="mt-1 block w-full border-gray-300 rounded-md shadow-sm 
-                                focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                </div>
-            </div>
-
-        {{-- Role --}}
-        <div>
-            <label class="block text-sm font-medium text-gray-700">Role</label>
-            <select name="role" required
-                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                <option value="">-- Select Role --</option>
-                @foreach($roles as $role)
-                    <option value="{{ $role->name }}" {{ old('role') == $role->name ? 'selected' : '' }}>
-                        {{ $role->name }}
-                    </option>
-                @endforeach
-            </select>
-            @error('role') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Middle Initial</label>
+          <input type="text" name="mi" value="{{ old('mi') }}" maxlength="1"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
         </div>
 
-        {{-- Submit --}}
-        <div class="flex justify-end">
-            <a href="{{ route('admin.accountingunits.index') }}" class="px-4 py-2 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300">Cancel</a>
-            <button type="submit" class="ml-3 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Save</button>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Last Name</label>
+          <input type="text" name="lname" value="{{ old('lname') }}" required
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+          @error('lname') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
         </div>
+      </div>
+
+      <!-- Contact Info -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+          <input type="email" name="email" value="{{ old('email') }}" required
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+          @error('email') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Phone Number</label>
+          <input type="number" name="phone" value="{{ old('phone') }}" required
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+          @error('phone') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+        </div>
+      </div>
+
+      <!-- Password Fields -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Password</label>
+          <input type="password" name="password" required
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+          @error('password') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Confirm Password</label>
+          <input type="password" name="password_confirmation" required
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+        </div>
+      </div>
+
+      <!-- Role -->
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Role</label>
+        <select name="role" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none">
+          <option value="">-- Select Role --</option>
+          @foreach($roles as $role)
+            <option value="{{ $role->name }}" {{ old('role') == $role->name ? 'selected' : '' }}>
+              {{ $role->name }}
+            </option>
+          @endforeach
+        </select>
+        @error('role') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+        <a href="{{ route('admin.accountingunits.index') }}"
+           class="px-5 py-2 rounded-lg text-gray-600 bg-gray-100 hover:bg-gray-200 transition font-medium">
+          Cancel
+        </a>
+        <button type="submit"
+                class="px-6 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow-md hover:bg-indigo-700 transition">
+          Save
+        </button>
+      </div>
     </form>
-</div>
-
+  </div>
 
 </body>
 </html>

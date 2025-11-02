@@ -20,16 +20,22 @@ class OrsRequest extends Model
         'status',
         'obligated_by',
         'obligated_at',
+        'received_by',
+        'received_at',
+    ];
+  protected $casts = [
+        'obligated_at' => 'datetime',
+        'received_at' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
-
-
-     public function uacsCodes()
+    public function uacsCodes()
     {
         return $this->belongsToMany(UacsCode::class, 'ors_request_uacscode', 'ors_request_id', 'uacscode_id')
                     ->withPivot('order')
                     ->withTimestamps()
-                    ->orderBy('order');
+                    ->orderBy('ors_request_uacscode.order');
     }
 
     public function DvRequest()
@@ -52,6 +58,20 @@ class OrsRequest extends Model
     {
         return $this->belongsTo(AdlCode::class, 'adlcode_id');
     }
+
+    public function adlCodes()
+    {
+        return $this->belongsToMany(
+            AdlCode::class,
+            'adlcode_ors_request',  // Pivot table name
+            'ors_request_id',        // Foreign key on pivot table for this model
+            'adlcode_id'             // Foreign key on pivot table for related model (singular to match table)
+        )
+        ->withPivot('order')
+        ->withTimestamps()
+        ->orderBy('adlcode_ors_request.order');
+    }
+
 
     public function ContinuingOrCurrent()
     {

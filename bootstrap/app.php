@@ -13,12 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-        'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-        'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-        'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
-
-        'auth.focal' => \App\Http\Middleware\AuthenticateFocal::class,
-    ]);
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+            'auth.focal' => \App\Http\Middleware\AuthenticateFocal::class,
+            'signed.focal' => \App\Http\Middleware\ValidateFocalSignature::class, // ✅ Add this
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

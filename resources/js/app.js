@@ -1,6 +1,6 @@
 import Chart from "chart.js/auto";
 
-/* Requests per Program (Bar Chart)
+
 const ctxProgram = document.getElementById("requestsPerProgram");
 if (ctxProgram) {
     new Chart(ctxProgram, {
@@ -22,7 +22,7 @@ if (ctxProgram) {
             },
         },
     });
-}*/
+}
 
 // Documents per Department (Pie Chart)
 const ctxDept = document.getElementById("documentsPerDepartment");

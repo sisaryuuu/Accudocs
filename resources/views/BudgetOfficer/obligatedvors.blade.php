@@ -3,11 +3,11 @@
 @section('title', 'Obligate DV Request')
 
 @section('content')
-<div class="max-w-7xl mx-auto py-8 px-4">
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div class="max-w-screen-2xl mx-auto py-8 px-4">
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
         
-        <!-- Left Section - ORS Processing -->
-        <div class="lg:col-span-2 bg-white shadow rounded-xl p-6">
+        <!-- Left Section - ORS Processing - Now spans 4 columns -->
+        <div class="xl:col-span-4 bg-white shadow rounded-xl p-6">
             <h1 class="text-2xl font-bold text-gray-900 mb-6">Budget Officer</h1>
 
             <form action="{{ route('BudgetOfficer.dvrequests.store', $dvRequest->id) }}" method="POST" class="space-y-6">
@@ -37,8 +37,8 @@
                     @endif
                 </div>
 
-                <!-- Basic Info -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Basic Info - Now 4 columns -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Control No.</label>
                         <input type="text" value="{{ $dvRequest->id ?? '' }}" 
@@ -49,7 +49,7 @@
                         <input type="text" value="{{ $dvRequest->focalPerson->fname ?? '' }} {{ $dvRequest->focalPerson->lname ?? '' }}"
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                     </div>
-                    <div>
+                    <div class="md:col-span-2">
                         <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
                         <p class="mt-1 text-sm text-gray-900">
                           {{ $dvRequest->respocenter->rccode ?? '' }} {{ $dvRequest->respocenter->description ?? '' }}
@@ -99,11 +99,11 @@
                     @endif
                 </div>
 
-                <!-- Payment Details Section -->
+                <!-- Payment Details Section - Now 4 columns -->
                 @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
                     @foreach($dvRequest->modeOfPayments as $mop)
                         @if($mop->pivot && $mop->pivot->paymentDetail)
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700">Bank Name</label>
                                     <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
@@ -112,7 +112,7 @@
                                     <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
                                     <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                                 </div>
-                                <div>
+                                <div class="md:col-span-2">
                                     <label class="block text-sm font-medium text-gray-700">Bank Address</label>
                                     <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                                 </div>
@@ -125,7 +125,128 @@
                     @endif
                 @endif
 
-                <!-- UACS Code -->
+                <!-- Attachments Display Section -->
+                @if($dvRequest->program->prcode === 'GIP')
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-3">GIP Attachments</h2>
+                    
+                    @if($attachments && $attachments->count() > 0)
+                        <div class="space-y-2">
+                            @foreach($attachments as $attachment)
+                            <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                <div class="flex items-center space-x-3">
+                                    @if($attachment->is_present)
+                                        <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                    @else
+                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                        </svg>
+                                    @endif
+                                    <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
+                                        {{ $attachment->name }}
+                                    </span>
+                                </div>
+                                <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
+                                    {{ $attachment->is_present ? 'Present' : 'Missing' }}
+                                </span>
+                            </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <p class="text-gray-500 italic">No attachments available for this GIP request.</p>
+                    @endif
+                </div>
+                @endif
+
+                @if($dvRequest->program->prcode === 'TUPAD')
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        TUPAD Attachments
+                        @if($selectedModality)
+                            <span class="text-sm font-normal text-blue-600">
+                                (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
+                            </span>
+                        @endif
+                    </h3>
+
+                    @if($selectedModality && $attachments && $attachments->count() > 0)
+                        <div class="space-y-2">
+                            @foreach($attachments as $attachment)
+                            <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                <div class="flex items-center space-x-3">
+                                    @if($attachment->is_present)
+                                        <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                    @else
+                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
+                                        </svg>
+                                    @endif
+                                    <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
+                                        {{ $attachment->name }}
+                                    </span>
+                                </div>
+                                <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
+                                    {{ $attachment->is_present ? 'Present' : 'Missing' }}
+                                </span>
+                            </div>
+                            @endforeach
+                        </div>
+                    @elseif(!$selectedModality)
+                        <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
+                    @else
+                        <p class="text-gray-400">No attachments found for the selected modality.</p>
+                    @endif
+                </div>
+                @endif
+
+                @if($dvRequest->program->prcode === 'TEV')
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        TEV Attachments
+                        @if($tevSelectedModality)
+                            <span class="text-sm font-normal text-blue-600">
+                                (Modality: {{ ucfirst(str_replace('_', ' ', $tevSelectedModality)) }})
+                            </span>
+                        @endif
+                    </h3>
+
+                    @if($tevSelectedModality && $tevAttachments && $tevAttachments->count() > 0)
+                        <div class="space-y-2">
+                            @foreach($tevAttachments as $attachment)
+                            <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                <div class="flex items-center space-x-3">
+                                    @if($attachment->is_present)
+                                        <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                    @else
+                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
+                                        </svg>
+                                    @endif
+                                    <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
+                                        {{ $attachment->name }}
+                                    </span>
+                                </div>
+                                <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
+                                    {{ $attachment->is_present ? 'Present' : 'Missing' }}
+                                </span>
+                            </div>
+                            @endforeach
+                        </div>
+                    @elseif(!$tevSelectedModality)
+                        <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
+                    @else
+                        <p class="text-gray-400">No attachments found for the selected modality.</p>
+                    @endif
+                </div>
+                @endif
+
+                <!-- UACS Code Section -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-3">
                         UACS Codes
@@ -155,32 +276,44 @@
                     </p>
                 </div>  
                              
-                <!-- ADL Code with Dynamic Add Feature -->
+                <!-- ✅ NEW: ADL Code Section with Multiple Entry -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">ADL Code</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-3">
+                        ADL Codes
+                        <span class="text-red-500">*</span>
+                    </label>
                     
-                    <!-- Searchable Dropdown -->
-                    <div class="relative">
-                        <select id="adl-select" name="adlcode_id" 
-                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm select2-adl" required>
-                            <option value="">-- Search or Select ADL Code --</option>
-                            @foreach($adlCodes as $adl)
-                                <option value="{{ $adl->id }}">
-                                    {{ $adl->adlcode }} - {{ $adl->description }}
-                                </option>
-                            @endforeach
-                        </select>
+                    <!-- Dynamic ADL Rows Container -->
+                    <div id="adl-container" class="space-y-3">
+                        <!-- Rows will be added by JavaScript -->
                     </div>
                     
-                    <!-- Add New ADL Button -->
+                    <!-- Add More Button -->
+                    <button type="button" 
+                            onclick="addADLRow()"
+                            class="mt-3 inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        Add Another ADL Code
+                    </button>
+                    
+                    <!-- Add New ADL Code Quick Button -->
                     <button type="button" 
                             onclick="openAddADLModal()"
-                            class="mt-2 inline-flex items-center px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors duration-200">
+                            class="mt-2 ml-2 inline-flex items-center px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors duration-200">
                         <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                         </svg>
-                        Add New ADL Code
+                        Create New ADL Code
                     </button>
+                    
+                    <p class="text-xs text-gray-500 mt-2">
+                        <svg class="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                        </svg>
+                        Select ADL codes that apply to this ORS request
+                    </p>
                 </div>
 
                 <!-- Allotment Class -->
@@ -249,6 +382,7 @@
                 
                 <div id="button-container" class="flex justify-end space-x-3">
                   @if($dvRequest->status === 'ORS_received')
+                  <td>
                   <button type="button"
                         onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
                         class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
@@ -263,7 +397,9 @@
                         class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
                             Back
                         </a>
-              @elseif($dvRequest->status === 'Incoming-GIP_verified')
+                </td>
+            </div>
+              @elseif(in_array($dvRequest->status, ['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified']))
                   <button type="button"
                             onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
@@ -278,65 +414,19 @@
                         class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
                             Back
                         </a>
-             @elseif($dvRequest->status === 'Incoming-TUPAD_verified')
-               <button type="button"
-                            onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                            id="receive-btn">
-                            <span class="button-text">Receive</span>
-                            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </button>
-                          <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
-                 @elseif($dvRequest->status === 'Incoming-TEV_verified')
-                  <button type="button"
-                            onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                            id="receive-btn">
-                            <span class="button-text">Receive</span>
-                            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </button>
-                          <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
-                @elseif($dvRequest->status === 'Incoming-TUPAD_in_process')
+                @elseif(in_array($dvRequest->status, ['ORS_in_process', 'ORS_onhold']))
                 <div class="flex justify-end space-x-3">
                     <button type="submit" 
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                         Obligate
                     </button>
-                    <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        onclick="releaseLock(event, {{ $dvRequest->id }})"
-                       class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Cancel
-                    </a>
-                </div>
-                @elseif($dvRequest->status === 'Incoming-GIP_in_process')
-                <div class="flex justify-end space-x-3">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Obligate
-                    </button>
-                    <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        onclick="releaseLock(event, {{ $dvRequest->id }})"
-                       class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Cancel
-                    </a>
-                </div>
-                  @elseif($dvRequest->status === 'Incoming-TEV_in_process')
-                <div class="flex justify-end space-x-3">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Obligate
+                    <button type="button"
+                            onclick="openRejectModal({{ $dvRequest->id }})"
+                            class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
+                        </svg>
+                        Reject
                     </button>
                     <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
                         onclick="releaseLock(event, {{ $dvRequest->id }})"
@@ -354,18 +444,12 @@
             </form>
         </div>
 
-        <!-- Sidebar -->
-        <div class="lg:col-span-1">
-            <div class="bg-white shadow-md rounded-xl p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Requests</h3>
-                <ul id="recent-requests" class="space-y-3">
-                    <li class="text-sm text-gray-500">Loading...</li>
-                </ul>
-            </div>
+        <!-- Right Section - If needed for additional content -->
+        <div class="xl:col-span-1">
+            <!-- You can add any sidebar content here if needed -->
         </div>
-
     </div>
-</div>  
+</div>
 
 <!-- Add ADL Modal -->
 <div id="addADLModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -374,14 +458,12 @@
             <h3 class="text-lg font-semibold text-gray-900">Add New ADL Code</h3>
             <button onclick="closeAddADLModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
                 </svg>
             </button>
         </div>
         
         <form id="addADLForm" class="space-y-4">
-            <!-- ✅ FIXED: Use meta csrf-token instead -->
-            
             <!-- ADL Code Input -->
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">ADL Code <span class="text-red-500">*</span></label>
@@ -433,7 +515,7 @@
             <h3 class="text-lg font-semibold text-gray-900">Edit Amount</h3>
             <button onclick="closeAmountModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
                 </svg>
             </button>
         </div>
@@ -502,6 +584,65 @@
     </div>
 </div>
 
+<!-- Reject Modal -->
+<div id="rejectModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-lg bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Reject DV Request</h3>
+            <button onclick="closeRejectModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <form id="rejectForm" class="space-y-4">
+            <!-- Rejection Reason -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Reason for Rejection
+                    <span class="text-red-500">*</span>
+                </label>
+                <textarea id="reject-reason" 
+                          name="reject_reason"
+                          rows="4"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          placeholder="Please provide a detailed reason for rejecting this DV request..."
+                          required></textarea>
+                <p id="reject-error" class="text-xs text-red-500 mt-1 hidden"></p>
+            </div>
+            
+            <!-- Additional Notes -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Additional Notes (Optional)</label>
+                <textarea id="reject-notes" 
+                          name="reject_notes"
+                          rows="2"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          placeholder="Any additional notes or instructions..."></textarea>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="flex justify-end space-x-2 pt-2">
+                <button type="button" 
+                        onclick="closeRejectModal()"
+                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200">
+                    Cancel
+                </button>
+                <button type="submit"
+                        id="rejectBtn"
+                        class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200">
+                    <span class="btn-text">Confirm Reject</span>
+                    <svg class="animate-spin hidden h-4 w-4 text-white inline ml-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Toast Container -->
 <div class="toast-container position-fixed top-0 end-0 p-3" id="toast-container"></div>
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
@@ -550,18 +691,61 @@
     border: 1px solid #d1d5db !important;
     border-radius: 0.375rem !important;
 }
+
+/* Animation styles */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideOut {
+    to {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+}
+
+.remove-btn:hover {
+    transform: scale(1.1);
+}
 </style>
 
 <script>
 // ====================================
-// UACS DYNAMIC FORM FUNCTIONS (GLOBAL)
+// GLOBAL VARIABLES
 // ====================================
 
 // Pass UACS data from Laravel to JavaScript
 const uacsSelectableData = @json($selectableUacsCodes ?? []);
 
+// Pass ADL data from Laravel to JavaScript
+const adlSelectableData = @json($adlCodes->map(function($adl) {
+    return [
+        'id' => $adl->id,
+        'code' => $adl->adlcode,
+        'description' => $adl->description
+    ];
+}) ?? []);
+
 let uacsRowCounter = 0;
 let selectedUACSIds = new Set();
+
+let adlRowCounter = 0;
+let selectedADLIds = new Set();
+
+let currentRejectDvRequestId = null;
+let currentDvRequestId = null;
+let currentOriginalAmount = 0;
+
+// ====================================
+// UACS DYNAMIC FORM FUNCTIONS
+// ====================================
 
 function addUACSRow(selectedId = null) {
     uacsRowCounter++;
@@ -569,20 +753,17 @@ function addUACSRow(selectedId = null) {
     
     const container = document.getElementById('uacs-container');
     
-    // Create row HTML
     const rowHTML = `
         <div class="uacs-row flex items-start gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200" 
              id="${rowId}" 
              data-row-id="${uacsRowCounter}"
              style="animation: slideIn 0.3s ease-out;">
-            <!-- Order Number -->
             <div class="flex-shrink-0 w-8 pt-2">
                 <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-medium row-number">
                     ${uacsRowCounter}
                 </span>
             </div>
             
-            <!-- UACS Select (Full width) -->
             <div class="flex-1">
                 <select name="uacscode_ids[]" 
                         id="uacs-select-${uacsRowCounter}"
@@ -593,12 +774,10 @@ function addUACSRow(selectedId = null) {
                 </select>
             </div>
             
-            <!-- Remove Button -->
             <button type="button" 
                     onclick="removeUACSRow('${rowId}', ${uacsRowCounter})"
                     class="remove-btn flex-shrink-0 p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
-                    title="Remove this UACS code"
-                    style="transition: transform 0.2s;">
+                    title="Remove this UACS code">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                 </svg>
@@ -607,11 +786,7 @@ function addUACSRow(selectedId = null) {
     `;
     
     container.insertAdjacentHTML('beforeend', rowHTML);
-    
-    // Initialize Select2 for the new row
     initializeUACSSelect2(uacsRowCounter, selectedId);
-    
-    // Update row numbers
     updateUACSRowNumbers();
 }
 
@@ -623,7 +798,6 @@ function generateUACSOptions(selectedId = null) {
     return uacsSelectableData
         .filter(uacs => !selectedUACSIds.has(uacs.id) || uacs.id === selectedId)
         .map(uacs => {
-            // Visual indicator based on level
             let indent = '&nbsp;&nbsp;&nbsp;'.repeat(uacs.level || 0);
             
             return `<option value="${uacs.id}" 
@@ -639,10 +813,8 @@ function generateUACSOptions(selectedId = null) {
 function initializeUACSSelect2(rowId, selectedId = null) {
     const selectElement = $(`#uacs-select-${rowId}`);
     
-    // Populate options
     selectElement.html('<option value="">-- Select UACS Code --</option>' + generateUACSOptions(selectedId));
     
-    // Initialize Select2
     selectElement.select2({
         placeholder: '-- Select UACS Code --',
         allowClear: true,
@@ -652,41 +824,30 @@ function initializeUACSSelect2(rowId, selectedId = null) {
         escapeMarkup: function(markup) { return markup; }
     });
     
-    // Set initial value if provided
     if (selectedId) {
         selectElement.val(selectedId).trigger('change');
         selectedUACSIds.add(selectedId);
     }
     
-    // Handle selection change
     selectElement.on('select2:select', function(e) {
         const newValue = parseInt(e.params.data.id);
         const oldValue = parseInt($(this).data('previous-value') || 0);
         
-        // Remove old value from selected set
         if (oldValue) {
             selectedUACSIds.delete(oldValue);
         }
         
-        // Add new value to selected set
         selectedUACSIds.add(newValue);
-        
-        // Store current value
         $(this).data('previous-value', newValue);
-        
-        // Refresh all other dropdowns
         refreshAllUACSDropdowns();
     });
     
-    // Handle unselect/clear
     selectElement.on('select2:unselect select2:clear', function(e) {
         const oldValue = parseInt($(this).data('previous-value') || 0);
         if (oldValue) {
             selectedUACSIds.delete(oldValue);
         }
         $(this).data('previous-value', null);
-        
-        // Refresh all other dropdowns
         refreshAllUACSDropdowns();
     });
 }
@@ -698,7 +859,6 @@ function formatUACSOption(option) {
     const fullPath = $option.data('full-path');
     const level = $option.data('level') || 0;
     
-    // Add visual hierarchy
     let icon = '';
     if (level === 0) icon = '📁 ';
     else if (level === 1) icon = '├─ ';
@@ -715,7 +875,7 @@ function formatUACSOption(option) {
 function formatUACSSelection(option) {
     if (!option.id) return option.text;
     
-    const text = option.text.replace(/^[│├└─\s]+/, ''); // Remove tree characters
+    const text = option.text.replace(/^[│├└─\s]+/, '');
     const parts = text.split(' - ');
     const code = parts[0] || '';
     const desc = parts.slice(1).join(' - ') || '';
@@ -728,11 +888,9 @@ function refreshAllUACSDropdowns() {
         const currentValue = $(this).val();
         const selectedValue = currentValue ? parseInt(currentValue) : null;
         
-        // Rebuild options
         const newOptions = '<option value="">-- Select UACS Code --</option>' + 
             generateUACSOptions(selectedValue);
         
-        // Preserve selection and update options
         $(this).html(newOptions);
         
         if (selectedValue) {
@@ -746,22 +904,18 @@ function removeUACSRow(rowId, rowCounter) {
     const selectElement = $(`#uacs-select-${rowCounter}`);
     const selectedValue = parseInt(selectElement.val() || 0);
     
-    // Remove from selected set
     if (selectedValue) {
         selectedUACSIds.delete(selectedValue);
     }
     
-    // Destroy Select2 instance
     selectElement.select2('destroy');
     
-    // Remove row with animation
     row.style.animation = 'slideOut 0.3s ease-out';
     setTimeout(() => {
         row.remove();
         updateUACSRowNumbers();
         refreshAllUACSDropdowns();
         
-        // If no rows left, add one
         if (document.querySelectorAll('.uacs-row').length === 0) {
             addUACSRow();
         }
@@ -778,59 +932,197 @@ function updateUACSRowNumbers() {
     });
 }
 
-// Add animation styles
-const uacsAnimationStyle = document.createElement('style');
-uacsAnimationStyle.textContent = `
-    @keyframes slideIn {
-        from {
-            opacity: 0;
-            transform: translateY(-10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    @keyframes slideOut {
-        to {
-            opacity: 0;
-            transform: translateX(20px);
-        }
-    }
-    
-    .remove-btn:hover {
-        transform: scale(1.1);
-    }
-`;
-document.head.appendChild(uacsAnimationStyle);
-</script>
-
-<script>
 // ====================================
-// AMOUNT MODAL FUNCTIONS (GLOBAL)
+// ADL DYNAMIC FORM FUNCTIONS
 // ====================================
 
-let currentDvRequestId = null;
-let currentOriginalAmount = 0;
+function addADLRow(selectedId = null) {
+    adlRowCounter++;
+    const rowId = `adl-row-${adlRowCounter}`;
+    
+    const container = document.getElementById('adl-container');
+    
+    const rowHTML = `
+        <div class="adl-row flex items-start gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200" 
+             id="${rowId}" 
+             data-row-id="${adlRowCounter}"
+             style="animation: slideIn 0.3s ease-out;">
+            <div class="flex-shrink-0 w-8 pt-2">
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-600 text-white text-xs font-medium adl-row-number">
+                    ${adlRowCounter}
+                </span>
+            </div>
+            
+            <div class="flex-1">
+                <select name="adlcode_ids[]" 
+                        id="adl-select-${adlRowCounter}"
+                        class="adl-select w-full rounded-lg border-gray-300 shadow-sm text-sm" 
+                        data-row-id="${adlRowCounter}"
+                        required>
+                    <option value="">-- Select ADL Code --</option>
+                </select>
+            </div>
+            
+            <button type="button" 
+                    onclick="removeADLRow('${rowId}', ${adlRowCounter})"
+                    class="remove-btn flex-shrink-0 p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
+                    title="Remove this ADL code">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+            </button>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', rowHTML);
+    initializeADLSelect2(adlRowCounter, selectedId);
+    updateADLRowNumbers();
+}
+
+function generateADLOptions(selectedId = null) {
+    if (!adlSelectableData || adlSelectableData.length === 0) {
+        return '<option value="">No ADL codes available</option>';
+    }
+    
+    return adlSelectableData
+        .filter(adl => !selectedADLIds.has(adl.id) || adl.id === selectedId)
+        .map(adl => {
+            return `<option value="${adl.id}" 
+                            ${adl.id === selectedId ? 'selected' : ''}>
+                ${adl.code} - ${adl.description}
+            </option>`;
+        })
+        .join('');
+}
+
+function initializeADLSelect2(rowId, selectedId = null) {
+    const selectElement = $(`#adl-select-${rowId}`);
+    
+    selectElement.html('<option value="">-- Select ADL Code --</option>' + generateADLOptions(selectedId));
+    
+    selectElement.select2({
+        placeholder: '-- Select ADL Code --',
+        allowClear: true,
+        width: '100%',
+        templateSelection: formatADLSelection,
+        escapeMarkup: function(markup) { return markup; }
+    });
+    
+    if (selectedId) {
+        selectElement.val(selectedId).trigger('change');
+        selectedADLIds.add(selectedId);
+    }
+    
+    selectElement.on('select2:select', function(e) {
+        const newValue = parseInt(e.params.data.id);
+        const oldValue = parseInt($(this).data('previous-value') || 0);
+        
+        if (oldValue) {
+            selectedADLIds.delete(oldValue);
+        }
+        
+        selectedADLIds.add(newValue);
+        $(this).data('previous-value', newValue);
+        refreshAllADLDropdowns();
+    });
+    
+    selectElement.on('select2:unselect select2:clear', function(e) {
+        const oldValue = parseInt($(this).data('previous-value') || 0);
+        if (oldValue) {
+            selectedADLIds.delete(oldValue);
+        }
+        $(this).data('previous-value', null);
+        refreshAllADLDropdowns();
+    });
+}
+
+function formatADLSelection(option) {
+    if (!option.id) return option.text;
+    
+    const text = option.text;
+    const parts = text.split(' - ');
+    const code = parts[0] || '';
+    const desc = parts.slice(1).join(' - ') || '';
+    
+    return $(`<span><strong>${code}</strong> ${desc ? '- ' + desc : ''}</span>`);
+}
+
+function refreshAllADLDropdowns() {
+    $('.adl-select').each(function() {
+        const currentValue = $(this).val();
+        const selectedValue = currentValue ? parseInt(currentValue) : null;
+        
+        const newOptions = '<option value="">-- Select ADL Code --</option>' + 
+            generateADLOptions(selectedValue);
+        
+        $(this).html(newOptions);
+        
+        if (selectedValue) {
+            $(this).val(selectedValue).trigger('change.select2');
+        }
+    });
+}
+
+function removeADLRow(rowId, rowCounter) {
+    const row = document.getElementById(rowId);
+    const selectElement = $(`#adl-select-${rowCounter}`);
+    const selectedValue = parseInt(selectElement.val() || 0);
+    
+    if (selectedValue) {
+        selectedADLIds.delete(selectedValue);
+    }
+    
+    selectElement.select2('destroy');
+    
+    row.style.animation = 'slideOut 0.3s ease-out';
+    setTimeout(() => {
+        row.remove();
+        updateADLRowNumbers();
+        refreshAllADLDropdowns();
+        
+        if (document.querySelectorAll('.adl-row').length === 0) {
+            addADLRow();
+        }
+    }, 300);
+}
+
+function updateADLRowNumbers() {
+    const rows = document.querySelectorAll('.adl-row');
+    rows.forEach((row, index) => {
+        const numberBadge = row.querySelector('.adl-row-number');
+        if (numberBadge) {
+            numberBadge.textContent = index + 1;
+        }
+    });
+}
+
+// ====================================
+// MODAL FUNCTIONS
+// ====================================
+
+function openRejectModal(dvRequestId) {
+    currentRejectDvRequestId = dvRequestId;
+    document.getElementById('reject-reason').value = '';
+    document.getElementById('reject-notes').value = '';
+    document.getElementById('reject-error').classList.add('hidden');
+    document.getElementById('rejectModal').classList.remove('hidden');
+    document.getElementById('reject-reason').focus();
+}
+
+function closeRejectModal() {
+    document.getElementById('rejectModal').classList.add('hidden');
+    document.getElementById('rejectForm').reset();
+    document.getElementById('reject-error').classList.add('hidden');
+    currentRejectDvRequestId = null;
+}
 
 function openAmountModal(dvRequestId, originalAmount) {
     currentDvRequestId = dvRequestId;
     currentOriginalAmount = originalAmount;
-    
-    // Set current amount display
     document.getElementById('current-amount-display').textContent = `₱${formatNumber(originalAmount)}`;
-    
-    // Set new amount field to current amount
     document.getElementById('new-amount').value = originalAmount.toFixed(2);
-    
-    // Clear reason field
     document.getElementById('amount-reason').value = '';
-    
-    // Clear any previous errors
     document.getElementById('amount-error').classList.add('hidden');
-    
-    // Show modal
     document.getElementById('amountModal').classList.remove('hidden');
     document.getElementById('new-amount').focus();
 }
@@ -839,14 +1131,9 @@ function closeAmountModal() {
     document.getElementById('amountModal').classList.add('hidden');
     document.getElementById('amountForm').reset();
     document.getElementById('amount-error').classList.add('hidden');
-    
     currentDvRequestId = null;
     currentOriginalAmount = 0;
 }
-
-// ====================================
-// ADL MODAL FUNCTIONS (GLOBAL)
-// ====================================
 
 function openAddADLModal() {
     document.getElementById('addADLModal').classList.remove('hidden');
@@ -860,7 +1147,7 @@ function closeAddADLModal() {
 }
 
 // ====================================
-// UTILITY FUNCTIONS (GLOBAL)
+// UTILITY FUNCTIONS
 // ====================================
 
 function formatNumber(number) {
@@ -896,7 +1183,7 @@ function showMessage(message, type = 'success') {
 }
 
 // ====================================
-// BUTTON ACTION FUNCTIONS (GLOBAL)
+// BUTTON ACTION FUNCTIONS
 // ====================================
 
 async function handleReceiveAction(dvRequestId, buttonElement) {
@@ -945,6 +1232,9 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
         spinner.classList.add('hidden');
     }
 }
+// ====================================
+// CONTINUATION OF JAVASCRIPT FUNCTIONS
+// ====================================
 
 async function handleStartProcessing(dvRequestId, buttonElement) {
     const spinner = document.getElementById('start-loading-spinner');
@@ -992,6 +1282,47 @@ async function handleStartProcessing(dvRequestId, buttonElement) {
     }
 }
 
+async function handleRejectAction(dvRequestId, rejectReason, rejectNotes = '') {
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (!csrfToken) {
+            throw new Error('Security token not found. Please refresh the page.');
+        }
+
+        const response = await fetch(`/BudgetOfficer/dvrequests/${dvRequestId}/reject`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken.content,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                reject_reason: rejectReason,
+                reject_notes: rejectNotes,
+                remarks: `Request rejected. Reason: ${rejectReason}${rejectNotes ? '. Notes: ' + rejectNotes : ''}`
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showMessage('DV Request rejected successfully!', 'success');
+            closeRejectModal();
+            
+            setTimeout(() => {
+                window.location.href = '/BudgetOfficer/dvrequests';
+            }, 1500);
+        } else {
+            throw new Error(data.message || 'Failed to reject request');
+        }
+    } catch (error) {
+        console.error('Reject Error:', error);
+        showMessage(error.message || 'Failed to reject request', 'error');
+        throw error;
+    }
+}
+
 function updateButtonsToStartProcessingMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
     buttonContainer.innerHTML = `
@@ -1005,6 +1336,14 @@ function updateButtonsToStartProcessingMode(dvRequestId) {
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
         </button>
+        <button type="button"
+                onclick="openRejectModal(${dvRequestId})"
+                class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            Reject
+        </button>
         <a href="/BudgetOfficer/dvrequests"
             class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, ${dvRequestId})">
             Back
@@ -1016,10 +1355,19 @@ function updateButtonsToVerifyMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
     
     buttonContainer.innerHTML = `
+    <td>
         <div class="flex justify-end space-x-3">
             <button type="submit" 
                     class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                 Obligate
+            </button>
+            <button type="button"
+                    onclick="openRejectModal(${dvRequestId})"
+                    class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                Reject
             </button>
             <a href="/BudgetOfficer/dvrequests"
                 onclick="releaseLock(event, ${dvRequestId})"
@@ -1027,11 +1375,12 @@ function updateButtonsToVerifyMode(dvRequestId) {
                 Cancel
             </a>
         </div>
+    </td>
     `;
 }
 
 // ====================================
-// LOCK MANAGEMENT FUNCTIONS (GLOBAL)
+// LOCK MANAGEMENT FUNCTIONS
 // ====================================
 
 function releaseLock(event, id) {
@@ -1083,25 +1432,19 @@ async function loadRecentRequests() {
         document.getElementById('recent-requests').innerHTML = `<li class="text-sm text-red-500">Failed to load requests</li>`;
     }
 }
-
-// ====================================
-// DOM READY - INITIALIZATION
-// ====================================
-
 document.addEventListener("DOMContentLoaded", () => {
     const dvRequestId = "{{ $dvRequest->id }}";
     
-    // Initialize Select2
+    // Initialize Select2 and add first rows
     if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-        $('.select2-adl').select2({
-            placeholder: '-- Search or Select ADL Code --',
-            allowClear: true,
-            width: '100%'
-        });
-
+        // Add first UACS row
         addUACSRow();
+        
+        // Add first ADL row
+        addADLRow();
 
         console.log('✅ Select2 initialized successfully');
+        console.log('✅ First UACS and ADL rows added');
     } else {
         console.error('❌ jQuery or Select2 not loaded');
     }
@@ -1126,7 +1469,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const newAmount = parseFloat(document.getElementById('new-amount').value);
             const reason = document.getElementById('amount-reason').value;
             
-            // Validation
             if (!newAmount || newAmount <= 0 || isNaN(newAmount)) {
                 document.getElementById('amount-error').textContent = 'Please enter a valid amount greater than 0';
                 document.getElementById('amount-error').classList.remove('hidden');
@@ -1161,13 +1503,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    // Update display
                     const amountDisplay = document.querySelector('.amount-display span');
                     if (amountDisplay) {
                         amountDisplay.textContent = `₱${formatNumber(newAmount)}`;
                     }
                     
-                    // Update hidden input for form submission
                     document.getElementById('amount-hidden').value = newAmount;
                     
                     showMessage('Amount updated successfully!', 'success');
@@ -1233,16 +1573,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log('📦 Response data:', data);
                 
                 if (response.ok && data.success) {
-                    if (typeof jQuery !== 'undefined') {
-                        const newOption = new Option(
-                            `${data.adlCode.adlcode} - ${data.adlCode.description}`,
-                            data.adlCode.id,
-                            true,
-                            true
-                        );
-                        jQuery('.select2-adl').append(newOption).trigger('change');
-                        console.log('✅ ADL Code added to dropdown');
-                    }
+                    // Add to adlSelectableData array
+                    adlSelectableData.push({
+                        id: data.adlCode.id,
+                        code: data.adlCode.adlcode,
+                        description: data.adlCode.description
+                    });
+                    
+                    // Refresh all ADL dropdowns
+                    refreshAllADLDropdowns();
+                    
+                    console.log('✅ ADL Code added to dropdown');
                     
                     showMessage('ADL Code added successfully!', 'success');
                     closeAddADLModal();
@@ -1255,6 +1596,48 @@ document.addEventListener("DOMContentLoaded", () => {
             } finally {
                 submitBtn.disabled = false;
                 btnText.textContent = 'Save ADL Code';
+                spinner.classList.add('hidden');
+            }
+        });
+    }
+    
+    // Reject Form Submission
+    const rejectForm = document.getElementById('rejectForm');
+    if (rejectForm) {
+        rejectForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('rejectBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const spinner = submitBtn.querySelector('svg');
+            
+            const csrfToken = document.querySelector('meta[name="csrf-token"]');
+            if (!csrfToken) {
+                console.error('❌ CSRF token not found in meta tag');
+                showMessage('Security token not found. Please refresh the page.', 'error');
+                return;
+            }
+            
+            const rejectReason = document.getElementById('reject-reason').value;
+            
+            if (!rejectReason.trim()) {
+                document.getElementById('reject-error').textContent = 'Please provide a reason for rejection';
+                document.getElementById('reject-error').classList.remove('hidden');
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            btnText.textContent = 'Rejecting...';
+            spinner.classList.remove('hidden');
+            
+            try {
+                const rejectNotes = document.getElementById('reject-notes').value;
+                await handleRejectAction(currentRejectDvRequestId, rejectReason, rejectNotes);
+            } catch (error) {
+                // Error is already handled in handleRejectAction
+            } finally {
+                submitBtn.disabled = false;
+                btnText.textContent = 'Confirm Reject';
                 spinner.classList.add('hidden');
             }
         });
@@ -1275,6 +1658,15 @@ document.addEventListener("DOMContentLoaded", () => {
         adlModal.addEventListener('click', function(e) {
             if (e.target === this) {
                 closeAddADLModal();
+            }
+        });
+    }
+    
+    const rejectModal = document.getElementById('rejectModal');
+    if (rejectModal) {
+        rejectModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeRejectModal();
             }
         });
     }

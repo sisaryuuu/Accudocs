@@ -187,14 +187,13 @@
                         </div>
                         </form> <!-- Close form here -->
                      @elseif($dvRequest->status === 'Incoming-GIP_in_process')
+                     <td>
                       <div id="button-container" class="flex justify-end space-x-3">
                         <button type="submit"
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                             Verify
                         </button>
-                       </div>
                     </form>
-                    <div class="flex justify-end space-x-3 mt-3" id="outside-form-buttons">
                         <button 
                             type="button"
                             onclick="openRejectModal()"
@@ -206,6 +205,7 @@
                             Back
                         </a>
                     </div>
+                    </td>
                     @elseif($dvRequest->status === 'IMSD_verified')
                        <div id="button-container" class="flex justify-end space-x-3">
                         <button type="button"
@@ -647,63 +647,29 @@ function updateButtonsToStartProcessingMode(dvRequestId) {
 }
 function updateButtonsToVerifyMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
-    const form = buttonContainer.closest('form');
-    
-    // Clear existing button container content
-    buttonContainer.innerHTML = '';
-    
-    // Create Verify button container (inside form)
-    const verifyContainer = document.createElement('div');
-    verifyContainer.className = 'flex justify-end space-x-3';
-    
-    const verifyBtn = document.createElement('button');
-    verifyBtn.type = 'submit';
-    verifyBtn.className = 'inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    verifyBtn.textContent = 'Verify';
-    
-    verifyContainer.appendChild(verifyBtn);
-    buttonContainer.appendChild(verifyContainer);
-    
-    // Create Reject and Cancel buttons container (outside form)
-    const outsideButtonsContainer = document.createElement('div');
-    outsideButtonsContainer.className = 'flex justify-end space-x-3 mt-3';
-    outsideButtonsContainer.id = 'outside-form-buttons';
-    
-    // Create Reject button
-    const rejectBtn = document.createElement('button');
-    rejectBtn.type = 'button';
-    rejectBtn.id = 'reject-button';
-    rejectBtn.className = 'inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    rejectBtn.textContent = 'Reject';
-    
-    // Add event listener directly
-    rejectBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('🔴 Reject button clicked for Incoming-GIP');
-        openRejectModal();
-    });
-    
-    // Create Cancel link
-    const cancelLink = document.createElement('a');
-    cancelLink.href = '/Incoming/GIP';
-    cancelLink.className = 'inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    cancelLink.textContent = 'Cancel';
-    
-    // Add buttons to container
-    outsideButtonsContainer.appendChild(rejectBtn);
-    outsideButtonsContainer.appendChild(cancelLink);
-    
-    // Remove any existing outside buttons first
-    const existingOutsideButtons = form.parentNode.querySelector('#outside-form-buttons');
-    if (existingOutsideButtons) {
-        existingOutsideButtons.remove();
-    }
-    
-    // Insert outside buttons after the form
-    form.parentNode.insertBefore(outsideButtonsContainer, form.nextSibling);
-    
-    console.log('✅ Buttons updated to verify mode for Incoming-GIP');
+    buttonContainer.innerHTML = `
+    <td>
+        <div class="flex justify-end space-x-3">
+            <button type="submit" 
+                    class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                Verify
+            </button>
+            <button type="button"
+                    onclick="openRejectModal(${dvRequestId})"
+                    class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                Reject
+            </button>
+            <a href="/Incoming/GIP"
+               onclick="releaseLock(event, ${dvRequestId})"
+               class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                Cancel
+            </a>
+        </div>
+    </td>
+        `;
 }
 
 document.addEventListener("DOMContentLoaded", () => {

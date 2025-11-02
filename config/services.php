@@ -34,9 +34,14 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
-    'twilio' => [
-    'sid' => env('TWILIO_SID'),
-    'token' => env('TWILIO_AUTH_TOKEN'),
-    'from' => env('TWILIO_PHONE_NUMBER'),
-],
+
+    'email_reputation' => [
+        'api_key' => env('EMAIL_REPUTATION_API_KEY'),
+        'api_url' => env('EMAIL_REPUTATION_API_URL'),
+    ],
+
+    'sendpulse' => [
+        'client_id' => env('SENDPULSE_CLIENT_ID'),
+        'client_secret' => env('SENDPULSE_CLIENT_SECRET'),
+    ],
 ];

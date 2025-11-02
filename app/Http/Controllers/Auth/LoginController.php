@@ -86,8 +86,7 @@ class LoginController extends Controller
         // Normal login redirect based on role
         $role = $user->getRoleNames()->first();
         if ($role && isset($roleroutes[$role])) {
-            return redirect()->route($roleroutes[$role])
-                ->with('success', 'Login successful!');
+            return redirect()->route($roleroutes[$role]);
         }
 
         return redirect()->route('login')->withErrors([
@@ -95,13 +94,15 @@ class LoginController extends Controller
         ]);
     }
 
-    public function logout(Request $request)
-    {
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+   public function logout(Request $request)
+{
+    Auth::logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
 
-        return redirect()->route('login')
-            ->with('info', 'You have been logged out successfully.');
-    }
+    // Return view with JavaScript to clear sessionStorage before redirect
+    return view('auth.logout-cleanup', [
+        'redirectUrl' => route('login')
+    ]);
+}
 }

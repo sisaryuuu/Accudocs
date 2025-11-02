@@ -617,108 +617,169 @@ class RANCAController extends Controller
         }
     }
 
-    /** Reject DV */
-    public function reject(Request $request, $id)
-    {
+    /** Reject DV Request - RANCA Version */
+public function reject(Request $request, $id)
+{
+    try {
         $request->validate([
-            'remarks' => 'required|string|max:1000',
+            'remarks' => 'required|string|max:1000|min:10',
+        ], [
+            'remarks.required' => 'Please provide a reason for rejection.',
+            'remarks.min' => 'Rejection reason must be at least 10 characters.',
         ]);
 
-        try {
-            $dvRequest = DvRequest::findOrFail($id);
-            $statusBefore = $dvRequest->status;
+        $dvRequest = DvRequest::with(['orsRequest', 'focalPerson'])->findOrFail($id);
+        $statusBefore = $dvRequest->status;
+        $currentUserId = auth()->id();
+        $rejectedAt = now();
 
-            if (!in_array($dvRequest->status, ['RANCA_in_process'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This DV request cannot be rejected at its current stage.'
-                ], 422);
-            }
+        // Check if request can be rejected by RANCA
+        if (!in_array($dvRequest->status, [
+            'RANCA_received', 
+            'RANCA_in_process'
+        ])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This request cannot be rejected at its current status: ' . $statusBefore
+            ], 422);
+        }
 
-            $rejectedAt = now();
-            $focalId = $dvRequest->focalperson_id;
-            $remarks = trim($request->remarks);
+        // Check if locked by another user
+        $lockDuration = now()->subMinutes(10);
+        if ($dvRequest->locked_by && 
+            $dvRequest->locked_by !== $currentUserId && 
+            $dvRequest->locked_at >= $lockDuration) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This request is currently locked by another user.'
+            ], 422);
+        }
 
+        DB::transaction(function () use (
+            $dvRequest, 
+            $statusBefore, 
+            $rejectedAt, 
+            $request, 
+            $currentUserId
+        ) {
+            // Update DV Request
             $dvRequest->update([
-                'status'     => 'RANCA_rejected',
-                'locked_by'  => null,
-                'locked_at'  => null,
+                'status'       => 'RANCA_rejected',
+                'rejected_by'  => $currentUserId,
+                'rejected_at'  => $rejectedAt,
+                'locked_by'    => null,
+                'locked_at'    => null,
             ]);
+
+            // Update ORS Request if exists
+            if ($dvRequest->orsRequest) {
+                $dvRequest->orsRequest->update([
+                    'status'      => 'RANCA_rejected',
+                    'rejected_by' => $currentUserId,
+                    'rejected_at' => $rejectedAt,
+                ]);
+            }
 
             // ✅ SAVE VERIFICATION HISTORY
             $this->saveRANCAValidationHistory(
                 $dvRequest,
                 'reject',
-                $remarks,
+                $request->remarks,
                 [
-                    'status_before' => $statusBefore,
-                    'status_after'  => 'RANCA_rejected',
-                    'rejected_by' => auth()->id(),
-                    'rejected_at' => $rejectedAt->toISOString(),
-                    'rejection_reason' => $remarks
+                    'status_before'    => $statusBefore,
+                    'status_after'     => 'RANCA_rejected',
+                    'rejected_by'      => $currentUserId,
+                    'rejected_at'      => $rejectedAt->toISOString(),
+                    'rejection_reason' => $request->remarks,
+                    'amount'           => $dvRequest->amount,
+                    'dv_number'        => $dvRequest->dv_number,
+                    'ors_request_id'   => $dvRequest->orsRequest->id ?? null
                 ]
             );
 
+            // Log action
             $this->logAction(
                 $dvRequest->id,
                 'Accounting_III',
                 'RANCA_rejected',
-                $remarks
+                'DV request rejected by RANCA: ' . $request->remarks
             );
 
+            // Create notification for focal person
+            $focalId = $dvRequest->focalperson_id;
             if ($focalId) {
                 Notification::create([
                     'focalperson_id' => $focalId,
                     'dv_request_id'  => $dvRequest->id,
                     'status'         => 'RANCA_rejected',
-                    'action'         => 'Rejected',
-                    'remarks'        => $remarks,
+                    'action'         => 'Rejected by RANCA',
+                    'remarks'        => $request->remarks,
                 ]);
 
+                // Trigger Pusher event to focal person
                 $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
                     'status'        => 'RANCA_rejected',
-                    'remarks'       => $remarks,
+                    'action'        => 'Rejected',
+                    'remarks'       => $request->remarks,
                     'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);
             }
 
+            // Trigger Pusher event to RANCA channel
             $this->pusher->trigger('dv-requests-ranca', 'dv-request-rejected', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => 'RANCA_rejected',
-                'action_performer_id' => auth()->id(), // ✅ ADDED
-                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'dv_request_id'      => $dvRequest->id,
+                'control_number'     => $dvRequest->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) : 
+                    'Unknown',
+                'status'             => 'RANCA_rejected',
+                'rejected_by'        => auth()->user()->name ?? 'RANCA Officer',
+                'timestamp'          => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'action_performer_id' => $currentUserId,
             ]);
+        });
 
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'DV request has been rejected successfully.',
-                    'data' => [
-                        'id'         => $dvRequest->id,
-                        'status'     => 'RANCA_rejected',
-                        'remarks'    => $remarks,
-                    ]
-                ]);
-            }
-
-            return redirect()->route('Accounting.dvrequests.index')
-                             ->with('error', 'DV request has been rejected.');
-
-        } catch (\Exception $e) {
-            \Log::error('Error rejecting DV request: ' . $e->getMessage());
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An error occurred while rejecting the DV request.'
-                ], 500);
-            }
-
-            return redirect()->back()->with('error', 'An error occurred while rejecting the DV request.');
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'DV request has been rejected successfully.',
+                'data' => [
+                    'id'          => $dvRequest->id,
+                    'status'      => 'RANCA_rejected',
+                    'rejected_at' => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                ]
+            ]);
         }
-    }
 
+        return redirect()->route('Accounting.dvrequests.index')
+            ->with('success', 'DV request has been rejected successfully.');
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->validator->errors()->first()
+            ], 422);
+        }
+        return redirect()->back()->withErrors($e->validator)->withInput();
+        
+    } catch (\Exception $e) {
+        \Log::error('Error rejecting DV request in RANCA: ' . $e->getMessage(), [
+            'dv_request_id' => $id,
+            'user_id' => auth()->id(),
+            'exception' => $e->getTraceAsString()
+        ]);
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while rejecting the request: ' . $e->getMessage()
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while rejecting the request.');
+    }
+}
     /** Release lock */
     public function releaseLock($id)
     {
@@ -822,7 +883,7 @@ class RANCAController extends Controller
     // ✅ ADD this new method for saving verification history
     protected function saveRANCAValidationHistory($dvRequest, $step, $remarks = null, $data = [])
     {
-        try{
+        try {
         RANCAValidationHistory::create([
                     'dv_request_id'      => $dvRequest->id,
                     'verified_by'        => auth()->id(),

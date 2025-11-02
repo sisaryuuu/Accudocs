@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Disbursement Voucher</title>
     <style>
-        @page { size: Legal; margin: 0mm; }
+        @page { 
+            size: Legal; 
+            margin: 1mm; 
+        }
         body { 
             font-family: "Times New Roman", Times, serif; 
             font-size: 10px;
@@ -15,19 +18,18 @@
             position: relative;
         }
     
-        /* QR Code Container - Fixed position at top right */
-        .qr-code-container {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
+        .qr-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
-            background: white;
-            padding: 8px;
-            border: 2px solid #000;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            width: 120px;
+            width: fit-content;
+        }
+
+        .qr-label, .qr-status, .qr-placeholder, .qr-footer {
+            font-size: 12px;
+            margin: 4px 0;
         }
 
         .qr-label {
@@ -37,43 +39,35 @@
             color: #333;
         }
 
+        /* QR Code Size: Minimum 1x1 cm (approximately 38x38 pixels at 96 DPI) */
         .qr-image {
-            width: 80px;
-            height: 80px;
+            width: 114px;  /* 1 cm equivalent */
+            height: 114px; /* 1 cm equivalent */
+            min-width: 114px;
+            min-height: 114px;
             display: block;
             margin: 0 auto;
-        }
-
-        .qr-status {
-            font-size: 8px;
-            margin-top: 4px;
-            padding: 2px 4px;
-            border-radius: 3px;
-            display: inline-block;
+            border: 1px solid #f0f0f0; /* subtle border for visibility */
         }
 
         .qr-code-placeholder {
-            width: 80px;
-            height: 80px;
+            width: 114px;  /* 1 cm equivalent */
+            height: 114px; /* 1 cm equivalent */
+            min-width: 114px;
+            min-height: 114px;
             border: 1px solid #ccc;
             display: flex;
             align-items: center;
             justify-content: center;
             background: #f5f5f5;
             color: #666;
-            font-size: 8px;
+            font-size: 6px; /* smaller font for small placeholder */
             font-weight: bold;
             margin: 0 auto;
-        }
-
-        .qr-status.active {
-            background-color: #10b981;
-            color: white;
-        }
-
-        .qr-status.inactive {
-            background-color: #f59e0b;
-            color: white;
+            line-height: 1;
+            text-align: center;
+            padding: 2px;
+            box-sizing: border-box;
         }
         
         table { 
@@ -176,94 +170,96 @@
             border-right: 1px solid #000;
         }
         
+        /* Logo size for both screen and print */
+        .dole-logo {
+            width: 120px !important;
+            height: auto !important;
+            max-width: 120px !important;
+        }
+        
         @media print {
-            body { padding: 0; }
-            .no-print { display: none; }
-            
-            .qr-code-container {
-                position: fixed;
-                top: 15px;
-                right: 15px;
-                box-shadow: none;
-                border: 2px solid #000;
-                padding: 10px;
-                width: 130px;
+            body { 
+                padding: 0; 
+                margin: 1cm;
             }
             
+            .no-print { display: none; }
+            
+            .dole-logo {
+                width: 175px !important;
+                height: auto !important;
+                max-width: 175px !important;
+            }
+            
+            /* Ensure QR code maintains minimum 1x1 cm size in print */
             .qr-image {
-                width: 100px !important;
-                height: 100px !important;
+                width: 2cm !important;  /* Physical 1 cm size */
+                height: 2cm !important; /* Physical 1 cm size */
+                min-width: 2cm !important;
+                min-height: 2cm !important;
+                margin: 8px auto !important;
             }
             
             .qr-code-placeholder {
-                width: 100px;
-                height: 100px;
-                font-size: 9px;
-                border: 2px solid #000;
+                width: 2cm !important;  /* Physical 1 cm size */
+                height: 2cm !important; /* Physical 1 cm size */
+                min-width: 2cm !important;
+                min-height: 2cm !important;
+                font-size: 6px !important;
+                border: 1px solid #000 !important;
+                margin: 8px auto !important;
             }
             
             .qr-label {
-                font-size: 11px;
-                margin-bottom: 8px;
+                font-size: 9px !important;
+                margin-bottom: 6px !important;
             }
             
-            .qr-status {
-                font-size: 9px;
-                margin-top: 6px;
-                padding: 3px 6px;
+            .qr-footer {
+                font-size: 7px !important;
             }
         }
     </style>
 </head>
 <body>
+    <br><br>
 
-    <!-- QR CODE CONTAINER - Fixed position at top right -->
-    <div class="qr-code-container">
-        <div class="qr-label">SCAN FOR STATUS</div>
-        
-        @if(isset($qrCode) && $qrCode)
-            <img src="{{ $qrCode }}" alt="DV QR Code" class="qr-image">
-            
-            @if(isset($dvRequest))
-                <div class="qr-status {{ $dvRequest->qr_status === 'active' ? 'active' : 'inactive' }}">
-                    {{ $dvRequest->qr_status === 'active' ? '● ACTIVE' : '○ PENDING' }}
-                </div>
-            @endif
-        @else
-            <div class="qr-code-placeholder">
-                QR CODE<br>NOT<br>GENERATED
-            </div>
-        @endif
-        
-        <div style="font-size: 8px; margin-top: 4px; color: #666;">
-            RD & CASHIER
-        </div>
-    </div>
-
-    <!-- Header Table with proper borders -->
-    <table class="header-table">
+    <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px;">
         <tr>
-            <td rowspan="2" style="width: 15%; text-align: center; border-right: 1px solid #000;">
+            <!-- Left: Logo -->
+            <td rowspan="3" style="width: 15%; text-align: center; border: 1px solid #000; border-right: none;">
                 <img src="{{ asset('storage/logo/DOLE.png') }}" 
-                    alt="DOLE Logo" 
-                    style="width: 100px; height: auto; display: block; margin: 0 auto;">
+                     alt="DOLE Logo" 
+                     class="dole-logo"
+                     style="margin: 5px auto; display: block;">
             </td>
-            
-            <td class="center" style="width: 60%; border-bottom: 1px solid #000; border-right: 1px solid #000;">
+
+            <!-- Middle: Header -->
+            <td rowspan="3" style="width: 65%; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; border-left: none; border-right: none; padding: 4px 0;">
                 <br>
-                Republic of the Philippines<br><br>
-                <strong style="font-size: 11px;">DEPARTMENT OF LABOR AND EMPLOYMENT XI</strong><br><br>
-                <strong style="font-size: 12px; text-decoration: underline;">DISBURSEMENT VOUCHER</strong><br><br>
+                <strong style="font-size: 16px;">DEPARTMENT OF LABOR AND EMPLOYMENT XI</strong><br><br><br><br><br><br><br><br>
+                <strong style="font-size: 20px;">DISBURSEMENT VOUCHER</strong>
             </td>
-            <td style="width: 20%; border-bottom: 1px solid #000;">
-                Fund Cluster: ___________
+
+            <!-- Right: Fund Cluster -->
+            <td style="width: 20%; border: 1px solid #000; padding: 4px 6px;">
+                Fund Cluster :
+                <br><br><br>
             </td>
         </tr>
         <tr>
-            <td class="no-border" style="border-right: 1px solid #000;"></td>
-            <td>
+            <!-- Right: DV No. -->
+            <td style="border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 6px;">
                 Date: <strong>{{ $data['date'] ?? '_____________' }}</strong><br><br>
                 DV No.: <strong>{{ $data['dv_no'] ?? '_____________' }}</strong>
+                <br>
+                <div class="qr-label" style="text-align:center">SCAN FOR UPDATE STATUS</div>
+
+                @if(isset($qrCode) && $qrCode)
+                    <img src="{{ $qrCode }}" alt="DV QR Code" class="qr-image">
+                @else
+                    <div class="qr-code-placeholder">QR<br>CODE</div>
+                @endif
             </td>
         </tr>
     </table>
@@ -299,20 +295,20 @@
     <!-- Payee Information -->
     <table>
         <tr>
-            <td class="bold" style="width: 5%; height: 30px;">Payee</td>
-            <td style="width: 38%;" colspan="2">
+            <td class="bold" style="width: 5%; height: 30px; font-size: 12px;">Payee</td>
+            <td style="width: 38%; font-size: 12px;" colspan="2" >
                 <strong>{{ strtoupper($data['payee'] ?? 'NAME OF PAYEE') }}</strong>
             </td>
-            <td style="width: 30%;">
-                TIN/Employee No.: <strong>{{ $data['tin'] ?? '___________' }}</strong>
+            <td style="width: 30%; font-size: 12px;">
+                TIN/Employee No.: <br> <strong>{{ $data['tin'] ?? '___________' }}</strong>
             </td>
-            <td style="width: 18%;">
-                ORS/BURS No.: <strong>{{ $data['ors_number'] ?? '___________' }}</strong>
+            <td style="width: 18%; font-size: 12px;"> 
+                ORS/BURS No.: <br><strong>{{ $data['ors_number'] ?? '___________' }}</strong>
             </td>
         </tr>
         <tr>
-            <td class="bold">Address</td>
-            <td colspan="4">
+            <td style="font-size: 12px;" class = "bold">Address</td>
+            <td colspan="4" style="font-size: 12px;">
                 <strong>{{ strtoupper($data['address'] ?? 'DAVAO CITY') }}</strong>
             </td>
         </tr>
@@ -321,14 +317,15 @@
     <!-- Particulars Section -->
     <table>
         <tr>
-            <td class="center bold" style="width: 30%; background-color: #f5f5f5;">Particulars</td>
-            <td class="center bold" style="width: 20%; background-color: #f5f5f5;">Responsibility Center</td>
-            <td class="center bold" style="width: 20%; background-color: #f5f5f5;">MFO/PAP</td>
-            <td class="center bold" style="width: 20%; background-color: #f5f5f5;">Amount</td>
+            <td class="center bold" style="width: 30%; font-size:13px; background-color: #f5f5f5;">Particulars</td>
+            <td class="center bold" style="width: 20%; font-size:13px; background-color: #f5f5f5;">Responsibility Center</td>
+            <td class="center bold" style="width: 20%; font-size:13px; background-color: #f5f5f5;">MFO/PAP</td>
+            <td class="center bold" style="width: 20%; font-size:13px; background-color: #f5f5f5;">Amount</td>
         </tr>
         <tr style="height: 275px;">
-            <td class="particulars-section" style="vertical-align: top; padding: 10px;">
-                <div style="white-space: pre-wrap;">{{ $data['particulars'] ?? '' }}</div>
+            <td class="particulars-section" style="vertical-align: top; padding: 10px; font-size: 12px">
+                <br>
+                <div style="white-space: pre-wrap;" >{{ $data['particulars'] ?? '' }}</div>
                 <br><br>
                 <table style="border: none; margin-top: 10px;" cellpadding="2">
                     <tr style="border: none;">
@@ -337,12 +334,13 @@
                     </tr>
                 </table>
             </td>
-            <td style="text-align: center;">
+            <td style="text-align: center; font-size: 12px;">
                 <br>
                 <strong>{{ $data['respocenter_code'] ?? '' }}</strong><br>
                 {{ $data['respocenter_desc'] ?? '' }}<br>
             </td>
-            <td style="text-align: center;">
+            <td style="text-align: center; font-size: 12px;">
+                <br>
                 @if(isset($data['mfocode']) && $data['mfocode'])
                     <strong>{{ $data['mfocode'] }}</strong><br>
                     {{ $data['mfodescription'] ?? '' }}
@@ -425,10 +423,7 @@
                 <td style="text-align: right;">-</td>
             </tr>
         @endif
-          <td>&nbsp;</td>
-        <td>&nbsp;</td>
-          <td>&nbsp;</td>
-                  <td>&nbsp;</td>
+
                   
         <tr>
             <td colspan="4" style="height: 20px;"></td>
@@ -571,6 +566,5 @@
             </td>
         </tr>
     </table>
-
 </body>
 </html>

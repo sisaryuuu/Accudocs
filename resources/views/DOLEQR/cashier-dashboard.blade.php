@@ -3,8 +3,8 @@
 @section('title', 'Cashier Dashboard')
 
 @section('content')
-        <!-- Main Content Section -->
-       <div class="min-h-screen bg-gray-50 py-8">
+<!-- Main Content Section -->
+<div class="min-h-screen bg-gray-50 py-8">
     <div class="max-w-[150rem] mx-auto px-6">
         <!-- Header Section -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
@@ -81,6 +81,32 @@
             </div>
         </div>
 
+        <!-- Bulk Actions Section -->
+        <div id="bulkActionsSection" class="hidden bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="selectAllDVs" class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                        <label for="selectAllDVs" class="ml-3 text-sm font-medium text-gray-700">Select All</label>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <span id="selectedCount">0</span> DVs selected
+                    </div>
+                </div>
+                <div class="flex space-x-3">
+                    <button id="bulkReceiveBtn" class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Bulk Receive
+                    </button>
+                    <button id="clearSelectionBtn" class="inline-flex items-center px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
+                        Clear Selection
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- DVs Ready for Processing - Full Width -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-8 py-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
@@ -105,6 +131,9 @@
                     <table class="w-full table-auto divide-y divide-gray-200 min-w-full" id="dvTable">
                         <thead class="bg-gray-50">
                             <tr>
+                                <th class="px-6 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200 w-12">
+                                    <!-- Checkbox column -->
+                                </th>
                                 <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">DV Number</th>
                                 <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">Payee Details</th>
                                 <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">Amount</th>
@@ -117,13 +146,26 @@
                         <tbody class="bg-white divide-y divide-gray-200" id="dvTableBody">
                             @foreach($pendingDvs as $dv)
                             <tr class="hover:bg-gray-50 transition-colors duration-150 group" data-dv-id="{{ $dv->id }}" data-dv-status="{{ $dv->status }}">
+                                <td class="px-6 py-6 whitespace-nowrap text-center">
+                                    @if($dv->status === 'Regional_Director_signed_approved')
+                                        <!-- Show checkbox only for awaiting receipt -->
+                                        <input type="checkbox" name="dvCheckbox" value="{{ $dv->id }}" 
+                                            class="dv-checkbox w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                                    @else
+                                        <!-- Show checkmark icon for received DVs -->
+                                        <div class="w-5 h-5 flex items-center justify-center text-green-500">
+                                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                            </svg>
+                                        </div>
+                                    @endif
+                                </td>
                                 <td class="px-8 py-6 whitespace-nowrap">
                                     <div class="text-base font-bold text-gray-900">{{ $dv->dv_number }}</div>
                                     <div class="text-sm text-gray-500 mt-1">Ref: {{ $dv->reference_number ?? 'N/A' }}</div>
                                 </td>
                                 <td class="px-8 py-6">
                                     <div class="text-base font-semibold text-gray-900">{{ $dv->focalPerson->fname }} {{ $dv->focalPerson->lname }}</div>
-                                    <div class="text-sm text-gray-600 mt-1">{{ $dv->focalPerson->position ?? 'N/A' }}</div>
                                     <div class="text-xs text-gray-500 mt-1">TIN: {{ $dv->focalPerson->TIN_number ?? 'N/A' }}</div>
                                 </td>
                                 <td class="px-8 py-6 whitespace-nowrap">
@@ -154,63 +196,63 @@
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-8 py-6">
-                                    @if($dv->qr_code_token)
-                                        <div class="flex flex-col items-center space-y-3">
-                                            <div class="flex justify-center relative group/qr">
-                                                <img 
-                                                    src="{{ route('dv.generate-qr', $dv->id) }}?v={{ time() }}" 
-                                                    width="80" 
-                                                    height="80"
-                                                    alt="QR Code for DV {{ $dv->dv_number }}" 
-                                                    class="rounded-xl border-2 border-gray-200 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-105 hover:border-green-300"
-                                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
-                                                    onclick="showQRModal({{ $dv->id }})"
-                                                    loading="lazy"
-                                                >
-                                                <div class="hidden text-red-400 text-xs text-center">
-                                                    <svg class="w-12 h-12 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                                                    </svg>
-                                                    Failed to load
-                                                </div>
-                                            </div>
-                                            
-                                            <div class="text-center">
-                                                @if($dv->qr_status === 'active')
-                                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-300 shadow-sm">
-                                                        <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                                                        </svg>
-                                                        QR Active
-                                                    </span>
-                                                @else
-                                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300 shadow-sm">
-                                                        <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path fill-rule="evenodd" d="M10 1a9 9 0 100 18A9 9 0 0010 1zm0 16a7 7 0 100-14 7 7 0 000 14zm1-7a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/>
-                                                        </svg>
-                                                        QR Inactive
-                                                    </span>
-                                                @endif
-                                            </div>
-                                            
-                                            <button onclick="showQRModal({{ $dv->id }})" 
-                                                    class="text-sm text-blue-600 hover:text-blue-800 font-medium underline transition-colors">
-                                                View Large QR
-                                            </button>
-                                        </div>
-                                    @else
-                                        <div class="text-center py-4">
-                                            <div class="mx-auto w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-3 border-2 border-gray-200">
-                                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                                                </svg>
-                                            </div>
-                                            <span class="text-gray-500 font-medium block">No QR Code</span>
-                                            <span class="text-gray-400 text-sm">Generate in RANCA</span>
-                                        </div>
-                                    @endif
-                                </td>
+                               <td class="px-8 py-6">
+                    @if($dv->qr_code_token)
+                        <div class="flex flex-col items-center space-y-3">
+                            <div class="flex justify-center relative group/qr">
+                                <img 
+                                    src="{{ $dv->qr_code_data }}" 
+                                    width="80" 
+                                    height="80"
+                                    alt="QR Code for DV {{ $dv->qr_code_token }}" 
+                                    class="rounded-xl border-2 border-gray-200 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-105 hover:border-blue-300"
+                                    onclick="showQRModal({{ $dv->id }})"
+                                    loading="lazy"
+                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                                >
+                                <div class="hidden text-red-400 text-xs text-center" style="display: none;">
+                                    <svg class="w-12 h-12 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                    </svg>
+                                    Failed to load
+                                </div>
+                            </div>
+                            
+                            <div class="text-center">
+                                @if($dv->qr_status === 'active')
+                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-300 shadow-sm">
+                                        <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                        </svg>
+                                        QR Active
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300 shadow-sm">
+                                        <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 1a9 9 0 100 18A9 9 0 0010 1zm0 16a7 7 0 100-14 7 7 0 000 14zm1-7a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/>
+                                        </svg>
+                                        QR Inactive
+                                    </span>
+                                @endif
+                            </div>
+                            
+                            <button onclick="showQRModal({{ $dv->id }})" 
+                                    class="text-sm text-blue-600 hover:text-blue-800 font-medium underline transition-colors">
+                                View Large QR
+                            </button>
+                        </div>
+                    @else
+                        <div class="text-center py-4">
+                            <div class="mx-auto w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-3 border-2 border-gray-200">
+                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                </svg>
+                            </div>
+                            <span class="text-gray-500 font-medium block">No QR Code</span>
+                            <span class="text-gray-400 text-sm">Generate in RANCA</span>
+                        </div>
+                    @endif
+                </td>
                                 <td class="px-8 py-6">
                                     <div class="flex flex-col space-y-3">
                                         <a href="{{ route('dv.qr.interface', $dv->qr_code_token) }}" 
@@ -218,7 +260,7 @@
                                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
                                             </svg>
-                                            Process DV
+                                            {{ $dv->status == 'Regional_Director_signed_approved' ? 'Receive DV' : 'Process Payment' }}
                                         </a>
                                         <div class="text-center">
                                             <button onclick="showDvDetails({{ $dv->id }})" 
@@ -288,58 +330,142 @@
     </div>
 </div>
 
+<!-- Bulk Receive Confirmation Modal -->
+<div id="bulkReceiveModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-8 max-w-lg w-full mx-4">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-2xl font-bold text-gray-900">Confirm Bulk Receive</h3>
+            <button onclick="closeBulkReceiveModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="mb-6">
+            <p class="text-gray-700 mb-4">You are about to receive the following DVs:</p>
+            <div id="bulkReceiveList" class="max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <!-- Selected DVs will be listed here -->
+            </div>
+            <p class="text-sm text-gray-600 mt-4">This action will mark these DVs as received and move them to the next stage.</p>
+        </div>
+        <div class="flex justify-end space-x-3">
+            <button onclick="closeBulkReceiveModal()" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors duration-200">
+                Cancel
+            </button>
+            <button id="confirmBulkReceiveBtn" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200">
+                Confirm Receive
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+        <div class="flex justify-center mb-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+        </div>
+        <h3 class="text-xl font-bold text-gray-900 mb-2">Processing DVs</h3>
+        <p class="text-gray-600" id="loadingMessage">Please wait while we process your request...</p>
+    </div>
+</div>
+
 <!-- Pusher Scripts -->
 <script src="https://js.pusher.com/8.2/pusher.min.js"></script>
 <script>
-function updateLastUpdatedTime() {
-    const now = formatDateTime(new Date());
-    
-    // Check if element exists before trying to update it
-    const lastUpdatedHeader = document.getElementById('lastUpdated');
-    if (lastUpdatedHeader) {
-        lastUpdatedHeader.textContent = now;
-    }
-    
-    const lastUpdatedFooter = document.getElementById('lastUpdatedFooter');
-    if (lastUpdatedFooter) {
-        lastUpdatedFooter.textContent = now;
-    }
-}
+// Global variables
+let currentQRData = null;
+let pusher = null;
+let cashierChannel = null;
+let selectedDVs = new Set();
 
-// Update statistics counters - WITH NULL CHECKS
-async function updateStatistics() {
+// ========== PUSHER REAL-TIME UPDATES ==========
+function initializePusher() {
     try {
-        const response = await fetch('/cashier/dashboard/stats');
-        const stats = await response.json();
-        
-        if (stats.success) {
-            // Check each element before updating
-            const totalPendingEl = document.getElementById('statTotalPending');
-            if (totalPendingEl) {
-                totalPendingEl.textContent = stats.data.total_pending;
-            }
-            
-            const awaitingProcessingEl = document.getElementById('statAwaitingProcessing');
-            if (awaitingProcessingEl) {
-                awaitingProcessingEl.textContent = stats.data.awaiting_processing;
-            }
-            
-            const inProcessingEl = document.getElementById('statInProcessing');
-            if (inProcessingEl) {
-                inProcessingEl.textContent = stats.data.in_processing;
-            }
-            
-            const dvCountEl = document.getElementById('dvCount');
-            if (dvCountEl) {
-                dvCountEl.textContent = stats.data.total_pending;
-            }
+        if (typeof Pusher === 'undefined') {
+            console.error('[Pusher] Pusher library not loaded');
+            updateRealtimeStatus(false);
+            return;
         }
+        
+        console.log('[Pusher] Initializing...');
+        
+        const pusherKey = document.documentElement.getAttribute('data-pusher-key') || '687d829e0e8bad4e0b71';
+        const pusherCluster = document.documentElement.getAttribute('data-pusher-cluster') || 'ap3';
+        
+        pusher = new Pusher(pusherKey, {
+            cluster: pusherCluster,
+            encrypted: true,
+            forceTLS: true
+        });
+
+        console.log('[Pusher] ✓ Instance created');
+
+        pusher.connection.bind('connecting', function() {
+            console.log('[Pusher] Connecting...');
+            updateRealtimeStatus(false);
+        });
+
+        pusher.connection.bind('connected', function() {
+            console.log('[Pusher] ✓ Connected');
+            updateRealtimeStatus(true);
+        });
+
+        pusher.connection.bind('disconnected', function() {
+            console.log('[Pusher] Disconnected');
+            updateRealtimeStatus(false);
+        });
+
+        pusher.connection.bind('error', function(err) {
+            console.error('[Pusher] Error:', err);
+            updateRealtimeStatus(false);
+        });
+
+        cashierChannel = pusher.subscribe('cashier-dashboard');
+        
+        console.log('[Channel] Subscribing to cashier-dashboard');
+        
+        cashierChannel.bind('pusher:subscription_succeeded', function() {
+            console.log('[Channel] ✓ Subscription succeeded');
+        });
+
+        cashierChannel.bind('pusher:subscription_error', function(status) {
+            console.error('[Channel] Subscription error:', status);
+        });
+        
+        cashierChannel.bind('dv-status-updated', function(data) {
+            console.log('[Event] DV Status Updated:', data);
+            handleDvStatusUpdate(data);
+        });
+
+        cashierChannel.bind('new-dv-added', function(data) {
+            console.log('[Event] New DV Added:', data);
+            handleNewDvAdded(data);
+        });
+
+        cashierChannel.bind('dv-removed', function(data) {
+            console.log('[Event] DV Removed:', data);
+            handleDvRemoved(data);
+        });
+
+        cashierChannel.bind('stats-updated', function(data) {
+            console.log('[Event] Stats Updated:', data);
+            updateStatisticsDisplay(data.stats);
+        });
+
+        cashierChannel.bind('bulk-receive-completed', function(data) {
+            console.log('[Event] Bulk Receive Completed:', data);
+            handleBulkReceiveCompleted(data);
+        });
+
+        console.log('[Pusher] ✓ Initialization complete');
+
     } catch (error) {
-        console.error('Error updating statistics:', error);
+        console.error('[Pusher] Error initializing:', error);
+        updateRealtimeStatus(false);
     }
 }
 
-// Update real-time status indicator - WITH NULL CHECK
 function updateRealtimeStatus(isConnected) {
     const statusElement = document.getElementById('realtimeStatus');
     
@@ -363,369 +489,580 @@ function updateRealtimeStatus(isConnected) {
     }
 }
 
-// Initialize Pusher for real-time updates
-function initializePusher() {
-    try {
-        console.log('[Pusher] Initializing...');
-        
-        // Get credentials from data attributes or use defaults
-        const pusherKey = document.documentElement.getAttribute('data-pusher-key') || '687d829e0e8bad4e0b71';
-        const pusherCluster = document.documentElement.getAttribute('data-pusher-cluster') || 'ap3';
-        
-        window.pusher = new Pusher(pusherKey, {
-            cluster: pusherCluster,
-            encrypted: true,
-            forceTLS: true
-        });
-
-        console.log('[Pusher] ✓ Instance created');
-
-        // Set up connection listeners
-        window.pusher.connection.bind('connecting', function() {
-            console.log('[Pusher] Connecting...');
-            updateRealtimeStatus(false);
-        });
-
-        window.pusher.connection.bind('connected', function() {
-            console.log('[Pusher] ✓ Connected');
-            updateRealtimeStatus(true);
-        });
-
-        window.pusher.connection.bind('disconnected', function() {
-            console.log('[Pusher] Disconnected');
-            updateRealtimeStatus(false);
-        });
-
-        window.pusher.connection.bind('error', function(err) {
-            console.error('[Pusher] Error:', err);
-            updateRealtimeStatus(false);
-        });
-
-        // Subscribe to cashier dashboard channel
-        window.cashierChannel = window.pusher.subscribe('cashier-dashboard');
-        
-        console.log('[Channel] Subscribing to cashier-dashboard');
-        
-        // Listen for subscription success
-        window.cashierChannel.bind('pusher:subscription_succeeded', function() {
-            console.log('[Channel] ✓ Subscription succeeded');
-        });
-
-        // Listen for subscription error
-        window.cashierChannel.bind('pusher:subscription_error', function(status) {
-            console.error('[Channel] Subscription error:', status);
-        });
-        
-        // Listen for DV status updates
-        window.cashierChannel.bind('dv-status-updated', function(data) {
-            console.log('[Event] DV Status Updated:', data);
-            handleDvStatusUpdate(data);
-        });
-
-        // Listen for new DV added
-        window.cashierChannel.bind('new-dv-added', function(data) {
-            console.log('[Event] New DV Added:', data);
-            handleNewDvAdded(data);
-        });
-
-        // Listen for DV removed (completed/moved)
-        window.cashierChannel.bind('dv-removed', function(data) {
-            console.log('[Event] DV Removed:', data);
-            handleDvRemoved(data);
-        });
-
-        console.log('[Pusher] ✓ Initialization complete');
-
-    } catch (error) {
-        console.error('[Pusher] Error initializing:', error);
-        updateRealtimeStatus(false);
-    }
-}
-
-// Handle DV status update from Pusher
-async function handleDvStatusUpdate(data) {
+// ========== PUSHER EVENT HANDLERS ==========
+function handleDvStatusUpdate(data) {
     console.log('[Handler] Processing status update for DV:', data.dv_id);
     
     const dvRow = document.querySelector(`tr[data-dv-id="${data.dv_id}"]`);
     
     if (dvRow) {
-        // Check if DV should still be shown in cashier dashboard
-        const shouldRemove = !['Regional_Director_signed_approved', 'Cashier_received'].includes(data.new_status);
+        updateDvRowInTable(data.dv_id, data.new_status);
         
-        if (shouldRemove) {
-            console.log('[Handler] Removing row - DV moved out of cashier queue');
-            // Remove with animation
-            dvRow.style.transition = 'all 0.5s ease-out';
-            dvRow.style.opacity = '0';
-            dvRow.style.transform = 'translateX(100%)';
-            
-            setTimeout(() => {
-                dvRow.remove();
-                updateStatistics();
-                checkEmptyState();
-            }, 500);
-            
-            showToast(`DV ${data.dv_number} moved to ${data.new_status.replace(/_/g, ' ')}`, 'info');
-        } else {
-            console.log('[Handler] Updating row - DV still in cashier queue');
-            // Update status badge with animation
-            const statusCell = dvRow.querySelector('td:nth-child(5)');
-            if (statusCell) {
-                statusCell.style.transition = 'all 0.3s ease';
-                statusCell.style.backgroundColor = '#fef3c7';
-                
-                setTimeout(() => {
-                    updateDvRow(data);
-                    statusCell.style.backgroundColor = '';
-                }, 300);
-            }
-            
-            showToast(`DV ${data.dv_number} status updated`, 'success');
+        if (data.new_status === 'Cashier_received') {
+            removeCheckboxForReceivedDV(data.dv_id);
         }
-    } else {
-        console.warn('[Handler] DV row not found for ID:', data.dv_id);
+        
+        if (!data.is_bulk_action) {
+            showToast(`DV ${data.dv_number} status updated to ${data.new_status.replace(/_/g, ' ')}`, 'success');
+        }
     }
     
     updateLastUpdatedTime();
+    updateTableHeader();
 }
 
-// Handle new DV added to cashier queue
-async function handleNewDvAdded(data) {
+function handleNewDvAdded(data) {
     console.log('[Handler] New DV added:', data.dv.dv_number);
     
-    // Check if DV already exists
     const existingRow = document.querySelector(`tr[data-dv-id="${data.dv.id}"]`);
     if (existingRow) {
         console.log('[Handler] DV already exists in table, skipping');
         return;
     }
     
-    try {
-        // Fetch the complete DV data
-        const response = await fetch(`/api/dv/${data.dv.id}/details`);
-        const dvData = await response.json();
-        
-        if (dvData.success) {
-            addDvRowToTable(dvData.dv);
-            updateStatistics();
-            showToast(`New DV ${data.dv.dv_number} ready for processing`, 'success');
-        } else {
-            console.error('[Handler] Failed to fetch DV details:', dvData.message);
-        }
-    } catch (error) {
-        console.error('[Handler] Error fetching DV details:', error);
-    }
-    
+    showToast(`New DV ${data.dv.dv_number} ready for processing`, 'info');
     updateLastUpdatedTime();
 }
 
-// Handle DV removed from queue
 function handleDvRemoved(data) {
     console.log('[Handler] DV removed:', data.dv_id);
     
     const dvRow = document.querySelector(`tr[data-dv-id="${data.dv_id}"]`);
     if (dvRow) {
-        dvRow.style.transition = 'all 0.5s ease-out';
-        dvRow.style.opacity = '0';
-        dvRow.style.transform = 'translateX(-100%)';
-        
-        setTimeout(() => {
-            dvRow.remove();
-            updateStatistics();
-            checkEmptyState();
-        }, 500);
-        
-        showToast(`DV ${data.dv_number} completed and removed`, 'info');
-    } else {
-        console.warn('[Handler] DV row not found for ID:', data.dv_id);
+        if (data.reason === 'bulk_received') {
+            console.log('DV marked as received via bulk action, keeping row');
+        } else {
+            dvRow.style.transition = 'all 0.5s ease-out';
+            dvRow.style.opacity = '0';
+            dvRow.style.transform = 'translateX(-100%)';
+            
+            setTimeout(() => {
+                dvRow.remove();
+                updateStatistics();
+                checkEmptyState();
+                updateTableHeader();
+            }, 500);
+            
+            showToast(`DV ${data.dv_number} ${data.reason === 'completed' ? 'completed' : 'removed'}`, 'info');
+        }
     }
     
     updateLastUpdatedTime();
 }
 
-// Update DV row with new data
-function updateDvRow(data) {
-    const dvRow = document.querySelector(`tr[data-dv-id="${data.dv_id}"]`);
-    if (!dvRow) {
-        console.warn('[Update] DV row not found:', data.dv_id);
-        return;
-    }
+function handleBulkReceiveCompleted(data) {
+    console.log('[Handler] Bulk receive completed:', data);
     
-    // Update status attribute
-    dvRow.setAttribute('data-dv-status', data.new_status);
+    data.successful_dvs.forEach(dv => {
+        updateDvRowInTable(dv.dv_id, dv.new_status);
+        removeCheckboxForReceivedDV(dv.dv_id);
+    });
     
-    // Update status badge
-    const statusCell = dvRow.querySelector('td:nth-child(5) span');
-    if (statusCell) {
-        const isAwaiting = data.new_status === 'Regional_Director_signed_approved';
-        statusCell.className = `inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${
-            isAwaiting ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-green-100 text-green-800 border border-green-200'
-        }`;
-        statusCell.innerHTML = `
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            ${data.new_status.replace(/_/g, ' ')}
-        `;
-    }
+    updateStatistics();
     
-    // Update timestamp
-    const timeCell = dvRow.querySelector('td:nth-child(5) .text-xs');
-    if (timeCell) {
-        timeCell.textContent = formatDateTime(new Date());
+    let message = `Bulk receive completed: ${data.successful_count} DVs received`;
+    if (data.failed_count > 0) {
+        message += `, ${data.failed_count} failed`;
     }
+    showToast(message, data.failed_count > 0 ? 'warning' : 'success');
+    
+    clearBulkSelection();
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
+    closeBulkReceiveModal();
+    
+    updateLastUpdatedTime();
+    updateTableHeader();
 }
 
-// Add new DV row to table
-function addDvRowToTable(dv) {
-    const tableContainer = document.getElementById('dvTableContainer');
-    let tableBody = document.getElementById('dvTableBody');
+// ========== BULK ACTIONS FUNCTIONS ==========
+function initializeBulkActions() {
+    const bulkSection = document.getElementById('bulkActionsSection');
+    const selectAllCheckbox = document.getElementById('selectAllDVs');
+    const dvCheckboxes = document.querySelectorAll('.dv-checkbox');
+    const selectedCount = document.getElementById('selectedCount');
+    const bulkReceiveBtn = document.getElementById('bulkReceiveBtn');
+    const clearSelectionBtn = document.getElementById('clearSelectionBtn');
     
-    // If no table body exists, create the table
-    if (!tableBody) {
-        tableContainer.innerHTML = `
-            <table class="w-full table-auto divide-y divide-gray-200 min-w-full" id="dvTable">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">DV Number</th>
-                        <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">Payee Details</th>
-                        <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">Amount</th>
-                        <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">Program</th>
-                        <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">Status</th>
-                        <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">QR Code</th>
-                        <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200" id="dvTableBody"></tbody>
-            </table>
-        `;
-        tableBody = document.getElementById('dvTableBody');
+    function updateBulkSectionVisibility() {
+        if (selectedDVs.size > 0) {
+            bulkSection.classList.remove('hidden');
+        } else {
+            bulkSection.classList.add('hidden');
+        }
+        if (selectedCount) {
+            selectedCount.textContent = selectedDVs.size;
+        }
     }
     
-    const newRow = createDvRow(dv);
+    dvCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                selectedDVs.add(this.value);
+            } else {
+                selectedDVs.delete(this.value);
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = false;
+                }
+            }
+            updateBulkSectionVisibility();
+        });
+    });
     
-    // Add with animation
-    newRow.style.opacity = '0';
-    newRow.style.transform = 'translateX(-20px)';
-    tableBody.insertBefore(newRow, tableBody.firstChild);
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            const isChecked = this.checked;
+            const checkboxes = document.querySelectorAll('.dv-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = isChecked;
+                if (isChecked) {
+                    selectedDVs.add(checkbox.value);
+                } else {
+                    selectedDVs.delete(checkbox.value);
+                }
+            });
+            updateBulkSectionVisibility();
+        });
+    }
     
-    setTimeout(() => {
-        newRow.style.transition = 'all 0.5s ease-out';
-        newRow.style.opacity = '1';
-        newRow.style.transform = 'translateX(0)';
-    }, 10);
+    if (bulkReceiveBtn) {
+        bulkReceiveBtn.addEventListener('click', function() {
+            if (selectedDVs.size > 0) {
+                showBulkReceiveModal();
+            }
+        });
+    }
+    
+    if (clearSelectionBtn) {
+        clearSelectionBtn.addEventListener('click', function() {
+            selectedDVs.clear();
+            document.querySelectorAll('.dv-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+            }
+            updateBulkSectionVisibility();
+        });
+    }
+    
+    updateBulkSectionVisibility();
 }
 
-// Create DV table row
-function createDvRow(dv) {
-    const row = document.createElement('tr');
-    row.className = 'hover:bg-gray-50 transition-colors duration-150 group';
-    row.setAttribute('data-dv-id', dv.id);
-    row.setAttribute('data-dv-status', dv.status);
+function showBulkReceiveModal() {
+    const modal = document.getElementById('bulkReceiveModal');
+    const listContainer = document.getElementById('bulkReceiveList');
     
-    const isAwaiting = dv.status === 'Regional_Director_signed_approved';
+    if (!modal || !listContainer) return;
     
-    row.innerHTML = `
-        <td class="px-8 py-6 whitespace-nowrap">
-            <div class="text-base font-bold text-gray-900">${dv.dv_number}</div>
-            <div class="text-sm text-gray-500 mt-1">Ref: ${dv.reference_number || 'N/A'}</div>
-        </td>
-        <td class="px-8 py-6">
-            <div class="text-base font-semibold text-gray-900">${dv.focal_person.fname} ${dv.focal_person.lname}</div>
-            <div class="text-sm text-gray-600 mt-1">${dv.focal_person.position || 'N/A'}</div>
-            <div class="text-xs text-gray-500 mt-1">TIN: ${dv.focal_person.tin_number || 'N/A'}</div>
-        </td>
-        <td class="px-8 py-6 whitespace-nowrap">
-            <div class="text-xl font-bold text-green-600">₱${formatNumber(dv.amount)}</div>
-            <div class="text-sm text-gray-500 mt-1">${dv.mode_of_payment || 'Cash'}</div>
-        </td>
-        <td class="px-8 py-6">
-            <div class="flex flex-col space-y-2">
-                <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 max-w-xs">
-                    ${dv.program.prcode || 'N/A'} - ${dv.program.description || 'N/A'}
-                </span>
-                <div class="text-sm text-gray-600">
-                    ${dv.particulars ? limitText(dv.particulars, 50) : 'No particulars'}
+    listContainer.innerHTML = '';
+    
+    selectedDVs.forEach(dvId => {
+        const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
+        if (dvRow) {
+            const dvNumber = dvRow.querySelector('td:nth-child(2) .text-base')?.textContent || 'N/A';
+            const payee = dvRow.querySelector('td:nth-child(3) .text-base')?.textContent || 'N/A';
+            const amount = dvRow.querySelector('td:nth-child(4) .text-xl')?.textContent || 'N/A';
+            
+            const listItem = document.createElement('div');
+            listItem.className = 'flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0';
+            listItem.innerHTML = `
+                <div>
+                    <div class="font-medium text-gray-900">${dvNumber}</div>
+                    <div class="text-sm text-gray-600">${payee}</div>
                 </div>
+                <div class="font-semibold text-green-600">${amount}</div>
+            `;
+            listContainer.appendChild(listItem);
+        }
+    });
+    
+    modal.classList.remove('hidden');
+}
+
+function closeBulkReceiveModal() {
+    const modal = document.getElementById('bulkReceiveModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+async function processBulkReceive() {
+    if (selectedDVs.size === 0) return;
+    
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingMessage = document.getElementById('loadingMessage');
+    
+    if (loadingOverlay) {
+        loadingOverlay.classList.remove('hidden');
+        loadingMessage.textContent = 'Processing bulk receive...';
+    }
+    
+    try {
+        const dvIds = Array.from(selectedDVs);
+        
+        const response = await fetch('/cashier/bulk-receive', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                dv_ids: dvIds
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            loadingMessage.textContent = 'Waiting for real-time updates...';
+            console.log('Bulk receive initiated, waiting for Pusher updates');
+        } else {
+            throw new Error(result.message || 'Bulk receive failed');
+        }
+        
+    } catch (error) {
+        console.error('Error in bulk receive:', error);
+        showToast('Error processing bulk receive: ' + error.message, 'error');
+        
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('hidden');
+        }
+        closeBulkReceiveModal();
+    }
+}
+
+function removeCheckboxForReceivedDV(dvId) {
+    const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
+    if (!dvRow) return;
+    
+    const checkboxCell = dvRow.querySelector('td:nth-child(1)');
+    if (checkboxCell) {
+        checkboxCell.innerHTML = `
+            <div class="w-5 h-5 flex items-center justify-center text-green-500">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
             </div>
-        </td>
-        <td class="px-8 py-6 whitespace-nowrap">
+        `;
+    }
+    
+    if (selectedDVs.has(dvId.toString())) {
+        selectedDVs.delete(dvId.toString());
+        updateBulkSectionVisibility();
+    }
+}
+
+function updateDvRowInTable(dvId, newStatus) {
+    const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
+    if (!dvRow) return;
+    
+    dvRow.setAttribute('data-dv-status', newStatus);
+    
+    if (newStatus === 'Cashier_received') {
+        removeCheckboxForReceivedDV(dvId);
+    }
+    
+    const statusCell = dvRow.querySelector('td:nth-child(6)');
+    if (statusCell) {
+        const isInProcessing = newStatus === 'Cashier_received';
+        statusCell.innerHTML = `
             <div class="flex flex-col space-y-2">
                 <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${
-                    isAwaiting ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-green-100 text-green-800 border border-green-200'
+                    isInProcessing ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
                 }">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
-                    ${dv.status.replace(/_/g, ' ')}
+                    ${newStatus.replace(/_/g, ' ')}
                 </span>
                 <div class="text-xs text-gray-500">
                     ${formatDateTime(new Date())}
                 </div>
             </div>
-        </td>
-        <td class="px-8 py-6">
-            ${dv.qr_code_token ? `
-                <div class="flex flex-col items-center space-y-3">
-                    <div class="flex justify-center relative group/qr">
-                        <img 
-                            src="/dv/${dv.id}/generate-qr?v=${Date.now()}" 
-                            width="80" 
-                            height="80"
-                            alt="QR Code for DV ${dv.dv_number}" 
-                            class="rounded-xl border-2 border-gray-200 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-105 hover:border-green-300"
-                            onclick="showQRModal(${dv.id})"
-                            loading="lazy"
-                        >
-                    </div>
-                    <div class="text-center">
-                        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-300 shadow-sm">
-                            <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                            </svg>
-                            QR Active
-                        </span>
-                    </div>
-                    <button onclick="showQRModal(${dv.id})" 
-                            class="text-sm text-blue-600 hover:text-blue-800 font-medium underline transition-colors">
-                        View Large QR
-                    </button>
-                </div>
-            ` : `
-                <div class="text-center py-4">
-                    <div class="mx-auto w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-3 border-2 border-gray-200">
-                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                        </svg>
-                    </div>
-                    <span class="text-gray-500 font-medium block">No QR Code</span>
-                    <span class="text-gray-400 text-sm">Generate in RANCA</span>
-                </div>
-            `}
-        </td>
-        <td class="px-8 py-6">
-            <div class="flex flex-col space-y-3">
-                <a href="/dv/qr/${dv.qr_code_token}" 
-                   class="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
-                    </svg>
-                    Process DV
-                </a>
-                <div class="text-center">
-                    <button onclick="showDvDetails(${dv.id})" 
-                            class="text-sm text-blue-600 hover:text-blue-800 font-medium underline">
-                        View Details
-                    </button>
-                </div>
-            </div>
-        </td>
-    `;
+        `;
+    }
     
-    return row;
+    const actionButton = dvRow.querySelector('td:nth-child(8) a');
+    if (actionButton) {
+        const buttonText = newStatus === 'Cashier_received' ? 'Process Payment' : 'Receive DV';
+        actionButton.innerHTML = `
+            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+            </svg>
+            ${buttonText}
+        `;
+    }
+    
+    dvRow.style.transition = 'all 0.3s ease';
+    dvRow.style.backgroundColor = '#dbeafe';
+    
+    setTimeout(() => {
+        dvRow.style.backgroundColor = '';
+    }, 1000);
 }
 
-// Check if table is empty and show empty state
+function clearBulkSelection() {
+    selectedDVs.clear();
+    document.querySelectorAll('.dv-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    const selectAll = document.getElementById('selectAllDVs');
+    if (selectAll) selectAll.checked = false;
+    document.getElementById('bulkActionsSection').classList.add('hidden');
+}
+
+function updateTableHeader() {
+    const selectAllHeader = document.querySelector('thead th:nth-child(1)');
+    if (!selectAllHeader) return;
+    
+    const selectableDVs = document.querySelectorAll('.dv-checkbox');
+    const receivedDVs = document.querySelectorAll('tr[data-dv-status="Cashier_received"]');
+    
+    if (selectableDVs.length === 0 && receivedDVs.length > 0) {
+        selectAllHeader.innerHTML = `
+            <div class="flex items-center justify-center">
+                <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+        `;
+    } else {
+        selectAllHeader.innerHTML = `
+            <input type="checkbox" id="selectAllDVs" class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
+        `;
+        initializeSelectAllCheckbox();
+    }
+}
+
+function initializeSelectAllCheckbox() {
+    const selectAllCheckbox = document.getElementById('selectAllDVs');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            const isChecked = this.checked;
+            const dvCheckboxes = document.querySelectorAll('.dv-checkbox');
+            dvCheckboxes.forEach(checkbox => {
+                checkbox.checked = isChecked;
+                if (isChecked) {
+                    selectedDVs.add(checkbox.value);
+                } else {
+                    selectedDVs.delete(checkbox.value);
+                }
+            });
+            updateBulkSectionVisibility();
+        });
+    }
+}
+
+function updateBulkSectionVisibility() {
+    const bulkSection = document.getElementById('bulkActionsSection');
+    const selectedCount = document.getElementById('selectedCount');
+    
+    if (selectedDVs.size > 0) {
+        bulkSection.classList.remove('hidden');
+    } else {
+        bulkSection.classList.add('hidden');
+    }
+    if (selectedCount) {
+        selectedCount.textContent = selectedDVs.size;
+    }
+}
+// ========== QR CODE FUNCTIONS ==========
+function showQRModal(dvId) {
+    const modal = document.getElementById('qrModal');
+    if (!modal) return;
+    
+    const content = document.getElementById('qrContent');
+    
+    modal.classList.remove('hidden');
+    content.innerHTML = `
+        <div class="flex items-center justify-center mb-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+        <p class="text-gray-600">Loading QR Code...</p>
+    `;
+    
+    const downloadBtn = document.getElementById('downloadQRBtn');
+    if (downloadBtn) {
+        downloadBtn.classList.add('hidden');
+    }
+    
+    try {
+        // Find the DV row to get the QR code data directly from the table
+        const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
+        if (!dvRow) {
+            throw new Error('DV row not found');
+        }
+        
+        // Get the QR code image from the correct table cell (7th column, index 6)
+        const qrImage = dvRow.querySelector('td:nth-child(7) img');
+        if (!qrImage || !qrImage.src) {
+            throw new Error('QR code not found in table');
+        }
+        
+        const qrCodeSrc = qrImage.src;
+        
+        // Get the QR code token from the image alt attribute
+        const qrCodeToken = qrImage.getAttribute('alt')?.replace('QR Code for DV ', '') || 
+                           'Unknown QR Code';
+
+        // Truncate the QR token for display
+        const displayToken = qrCodeToken.length > 30 
+            ? qrCodeToken.substring(0, 30) + '...' 
+            : qrCodeToken;
+        
+        content.innerHTML = `
+            <div class="space-y-4">
+                <div class="text-center">
+                    <h4 class="text-lg font-semibold text-gray-900 mb-2">QR Token</h4>
+                    <div class="bg-gray-100 p-3 rounded-lg border border-gray-300 max-w-full overflow-hidden">
+                        <p class="text-sm font-mono text-gray-700 break-all" title="${qrCodeToken}">
+                            ${displayToken}
+                        </p>
+                    </div>
+                    <button onclick="copyQrToken('${qrCodeToken}')" 
+                            class="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium underline transition-colors">
+                        Copy Full Token
+                    </button>
+                </div>
+                <div class="bg-white p-6 rounded-xl border-2 border-blue-200 shadow-inner flex justify-center">
+                    <img src="${qrCodeSrc}" alt="QR Code for DV ${qrCodeToken}" class="w-64 h-64 mx-auto">
+                </div>
+                <div class="text-sm text-gray-600 text-center">
+                    <p>Scan this QR code to process the disbursement voucher</p>
+                    <p class="text-xs text-gray-500 mt-1">Token length: ${qrCodeToken.length} characters</p>
+                </div>
+            </div>
+        `;
+        
+        currentQRData = { qrUrl: qrCodeSrc, dvId, qrCodeToken };
+        if (downloadBtn) {
+            downloadBtn.classList.remove('hidden');
+        }
+        
+    } catch (error) {
+        console.error('Error loading QR:', error);
+        content.innerHTML = `
+            <div class="text-center py-4">
+                <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="text-red-600 font-semibold">Failed to load QR Code</p>
+                <p class="text-gray-500 text-sm mt-2">The QR code is not available for this DV.</p>
+            </div>
+        `;
+    }
+}
+
+// Add this function to copy QR token to clipboard
+function copyQrToken(token) {
+    navigator.clipboard.writeText(token).then(function() {
+        showToast('QR token copied to clipboard!', 'success');
+    }).catch(function(err) {
+        console.error('Failed to copy token: ', err);
+        showToast('Failed to copy token', 'error');
+    });
+}
+
+function closeQRModal() {
+    const modal = document.getElementById('qrModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    currentQRData = null;
+}
+
+function downloadQR() {
+    if (!currentQRData) return;
+    
+    const link = document.createElement('a');
+    link.href = currentQRData.qrUrl;
+    link.download = `DV_QR_${currentQRData.dvId}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function showDvDetails(dvId) {
+    alert(`Viewing details for DV ID: ${dvId}\n\nThis would show detailed information about the disbursement voucher.`);
+}
+
+// ========== SEARCH FUNCTIONALITY ==========
+function initializeSearch() {
+    const searchInput = document.getElementById('searchDVs');
+    if (!searchInput) return;
+    
+    searchInput.addEventListener('keyup', function() {
+        let query = this.value.toLowerCase();
+        let rows = document.querySelectorAll('#dvTable tbody tr');
+        
+        rows.forEach(row => {
+            let text = row.innerText.toLowerCase();
+            if (text.includes(query)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    });
+}
+
+// ========== STATISTICS FUNCTIONS ==========
+async function updateStatistics() {
+    try {
+        const response = await fetch('/cashier/dashboard/stats');
+        const stats = await response.json();
+        
+        if (stats.success) {
+            updateStatisticsDisplay(stats.data);
+        }
+    } catch (error) {
+        console.error('Error updating statistics:', error);
+    }
+}
+
+function updateStatisticsDisplay(stats) {
+    const totalPendingEl = document.getElementById('statTotalPending');
+    if (totalPendingEl) {
+        totalPendingEl.textContent = stats.total_pending;
+    }
+    
+    const awaitingProcessingEl = document.getElementById('statAwaitingProcessing');
+    if (awaitingProcessingEl) {
+        awaitingProcessingEl.textContent = stats.awaiting_processing;
+    }
+    
+    const inProcessingEl = document.getElementById('statInProcessing');
+    if (inProcessingEl) {
+        inProcessingEl.textContent = stats.in_processing;
+    }
+    
+    const dvCountEl = document.getElementById('dvCount');
+    if (dvCountEl) {
+        dvCountEl.textContent = stats.total_pending;
+    }
+}
+
+function updateLastUpdatedTime() {
+    const now = formatDateTime(new Date());
+    
+    const lastUpdatedHeader = document.getElementById('lastUpdated');
+    if (lastUpdatedHeader) {
+        lastUpdatedHeader.textContent = now;
+    }
+    
+    const lastUpdatedFooter = document.getElementById('lastUpdatedFooter');
+    if (lastUpdatedFooter) {
+        lastUpdatedFooter.textContent = now;
+    }
+}
+
 function checkEmptyState() {
     const tableBody = document.getElementById('dvTableBody');
     const rows = tableBody ? tableBody.querySelectorAll('tr') : [];
@@ -741,38 +1078,35 @@ function checkEmptyState() {
                         </svg>
                     </div>
                     <h3 class="text-2xl font-bold text-gray-900 mb-3">No Pending DVs</h3>
-                    <p class="text-gray-600 text-lg mb-8 max-w-md mx-auto">All disbursement vouchers have been processed. Check back later for new requests.</p>
+                    <p class="text-gray-600 text-lg mb-8 max-w-md mx-auto">All DVs have been processed.</p>
                 </div>
             `;
         }
     }
 }
 
-// Format number with commas
-function formatNumber(num) {
-    return parseFloat(num).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-// Format date time
-function formatDateTime(date) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = months[date.getMonth()];
-    const day = date.getDate();
-    const year = date.getFullYear();
-    let hours = date.getHours();
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12;
+// ========== MODAL HANDLERS ==========
+function initializeModalHandlers() {
+    const qrModal = document.getElementById('qrModal');
+    if (qrModal) {
+        qrModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQRModal();
+            }
+        });
+    }
     
-    return `${month} ${day}, ${year} ${hours}:${minutes} ${ampm}`;
+    const bulkReceiveModal = document.getElementById('bulkReceiveModal');
+    if (bulkReceiveModal) {
+        bulkReceiveModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeBulkReceiveModal();
+            }
+        });
+    }
 }
 
-// Limit text length
-function limitText(text, length) {
-    return text.length > length ? text.substring(0, length) + '...' : text;
-}
-
-// Toast notification function
+// ========== TOAST NOTIFICATIONS ==========
 function showToast(message, type = 'success') {
     const colors = {
         success: 'bg-green-500',
@@ -801,120 +1135,43 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
-// QR Modal functions
-async function showQRModal(dvId) {
-    const modal = document.getElementById('qrModal');
-    if (!modal) return;
-    
-    const content = document.getElementById('qrContent');
-    
-    modal.classList.remove('hidden');
-    content.innerHTML = `
-        <div class="flex items-center justify-center mb-4">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
-        </div>
-        <p class="text-gray-600">Loading QR Code...</p>
-    `;
-    
-    const downloadBtn = document.getElementById('downloadQRBtn');
-    if (downloadBtn) {
-        downloadBtn.classList.add('hidden');
-    }
-    
-    try {
-        const qrUrl = `/dv/${dvId}/generate-qr?v=${new Date().getTime()}`;
-        
-        content.innerHTML = `
-            <div class="space-y-4">
-                <div class="bg-white p-4 rounded-xl border-2 border-green-200 shadow-inner">
-                    <img src="${qrUrl}" alt="QR Code" class="w-full h-auto mx-auto">
-                </div>
-                <div class="text-sm text-gray-600">
-                    <p>Scan this QR code to process the DV</p>
-                </div>
-            </div>
-        `;
-        
-        window.currentQRData = { qrUrl, dvId };
-        if (downloadBtn) {
-            downloadBtn.classList.remove('hidden');
-        }
-        
-    } catch (error) {
-        console.error('Error loading QR:', error);
-        content.innerHTML = `
-            <div class="text-center py-4">
-                <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <p class="text-red-600 font-semibold">Failed to load QR Code</p>
-            </div>
-        `;
-    }
+// ========== UTILITY FUNCTIONS ==========
+function formatNumber(num) {
+    return parseFloat(num).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-function closeQRModal() {
-    const modal = document.getElementById('qrModal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
-    window.currentQRData = null;
-}
-
-function downloadQR() {
-    if (!window.currentQRData) return;
+function formatDateTime(date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const day = date.getDate();
+    const year = date.getFullYear();
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
     
-    const link = document.createElement('a');
-    link.href = window.currentQRData.qrUrl;
-    link.download = `DV_QR_${window.currentQRData.dvId}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    return `${month} ${day}, ${year} ${hours}:${minutes} ${ampm}`;
 }
 
-// Search functionality
-function initializeSearch() {
-    const searchInput = document.getElementById('searchDVs');
-    if (!searchInput) return;
-    
-    searchInput.addEventListener('keyup', function() {
-        let query = this.value.toLowerCase();
-        let rows = document.querySelectorAll('#dvTable tbody tr');
-        
-        rows.forEach(row => {
-            let text = row.innerText.toLowerCase();
-            if (text.includes(query)) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
-    });
+function limitText(text, length) {
+    return text.length > length ? text.substring(0, length) + '...' : text;
 }
 
-// Close modal when clicking outside
-function initializeModalHandlers() {
-    const qrModal = document.getElementById('qrModal');
-    if (!qrModal) return;
-    
-    qrModal.addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeQRModal();
-        }
-    });
-}
-
-// Close modal with Escape key
+// ========== EVENT LISTENERS ==========
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         const qrModal = document.getElementById('qrModal');
         if (qrModal && !qrModal.classList.contains('hidden')) {
             closeQRModal();
         }
+        
+        const bulkReceiveModal = document.getElementById('bulkReceiveModal');
+        if (bulkReceiveModal && !bulkReceiveModal.classList.contains('hidden')) {
+            closeBulkReceiveModal();
+        }
     }
 });
 
-// Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
@@ -922,22 +1179,42 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-// Initialize when page loads
+// ========== INITIALIZATION ==========
 document.addEventListener('DOMContentLoaded', function() {
     console.log('[App] DOM loaded, initializing dashboard');
     
-    // Initialize all features
-    initializePusher();
+    updateTableHeader();
+    
+    if (typeof Pusher !== 'undefined') {
+        initializePusher();
+    } else {
+        console.warn('Pusher not available, real-time features disabled');
+        const statusElement = document.getElementById('realtimeStatus');
+        if (statusElement) {
+            statusElement.innerHTML = `
+                <div class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                <span class="text-sm text-yellow-700 font-medium">Real-time Disabled</span>
+            `;
+            statusElement.className = 'flex items-center space-x-2 px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg';
+        }
+        setInterval(updateStatistics, 30000);
+    }
+    
     initializeSearch();
     initializeModalHandlers();
+    initializeBulkActions();
+    
+    const confirmBulkReceiveBtn = document.getElementById('confirmBulkReceiveBtn');
+    if (confirmBulkReceiveBtn) {
+        confirmBulkReceiveBtn.addEventListener('click', processBulkReceive);
+    }
     
     console.log('[App] ✓ Dashboard initialization complete');
 });
 
-// Cleanup on page unload
 window.addEventListener('beforeunload', function() {
-    if (window.pusher) {
-        window.pusher.disconnect();
+    if (pusher) {
+        pusher.disconnect();
         console.log('[Pusher] Disconnected');
     }
 });

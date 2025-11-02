@@ -199,7 +199,7 @@
                                 <!-- Status Before -->
                                 <td class="px-4 py-3">
                                     <span class="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                                        {{ $history->status_before ?? 'N/A' }}
+                                    {{ ucwords(str_replace('_', ' ', $history->status_before ?? 'N/A')) }}
                                     </span>
                                 </td>
                                 
@@ -214,8 +214,8 @@
                                         ];
                                         $statusColor = $statusColors[$history->status_after] ?? 'bg-gray-100 text-gray-800';
                                     @endphp
-                                    <span class="px-2 py-1 text-xs font-medium rounded-full {{ $statusColor }}">
-                                        {{ $history->status_after ?? 'N/A' }}
+                                     <span class="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                                    {{ ucwords(str_replace('_', ' ', $history->status_before ?? 'N/A')) }}
                                     </span>
                                 </td>
                                 

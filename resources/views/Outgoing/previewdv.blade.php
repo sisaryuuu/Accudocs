@@ -16,12 +16,12 @@
 
     <!-- Header -->
     <div class="bg-white shadow-lg rounded-lg p-6 mb-6">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-                <h2 class="text-3xl font-bold text-gray-800">DV Document Preview</h2>
+                <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">DV Document Preview</h2>
                 <p class="text-gray-600 mt-1">DV Number: <strong>{{ $dvRequest->dv_number }}</strong></p>
             </div>
-            <div class="text-right">
+            <div class="text-left sm:text-right">
                 <span class="inline-block px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
                     ✓ Finalized
                 </span>
@@ -30,18 +30,18 @@
     </div>
 
     <!-- Action Buttons -->
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <a href="{{ route('Outgoing.dvrequests.index') }}" 
-           class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+           class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition w-full sm:w-auto justify-center">
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
             Back to List
         </a>
 
-        <div class="flex gap-3">
+        <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <button onclick="window.print()" 
-                    class="no-print inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-lg">
+                    class="no-print inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-lg justify-center">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
                 </svg>
@@ -49,7 +49,7 @@
             </button>
 
             <a href="{{ route('Outgoing.dvrequests.generate-pdf', $dvRequest->id) }}" 
-               class="inline-flex items-center px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-lg">
+               class="inline-flex items-center px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-lg justify-center">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
@@ -57,7 +57,7 @@
             </a>
 
             <a href="{{ route('Outgoing.dvrequests.dvloghistory') }}" 
-               class="inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-lg">
+               class="inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-lg justify-center">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
@@ -67,9 +67,9 @@
     </div>
 
     <!-- Voucher Preview Container -->
-    <div class="bg-white shadow-2xl rounded-lg p-8" id="voucher-container">
+    <div class="bg-white shadow-2xl rounded-lg p-4 sm:p-8" id="voucher-container">
         <!-- Include the DV document template -->
-        @include('vouchers.finaldisbursement',$data)
+        @include('vouchers.finaldisbursement', $data)
     </div>
 
     <!-- Information Notice -->
@@ -93,7 +93,7 @@
     <!-- Quick Info Card -->
     <div class="bg-white shadow-lg rounded-lg p-6 mt-6 no-print">
         <h3 class="text-lg font-bold text-gray-800 mb-4">Document Information</h3>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
                 <p class="text-sm text-gray-600">DV Number</p>
                 <p class="font-semibold text-gray-800">{{ $dvRequest->dv_number }}</p>
@@ -127,15 +127,26 @@
             left: 0;
             top: 0;
             width: 100%;
+            margin: 0;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            background: white;
         }
         .no-print {
             display: none !important;
         }
-        /* Remove shadows and rounded corners for print */
-        #voucher-container {
-            box-shadow: none !important;
-            border-radius: 0 !important;
-            padding: 0 !important;
+    }
+
+    /* Ensure proper printing of the DV document */
+    @media print {
+        @page {
+            margin: 0;
+            size: legal;
+        }
+        body {
+            margin: 0;
+            padding: 0;
         }
     }
 </style>

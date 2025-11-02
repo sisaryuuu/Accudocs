@@ -73,6 +73,10 @@
                         <th class="px-4 py-3">Status After</th>
                         <th class="px-4 py-3">Program</th>
                         <th class="px-4 py-3">Payee</th>
+                        <th class="px-4 py-3">MFO/PAP</th>
+                        <th class="px-4 py-3">ADL Code</th>
+                        <th class="px-4 py-3">UACS Code</th>
+                        <th class="px-4 py-3">Allotment Class</th>
                         <th class="px-4 py-3">Date & Time</th>
                         <th class="px-4 py-3">Remarks</th>
                         <th class="px-4 py-3">Details</th>
@@ -106,7 +110,7 @@
                             {{-- Status Before --}}
                             <td class="px-4 py-3">
                                 <span class="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                                    {{ $history->status_before ?? 'N/A' }}
+                                    {{ ucwords(str_replace('_', ' ', $history->status_before ?? 'N/A')) }}
                                 </span>
                             </td>
                             
@@ -122,7 +126,7 @@
                                     $statusColor = $statusColors[$history->status_after] ?? 'bg-gray-100 text-gray-800';
                                 @endphp
                                 <span class="px-2 py-1 text-xs font-medium rounded-full {{ $statusColor }}">
-                                    {{ $history->status_after ?? 'N/A' }}
+                                    {{ ucwords(str_replace('_',' ', $history->status_after ?? 'N/A')) }}
                                 </span>
                             </td>
                             
@@ -138,6 +142,42 @@
                                     {{ $history->dvRequest->focalPerson->lname ?? '' }}
                                 @else
                                     {{ $history->verification_data['payee_name'] ?? 'N/A' }}
+                                @endif
+                            </td>
+                            
+                            {{-- MFO/PAP --}}
+                            <td class="px-4 py-3 text-gray-700">
+                                @if($history->dvRequest && $history->dvRequest->mfoPap)
+                                    {{ $history->dvRequest->mfoPap->name ?? 'N/A' }}
+                                @else
+                                    {{ $history->verification_data['mfo_pap'] ?? 'N/A' }}
+                                @endif
+                            </td>
+                            
+                            {{-- ADL Code --}}
+                            <td class="px-4 py-3 text-gray-700">
+                                @if($history->dvRequest && $history->dvRequest->adlCode)
+                                    {{ $history->dvRequest->adlCode->code ?? 'N/A' }}
+                                @else
+                                    {{ $history->verification_data['adl_code'] ?? 'N/A' }}
+                                @endif
+                            </td>
+                            
+                            {{-- UACS Code --}}
+                            <td class="px-4 py-3 text-gray-700">
+                                @if($history->dvRequest && $history->dvRequest->uacsCode)
+                                    {{ $history->dvRequest->uacsCode->code ?? 'N/A' }}
+                                @else
+                                    {{ $history->verification_data['uacs_code'] ?? 'N/A' }}
+                                @endif
+                            </td>
+                            
+                            {{-- Allotment Class --}}
+                            <td class="px-4 py-3 text-gray-700">
+                                @if($history->dvRequest && $history->dvRequest->allotmentClass)
+                                    {{ $history->dvRequest->allotmentClass->name ?? 'N/A' }}
+                                @else
+                                    {{ $history->verification_data['allotment_class'] ?? 'N/A' }}
                                 @endif
                             </td>
                             
@@ -183,18 +223,20 @@
                             </td>
                             
                             {{-- Action --}}
-                            @if($history->status_after === 'Outgoing_finalized')
                             <td class="px-4 py-3">
-                                <a href="{{ route('Outgoing.dvrequests.preview', $history->dv_request_id) }}" 
-                                class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
-                                View DV Request
-                                </a>
+                                @if($history->status_after === 'Outgoing_finalized')
+                                    <a href="{{ route('Outgoing.dvrequests.preview', $history->dv_request_id) }}" 
+                                    class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
+                                    View DV Request
+                                    </a>
+                                @else
+                                    <span class="text-gray-400 text-sm">—</span>
+                                @endif
                             </td>
-                            @endif
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="px-4 py-6 text-center text-gray-500">
+                            <td colspan="14" class="px-4 py-6 text-center text-gray-500">
                                 @if(request()->hasAny(['search', 'program', 'step', 'date_from', 'date_to']))
                                     No verification history found for the applied filters.
                                 @else

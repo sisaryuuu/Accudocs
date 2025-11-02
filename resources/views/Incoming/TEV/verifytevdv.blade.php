@@ -160,14 +160,13 @@
 
                 {{-- Buttons --}}
                     @if($dvRequest->status === 'Incoming-TEV_in_process')
+                    <td>
                           <div id="button-container" class="flex justify-end space-x-3">
                         <button type="submit"
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                             Verify
                         </button>
-                       </div>
                     </form>
-                    <div class="flex justify-end space-x-3 mt-3" id="outside-form-buttons">
                         <button 
                             type="button"
                             onclick="openRejectModal()"
@@ -179,7 +178,7 @@
                             Back
                         </a>
                     </div>
-
+                    </td>
                     @elseif($dvRequest->status === 'IMSD_verified')
                        <div id="button-container" class="flex justify-end space-x-3">
                         <button type="button"
@@ -220,17 +219,10 @@
                            class="px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-lg shadow-sm">Back</a>
                     @endif
                 </div>
-          
+</div>
 
         <!-- Right Sidebar -->
         <div class="lg:col-span-1">
-            <div class="bg-white shadow-md rounded-xl p-6 sticky top-8">
-                <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Requests</h2>
-                <ul id="recent-requests" class="space-y-3">
-                    <li class="text-sm text-gray-500">Loading...</li>
-                </ul>
-            </div>
-        </div>
     </div>
 
 
@@ -667,70 +659,37 @@ function updateButtonsToStartProcessingMode(dvRequestId) {
                         </a>
     `;
 }
-// Function to update buttons to verify mode
 function updateButtonsToVerifyMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
-    const form = buttonContainer.closest('form');
-    
-    // Clear existing button container content
-    buttonContainer.innerHTML = '';
-    
-    // Create Verify button container (inside form)
-    const verifyContainer = document.createElement('div');
-    verifyContainer.className = 'flex justify-end space-x-3';
-    
-    const verifyBtn = document.createElement('button');
-    verifyBtn.type = 'submit';
-    verifyBtn.className = 'inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    verifyBtn.textContent = 'Verify';
-    
-    verifyContainer.appendChild(verifyBtn);
-    buttonContainer.appendChild(verifyContainer);
-    
-    // Create Reject and Cancel buttons container (outside form)
-    const outsideButtonsContainer = document.createElement('div');
-    outsideButtonsContainer.className = 'flex justify-end space-x-3 mt-3';
-    outsideButtonsContainer.id = 'outside-form-buttons';
-    
-    // Create Reject button
-    const rejectBtn = document.createElement('button');
-    rejectBtn.type = 'button';
-    rejectBtn.id = 'reject-button';
-    rejectBtn.className = 'inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    rejectBtn.textContent = 'Reject';
-    
-    // Add event listener directly
-    rejectBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('🔴 Reject button clicked for Incoming-TEV');
-        openRejectModal();
-    });
-    
-    // Create Cancel link
-    const cancelLink = document.createElement('a');
-    cancelLink.href = '/Incoming/TEV';
-    cancelLink.className = 'inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    cancelLink.textContent = 'Cancel';
-    
-    // Add buttons to container
-    outsideButtonsContainer.appendChild(rejectBtn);
-    outsideButtonsContainer.appendChild(cancelLink);
-    
-    // Remove any existing outside buttons first
-    const existingOutsideButtons = form.parentNode.querySelector('#outside-form-buttons');
-    if (existingOutsideButtons) {
-        existingOutsideButtons.remove();
-    }
-    
-    // Insert outside buttons after the form
-    form.parentNode.insertBefore(outsideButtonsContainer, form.nextSibling);
-    
-    console.log('✅ Buttons updated to verify mode for Incoming-TEV');
+    buttonContainer.innerHTML = `
+    <td>
+        <div class="flex justify-end space-x-3">
+            <button type="submit" 
+                    class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                Verify
+            </button>
+            <button type="button"
+                    onclick="openRejectModal(${dvRequestId})"
+                    class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                Reject
+            </button>
+            <a href="/Incoming/TEV"
+               onclick="releaseLock(event, ${dvRequestId})"
+               class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                Cancel
+            </a>
+        </div>
+    </td>
+        `;
 }
-    document.addEventListener("DOMContentLoaded", () => {
+
+document.addEventListener("DOMContentLoaded", () => {
     const dvRequestId = "{{ $dvRequest->id }}";
 
+    // 🔄 Auto-refresh lock every 2 minutes
     const refreshInterval = setInterval(() => {
         fetch(`/Incoming/TEV/dvrequests/${dvRequestId}/refresh-lock`, {
             method: "POST",
@@ -748,14 +707,15 @@ function updateButtonsToVerifyMode(dvRequestId) {
             }
         })
         .catch(err => console.error("Refresh lock failed:", err));
-    }, 120000); 
+    }, 120000); // every 2 minutes (120,000 ms)
 
-   
+    // 🧹 Release lock when user leaves the page
     window.addEventListener("beforeunload", () => {
         navigator.sendBeacon(`/Incoming/TEV/dvrequests/${dvRequestId}/release-lock`, 
             JSON.stringify({ _token: "{{ csrf_token() }}" }));
     });
 });
+
 
 
 function releaseLock(event, id) {

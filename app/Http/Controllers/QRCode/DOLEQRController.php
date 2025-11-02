@@ -7,8 +7,11 @@ use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Models\Notification;
+use App\Models\RegionalDirectorApprovedHistory;
+use App\Models\CashierReleasedHistory;
 use App\Services\PusherService;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use Illuminate\Support\Facades\DB;
 
 class DOLEQRController extends Controller
 {
@@ -19,24 +22,421 @@ class DOLEQRController extends Controller
         $this->pusher = $pusher;
     }
 
+    /**
+     * Regional Director QR Scanner Interface
+     */
+    public function regionalDirectorScanner()
+    {
+        return view('DOLEQR.regional-director-scanner');
+    }
 
     /**
- * Regional Director QR Scanner Interface
- */
-public function regionalDirectorScanner()
-{
-    return view('DOLEQR.regional-director-scanner');
-}
+     * Cashier QR Scanner Interface
+     */
+    public function cashierScanner()
+    {
+        return view('DOLEQR.cashier-scanner');
+    }
 
-/**
- * Cashier QR Scanner Interface
- */
-public function cashierScanner()
-{
-    return view('DOLEQR.cashier-scanner');
-}
+    /**
+     * Bulk receive DVs for Regional Director
+     */
+     public function bulkReceiveDVs(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            
+            if (!$user || !$user->hasRole('Regional_Director')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Only Regional Director can perform this action.'
+                ], 403);
+            }
 
- public function getCashierStats()
+            $dvIds = $request->input('dv_ids', []);
+            
+            if (empty($dvIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No DVs selected for bulk receive.'
+                ], 400);
+            }
+
+            $results = [
+                'successful' => [],
+                'failed' => []
+            ];
+
+            DB::beginTransaction();
+
+            foreach ($dvIds as $dvId) {
+                try {
+                    $dvRequest = DvRequest::with(['focalPerson', 'program'])
+                        ->where('id', $dvId)
+                        ->where('qr_status', 'active')
+                        ->first();
+
+                    if (!$dvRequest) {
+                        $results['failed'][] = [
+                            'dv_id' => $dvId,
+                            'reason' => 'DV not found or QR not active'
+                        ];
+                        continue;
+                    }
+
+                    if ($dvRequest->status !== 'RANCA_validated') {
+                        $results['failed'][] = [
+                            'dv_id' => $dvId,
+                            'dv_number' => $dvRequest->dv_number,
+                            'reason' => "Invalid status for receiving. Current status: {$dvRequest->status}"
+                        ];
+                        continue;
+                    }
+
+                    $previousStatus = $dvRequest->status;
+                    $newStatus = 'Regional_Director_received';
+                    $action = 'Request Received by Regional Director';
+                    $receivedAt = now();
+
+                    $dvRequest->update([
+                        'status' => $newStatus,
+                        'updated_by' => $user->id
+                    ]);
+
+                    $dvRequest->refresh();
+
+                    // ✅ Save Regional Director History
+                    $this->saveRegionalDirectorHistory(
+                        $dvRequest,
+                        'received',
+                        $action . ' - Bulk processed',
+                        [
+                            'status_before' => $previousStatus,
+                            'status_after' => $newStatus,
+                            'received_by' => $user->id,
+                            'received_at' => $receivedAt->toISOString(),
+                            'amount' => $dvRequest->amount,
+                            'dv_number' => $dvRequest->dv_number,
+                            'processing_type' => 'bulk'
+                        ]
+                    );
+
+                    $this->logQrAction(
+                        $dvRequest->id,
+                        $user->id,
+                        'Regional_Director',
+                        $newStatus,
+                        $action . ' - Bulk processed at: ' . $receivedAt->format('Y-m-d H:i:s')
+                    );
+
+                    $this->broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, 'Regional_Director');
+
+                    if ($dvRequest->focalperson_id) {
+                        Notification::create([
+                            'focalperson_id' => $dvRequest->focalperson_id,
+                            'dv_request_id'  => $dvRequest->id,
+                            'status'         => $newStatus,
+                            'action'         => 'Status Updated via Bulk Receive',
+                            'remarks'        => "DV status updated to {$newStatus} by Regional Director via bulk receive",
+                        ]);
+
+                        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                            'dv_request_id' => $dvRequest->id,
+                            'status'        => $newStatus,
+                            'remarks'       => "Status updated by Regional Director via bulk receive",
+                            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        ]);
+                    }
+
+                    $results['successful'][] = [
+                        'dv_id' => $dvRequest->id,
+                        'dv_number' => $dvRequest->dv_number,
+                        'new_status' => $newStatus
+                    ];
+
+                    \Log::info('DV bulk received by Regional Director', [
+                        'dv_id' => $dvRequest->id,
+                        'dv_number' => $dvRequest->dv_number,
+                        'previous_status' => $previousStatus,
+                        'new_status' => $newStatus,
+                        'updated_by' => $user->id
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Error processing DV in bulk receive: ' . $e->getMessage(), [
+                        'dv_id' => $dvId,
+                        'error' => $e->getMessage()
+                    ]);
+
+                    $results['failed'][] = [
+                        'dv_id' => $dvId,
+                        'reason' => 'Processing error: ' . $e->getMessage()
+                    ];
+                }
+            }
+
+            DB::commit();
+
+            $this->pusher->trigger('regional-director-dashboard', 'bulk-receive-completed', [
+                'successful_dvs' => $results['successful'],
+                'successful_count' => count($results['successful']),
+                'failed_count' => count($results['failed']),
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            $this->updateDashboardStatistics();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bulk receive completed',
+                'results' => $results,
+                'summary' => [
+                    'total_processed' => count($dvIds),
+                    'successful' => count($results['successful']),
+                    'failed' => count($results['failed'])
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            \Log::error('Bulk receive error: ' . $e->getMessage(), [
+                'dv_ids' => $dvIds,
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error during bulk receive: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Bulk receive DVs for Cashier
+     */
+   public function cashierBulkReceive(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            
+            if (!$user || !$user->hasRole('Cashier')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Only Cashier can perform this action.'
+                ], 403);
+            }
+
+            $dvIds = $request->input('dv_ids', []);
+            
+            if (empty($dvIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No DVs selected for bulk receive.'
+                ], 400);
+            }
+
+            $results = [
+                'successful' => [],
+                'failed' => []
+            ];
+
+            DB::beginTransaction();
+
+            foreach ($dvIds as $dvId) {
+                try {
+                    $dvRequest = DvRequest::with(['focalPerson', 'program'])
+                        ->where('id', $dvId)
+                        ->where('qr_status', 'active')
+                        ->first();
+
+                    if (!$dvRequest) {
+                        $results['failed'][] = [
+                            'dv_id' => $dvId,
+                            'reason' => 'DV not found or QR not active'
+                        ];
+                        continue;
+                    }
+
+                    if ($dvRequest->status !== 'Regional_Director_signed_approved') {
+                        $results['failed'][] = [
+                            'dv_id' => $dvId,
+                            'dv_number' => $dvRequest->dv_number,
+                            'reason' => "Invalid status for receiving. Current status: {$dvRequest->status}"
+                        ];
+                        continue;
+                    }
+
+                    $previousStatus = $dvRequest->status;
+                    $newStatus = 'Cashier_received';
+                    $action = 'Request Received by Cashier';
+                    $receivedAt = now();
+
+                    $dvRequest->update([
+                        'status' => $newStatus,
+                        'updated_by' => $user->id
+                    ]);
+
+                    $dvRequest->refresh();
+
+                    // ✅ Save Cashier History
+                    $this->saveCashierHistory(
+                        $dvRequest,
+                        'received',
+                        $action . ' - Bulk processed',
+                        [
+                            'status_before' => $previousStatus,
+                            'status_after' => $newStatus,
+                            'received_by' => $user->id,
+                            'received_at' => $receivedAt->toISOString(),
+                            'amount' => $dvRequest->amount,
+                            'dv_number' => $dvRequest->dv_number,
+                            'processing_type' => 'bulk'
+                        ]
+                    );
+
+                    $this->logQrAction(
+                        $dvRequest->id,
+                        $user->id,
+                        'Cashier',
+                        $newStatus,
+                        $action . ' - Bulk processed at: ' . $receivedAt->format('Y-m-d H:i:s')
+                    );
+
+                    $this->broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, 'Cashier');
+
+                    if ($dvRequest->focalperson_id) {
+                        Notification::create([
+                            'focalperson_id' => $dvRequest->focalperson_id,
+                            'dv_request_id'  => $dvRequest->id,
+                            'status'         => $newStatus,
+                            'action'         => 'Status Updated via Bulk Receive',
+                            'remarks'        => "DV status updated to {$newStatus} by Cashier via bulk receive",
+                        ]);
+
+                        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                            'dv_request_id' => $dvRequest->id,
+                            'status'        => $newStatus,
+                            'remarks'       => "Status updated by Cashier via bulk receive",
+                            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        ]);
+                    }
+
+                    $results['successful'][] = [
+                        'dv_id' => $dvRequest->id,
+                        'dv_number' => $dvRequest->dv_number,
+                        'new_status' => $newStatus
+                    ];
+
+                    \Log::info('DV bulk received by Cashier', [
+                        'dv_id' => $dvRequest->id,
+                        'dv_number' => $dvRequest->dv_number,
+                        'previous_status' => $previousStatus,
+                        'new_status' => $newStatus,
+                        'updated_by' => $user->id
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Error processing DV in cashier bulk receive: ' . $e->getMessage(), [
+                        'dv_id' => $dvId,
+                        'error' => $e->getMessage()
+                    ]);
+
+                    $results['failed'][] = [
+                        'dv_id' => $dvId,
+                        'reason' => 'Processing error: ' . $e->getMessage()
+                    ];
+                }
+            }
+
+            DB::commit();
+
+            $this->pusher->trigger('cashier-dashboard', 'bulk-receive-completed', [
+                'successful_dvs' => $results['successful'],
+                'successful_count' => count($results['successful']),
+                'failed_count' => count($results['failed']),
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            $this->updateDashboardStatistics();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bulk receive completed',
+                'results' => $results,
+                'summary' => [
+                    'total_processed' => count($dvIds),
+                    'successful' => count($results['successful']),
+                    'failed' => count($results['failed'])
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            \Log::error('Cashier bulk receive error: ' . $e->getMessage(), [
+                'dv_ids' => $dvIds,
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error during bulk receive: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update dashboard statistics after bulk operations
+     */
+    private function updateDashboardStatistics()
+    {
+        try {
+            // Get updated stats for regional director
+            $rdStats = [
+                'total_pending' => DvRequest::whereIn('status', ['RANCA_validated', 'Regional_Director_received'])
+                    ->where('qr_status', 'active')
+                    ->count(),
+                'awaiting_receipt' => DvRequest::where('status', 'RANCA_validated')
+                    ->where('qr_status', 'active')
+                    ->count(),
+                'awaiting_approval' => DvRequest::where('status', 'Regional_Director_received')
+                    ->where('qr_status', 'active')
+                    ->count(),
+            ];
+
+            // Get updated stats for cashier
+            $cashierStats = [
+                'total_pending' => DvRequest::whereIn('status', ['Regional_Director_signed_approved', 'Cashier_received'])
+                    ->where('qr_status', 'active')
+                    ->count(),
+                'awaiting_processing' => DvRequest::where('status', 'Regional_Director_signed_approved')
+                    ->where('qr_status', 'active')
+                    ->count(),
+                'in_processing' => DvRequest::where('status', 'Cashier_received')
+                    ->where('qr_status', 'active')
+                    ->count(),
+            ];
+
+            // Broadcast updated statistics
+            $this->pusher->trigger('regional-director-dashboard', 'stats-updated', [
+                'stats' => $rdStats,
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
+            ]);
+
+            $this->pusher->trigger('cashier-dashboard', 'stats-updated', [
+                'stats' => $cashierStats,
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error updating dashboard statistics: ' . $e->getMessage());
+        }
+    }
+
+    public function getCashierStats()
     {
         try {
             $stats = [
@@ -72,13 +472,13 @@ public function cashierScanner()
     {
         try {
             $stats = [
-                'total_pending' => DvRequest::whereIn('status', ['RANCA_validated', 'RD_received'])
+                'total_pending' => DvRequest::whereIn('status', ['RANCA_validated', 'Regional_Director_received'])
                     ->where('qr_status', 'active')
                     ->count(),
                 'awaiting_receipt' => DvRequest::where('status', 'RANCA_validated')
                     ->where('qr_status', 'active')
                     ->count(),
-                'awaiting_approval' => DvRequest::where('status', 'RD_received')
+                'awaiting_approval' => DvRequest::where('status', 'Regional_Director_received')
                     ->where('qr_status', 'active')
                     ->count(),
             ];
@@ -143,52 +543,7 @@ public function cashierScanner()
         }
     }
 
-    /**
-     * Trigger real-time updates when DV status changes
-     */
-    public function triggerStatusUpdate($dvId, $newStatus, $remarks = '')
-    {
-        try {
-            $dv = DvRequest::findOrFail($dvId);
-
-            // Trigger for both cashier and regional director dashboards
-            $this->pusher->trigger('cashier-dashboard', 'dv-status-updated', [
-                'dv_id' => $dv->id,
-                'dv_number' => $dv->dv_number,
-                'new_status' => $newStatus,
-                'previous_status' => $dv->status,
-                'remarks' => $remarks,
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-
-            $this->pusher->trigger('regional-director-dashboard', 'dv-status-updated', [
-                'dv_id' => $dv->id,
-                'dv_number' => $dv->dv_number,
-                'new_status' => $newStatus,
-                'previous_status' => $dv->status,
-                'remarks' => $remarks,
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-
-            // Update the DV status
-            $dv->update(['status' => $newStatus]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Status updated and real-time notifications sent'
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('Error triggering status update: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error updating status'
-            ], 500);
-        }
-    }
-
-
-private function broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, $role)
+    private function broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, $role)
     {
         $updateData = [
             'dv_id' => $dvRequest->id,
@@ -210,7 +565,7 @@ private function broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, 
         // Also send removal event if needed
         if (in_array($newStatus, ['Regional_Director_signed_approved', 'Cashier_released'])) {
             // Notify Regional Director dashboard if DV moved out of their queue
-            if (in_array($previousStatus, ['RANCA_validated', 'RD_received'])) {
+            if (in_array($previousStatus, ['RANCA_validated', 'Regional_Director_received'])) {
                 $this->pusher->trigger('regional-director-dashboard', 'dv-removed', [
                     'dv_id' => $dvRequest->id,
                     'dv_number' => $dvRequest->dv_number,
@@ -237,98 +592,9 @@ private function broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, 
         ]);
     }
 
-    /**
-     * Trigger when new DV is added to queue
-     */
-    public function triggerNewDvAdded($dvId)
-    {
-        try {
-            $dv = DvRequest::with(['program', 'focalPerson'])
-                ->where('id', $dvId)
-                ->where('qr_status', 'active')
-                ->firstOrFail();
-
-            $data = [
-                'dv' => [
-                    'id' => $dv->id,
-                    'dv_number' => $dv->dv_number,
-                    'status' => $dv->status,
-                    'amount' => $dv->amount,
-                    'focal_person' => [
-                        'fname' => $dv->focalPerson->fname,
-                        'lname' => $dv->focalPerson->lname,
-                    ]
-                ],
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ];
-
-            // Route to correct dashboard based on status
-            if (in_array($dv->status, ['Regional_Director_signed_approved', 'Cashier_received'])) {
-                $this->pusher->trigger('cashier-dashboard', 'new-dv-added', $data);
-            }
-
-            if (in_array($dv->status, ['RANCA_validated', 'RD_received'])) {
-                $this->pusher->trigger('regional-director-dashboard', 'new-dv-added', $data);
-            }
-
-            return response()->json(['success' => true]);
-
-        } catch (\Exception $e) {
-            \Log::error('Error triggering new DV notification: ' . $e->getMessage());
-            return response()->json(['success' => false], 500);
-        }
-    }
-
-    /**
-     * Trigger when DV is removed from queue
-     */
-    public function triggerDvRemoved($dvId, $reason = 'completed')
-    {
-        try {
-            $dv = DvRequest::findOrFail($dvId);
-
-            $data = [
-                'dv_id' => $dv->id,
-                'dv_number' => $dv->dv_number,
-                'reason' => $reason,
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ];
-
-            // Notify both dashboards
-            $this->pusher->trigger('cashier-dashboard', 'dv-removed', $data);
-            $this->pusher->trigger('regional-director-dashboard', 'dv-removed', $data);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'DV removal notification sent'
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('Error triggering DV removal: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error sending removal notification'
-            ], 500);
-        }
-    }
-
-/**
- * Get today's transactions for cashier
- */
-public function getTodaysTransactions()
-{
-    $transactions = DvRequest::whereIn('status', ['Cashier_received', 'Cashier_released'])
-        ->whereDate('updated_at', today())
-        ->select('dv_number', 'amount', 'status', 'updated_at')
-        ->orderBy('updated_at', 'desc')
-        ->get();
-
-    return response()->json($transactions);
-}
-
     public function regionalDirectorDashboard()
     {
-        $pendingDvs = DvRequest::whereIn('status', ['RANCA_validated', 'RD_received'])
+        $pendingDvs = DvRequest::whereIn('status', ['RANCA_validated', 'Regional_Director_received'])
             ->where('qr_status', 'active')
             ->with(['program', 'focalPerson'])
             ->orderBy('created_at', 'desc')
@@ -337,7 +603,7 @@ public function getTodaysTransactions()
         $stats = [
             'total_pending' => $pendingDvs->count(),
             'awaiting_receipt' => DvRequest::where('status', 'RANCA_validated')->where('qr_status', 'active')->count(),
-            'awaiting_approval' => DvRequest::where('status', 'RD_received')->where('qr_status', 'active')->count(),
+            'awaiting_approval' => DvRequest::where('status', 'Regional_Director_received')->where('qr_status', 'active')->count(),
         ];
 
         return view('DOLEQR.regional-director-dashboard', [
@@ -366,62 +632,58 @@ public function getTodaysTransactions()
         ]);
     }
     
-   public function qrStatusUpdateInterface($token)
-{
-    // DEBUG: Log the access attempt
-    \Log::info('QR Status Update Interface accessed', [
-        'token' => $token,
-        'authenticated' => auth()->check(),
-        'user_roles' => auth()->check() ? auth()->user()->getRoleNames() : 'not_authenticated'
-    ]);
-
-    // Check if user is authenticated
-    if (!auth()->check()) {
-        // Store the token in session and redirect to login
-        session(['qr_redirect_token' => $token]);
-        
-        \Log::info('User not authenticated, redirecting to login', ['token' => $token]);
-        
-        return redirect()->route('login')
-            ->with('info', 'Please log in first to access the DV status update page.');
-    }
-
-    // Check if user has the right role
-    $user = auth()->user();
-    $requiredRoles = ['Cashier', 'Regional_Director'];
-    
-    if (!$user->hasAnyRole($requiredRoles)) {
-        \Log::info('User lacks required role', [
-            'user_roles' => $user->getRoleNames(),
-            'required_roles' => $requiredRoles
+    public function qrStatusUpdateInterface($token)
+    {
+        \Log::info('QR Status Update Interface accessed', [
+            'token' => $token,
+            'authenticated' => auth()->check(),
+            'user_roles' => auth()->check() ? auth()->user()->getRoleNames() : 'not_authenticated'
         ]);
+
+        if (!auth()->check()) {
+            session(['qr_redirect_token' => $token]);
+            
+            \Log::info('User not authenticated, redirecting to login', ['token' => $token]);
+            
+            return redirect()->route('login')
+                ->with('info', 'Please log in first to access the DV status update page.');
+        }
+
+        $user = auth()->user();
+        $requiredRoles = ['Cashier', 'Regional_Director'];
         
-        return redirect()->route('login')
-            ->with('error', 'You do not have permission to access this page. Please log in with Cashier or Regional Director credentials.');
+        if (!$user->hasAnyRole($requiredRoles)) {
+            \Log::info('User lacks required role', [
+                'user_roles' => $user->getRoleNames(),
+                'required_roles' => $requiredRoles
+            ]);
+            
+            return redirect()->route('login')
+                ->with('error', 'You do not have permission to access this page. Please log in with Cashier or Regional Director credentials.');
+        }
+
+        $dvRequest = DvRequest::with(['program', 'focalPerson'])->where('qr_code_token', $token)->first();
+        
+        if (!$dvRequest) {
+            \Log::error('DV request not found for token', ['token' => $token]);
+            abort(404, 'Invalid QR code or DV request not found');
+        }
+
+        \Log::info('QR Status Update Interface loaded successfully', [
+            'dv_number' => $dvRequest->dv_number,
+            'status' => $dvRequest->status
+        ]);
+
+        return view('DOLEQR.qr-status-update', [
+            'dvRequest' => $dvRequest,
+            'token' => $token
+        ]);
     }
 
-    $dvRequest = DvRequest::with(['program', 'focalPerson'])->where('qr_code_token', $token)->first();
-    
-    if (!$dvRequest) {
-        \Log::error('DV request not found for token', ['token' => $token]);
-        abort(404, 'Invalid QR code or DV request not found');
-    }
-
-    \Log::info('QR Status Update Interface loaded successfully', [
-        'dv_number' => $dvRequest->dv_number,
-        'status' => $dvRequest->status
-    ]);
-
-    return view('DOLEQR.qr-status-update', [
-        'dvRequest' => $dvRequest,
-        'token' => $token
-    ]);
-}
-
-/**
- * Handle QR code status update
- */
-public function updateStatusViaQr(Request $request, $token)
+    /**
+     * Handle QR code status update
+     */
+    public function updateStatusViaQr(Request $request, $token)
     {
         try {
             $dvRequest = DvRequest::with(['focalPerson', 'program'])->where('qr_code_token', $token)->first();
@@ -454,26 +716,49 @@ public function updateStatusViaQr(Request $request, $token)
             $action = '';
             $role = '';
             $previousStatus = $dvRequest->status;
+            $actionTime = now();
+
+            \Log::info('QR Update Attempt', [
+                'current_status' => $dvRequest->status,
+                'user_role' => $user ? $user->getRoleNames() : 'no_user',
+                'user_id' => $user ? $user->id : 'no_user'
+            ]);
 
             if ($user && $user->hasRole('Regional_Director')) {
                 if ($dvRequest->status === 'RANCA_validated') {
-                    $newStatus = 'RD_received';
+                    $newStatus = 'Regional_Director_received';
                     $action = 'Received by Regional Director via QR Scan';
                     $role = 'Regional_Director';
-                } elseif ($dvRequest->status === 'RD_received') {
+                    $step = 'received';
+                } elseif ($dvRequest->status === 'Regional_Director_received') {
                     $newStatus = 'Regional_Director_signed_approved';
                     $action = 'Signed and Approved by Regional Director via QR Scan';
                     $role = 'Regional_Director';
+                    $step = 'signed_approved';
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "No action available for current status: {$dvRequest->status}. Expected: RANCA_validated or Regional_Director_received",
+                        'current_status' => $dvRequest->status,
+                    ], 422);
                 }
             } elseif ($user && $user->hasRole('Cashier')) {
                 if ($dvRequest->status === 'Regional_Director_signed_approved') {
                     $newStatus = 'Cashier_received';
                     $action = 'Received for Processing by Cashier via QR Scan';
                     $role = 'Cashier';
+                    $step = 'received';
                 } elseif ($dvRequest->status === 'Cashier_received') {
                     $newStatus = 'Cashier_released';
                     $action = 'Transaction Released by Cashier via QR Scan';
                     $role = 'Cashier';
+                    $step = 'released';
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "No action available for current status: {$dvRequest->status}. Expected: Regional_Director_signed_approved or Cashier_received",
+                        'current_status' => $dvRequest->status,
+                    ], 422);
                 }
             } else {
                 return response()->json([
@@ -485,28 +770,58 @@ public function updateStatusViaQr(Request $request, $token)
             }
 
             if ($newStatus) {
-                // Update DV status
                 $dvRequest->update([
                     'status' => $newStatus,
                     'updated_by' => $user->id
                 ]);
 
-                // Reload to get updated data
                 $dvRequest->refresh();
 
-                // Log the action
+                // ✅ Save history based on role
+                if ($role === 'Regional_Director') {
+                    $this->saveRegionalDirectorHistory(
+                        $dvRequest,
+                        $step,
+                        $action,
+                        [
+                            'status_before' => $previousStatus,
+                            'status_after' => $newStatus,
+                            'approved_by' => $user->id,
+                            'approved_at' => $actionTime->toISOString(),
+                            'amount' => $dvRequest->amount,
+                            'dv_number' => $dvRequest->dv_number,
+                            'processing_type' => 'qr_scan',
+                            'qr_token' => $token
+                        ]
+                    );
+                } elseif ($role === 'Cashier') {
+                    $this->saveCashierHistory(
+                        $dvRequest,
+                        $step,
+                        $action,
+                        [
+                            'status_before' => $previousStatus,
+                            'status_after' => $newStatus,
+                            'released_by' => $user->id,
+                            'released_at' => $actionTime->toISOString(),
+                            'amount' => $dvRequest->amount,
+                            'dv_number' => $dvRequest->dv_number,
+                            'processing_type' => 'qr_scan',
+                            'qr_token' => $token
+                        ]
+                    );
+                }
+
                 $this->logQrAction(
                     $dvRequest->id,
                     $user->id,
                     $role,
                     $newStatus,
-                    $action . ' - Scanned at: ' . now()->format('Y-m-d H:i:s')
+                    $action . ' - Scanned at: ' . $actionTime->format('Y-m-d H:i:s')
                 );
 
-                // CRITICAL: Send real-time notifications to BOTH dashboards
                 $this->broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, $role);
 
-                // Notify focal person
                 if ($dvRequest->focalperson_id) {
                     Notification::create([
                         'focalperson_id' => $dvRequest->focalperson_id,
@@ -520,7 +835,7 @@ public function updateStatusViaQr(Request $request, $token)
                         'dv_request_id' => $dvRequest->id,
                         'status'        => $newStatus,
                         'remarks'       => "Status updated by {$role} via QR scan",
-                        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'timestamp'     => $actionTime->timezone('Asia/Manila')->format('M d, Y h:i A'),
                     ]);
                 }
 
@@ -531,22 +846,25 @@ public function updateStatusViaQr(Request $request, $token)
                     'new_status' => $newStatus,
                     'updated_by' => $user->id,
                     'user_role' => $role,
+                    'action' => $action
                 ]);
 
                 return response()->json([
                     'success' => true,
-                    'message' => "Status updated successfully by {$role}",
+                    'message' => "Status updated successfully: {$action}",
                     'new_status' => $newStatus,
                     'dv_number' => $dvRequest->dv_number,
                     'updated_by' => $user->name,
                     'role' => $role,
-                    'next_action' => $this->getNextAction($newStatus, $role)
+                    'next_action' => $this->getNextAction($newStatus, $role),
+                    'action_performed' => $action
                 ]);
             } else {
                 return response()->json([
                     'success' => false,
                     'message' => "No action available for current status: {$dvRequest->status}",
                     'current_status' => $dvRequest->status,
+                    'expected_statuses' => $this->getRequiredStatus($user ? $user->getRoleNames()->first() : '')
                 ], 422);
             }
 
@@ -562,32 +880,6 @@ public function updateStatusViaQr(Request $request, $token)
                 'message' => 'Error updating status: ' . $e->getMessage()
             ], 500);
         }
-    }
-    /**
-     * Get next action description based on current status
-     */
-     private function getNextAction($currentStatus, $role)
-    {
-        $actions = [
-            'RD_received' => 'Next: Regional Director to sign and approve',
-            'Regional_Director_signed_approved' => 'Next: Forward to Cashier for processing',
-            'Cashier_received' => 'Next: Cashier to complete transaction',
-            'Cashier_released' => 'Transaction fully completed'
-        ];
-
-        return $actions[$currentStatus] ?? 'Process completed';
-    }
-    /**
-     * Get required status for role
-     */
-    private function getRequiredStatus($role)
-    {
-        $requirements = [
-            'Regional_Director' => ['RANCA_validated', 'RD_received'],
-            'Cashier' => ['Regional_Director_signed_approved', 'Cashier_received']
-        ];
-
-        return $requirements[$role] ?? [];
     }
 
     /**
@@ -613,7 +905,7 @@ public function updateStatusViaQr(Request $request, $token)
                 'data' => [
                     'dv_number' => $dvRequest->dv_number,
                     'reference_number' => $dvRequest->reference_number,
-                    'payee' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+                    'payee' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
                     'amount' => $dvRequest->amount,
                     'status' => $dvRequest->status,
                     'status_description' => $this->getStatusDescription($dvRequest->status),
@@ -637,18 +929,17 @@ public function updateStatusViaQr(Request $request, $token)
     /**
      * Get human-readable status description
      */
-    private function getStatusDescription($status)
+    private function getNextAction($currentStatus, $role)
     {
-        $descriptions = [
-            'Outgoing_finalized' => 'Finalized by Outgoing - QR Generated',
-            'RANCA_validated' => 'Validated by Accounting III - QR Activated for Scanning',
-            'RD_received' => 'Received by Regional Director',
-            'Regional_Director_signed_approved' => 'Signed and Approved by Regional Director',
-            'Cashier_received' => 'Received and Processed by Cashier',
-            'Cashier_released' => 'Transaction Released by Cashier'
+        $actions = [
+            'RANCA_validated' => 'Next: Regional Director to receive document',
+            'Regional_Director_received' => 'Next: Regional Director to sign and approve',
+            'Regional_Director_signed_approved' => 'Next: Forward to Cashier for processing',
+            'Cashier_received' => 'Next: Cashier to complete transaction',
+            'Cashier_released' => 'Transaction fully completed'
         ];
 
-        return $descriptions[$status] ?? $status;
+        return $actions[$currentStatus] ?? 'Process completed';
     }
 
     /**
@@ -666,10 +957,21 @@ public function updateStatusViaQr(Request $request, $token)
                 ], 404);
             }
 
+            // Check if we already have QR code data stored
+            if ($dvRequest->qr_code_data) {
+                return response()->json([
+                    'success' => true,
+                    'qr_code' => $dvRequest->qr_code_data,
+                    'dv_number' => $dvRequest->dv_number,
+                    'token' => $dvRequest->qr_code_token,
+                    'source' => 'database'
+                ]);
+            }
+
+            // If no QR code data exists, generate a new one
             $token = $dvRequest->qr_code_token;
             
             if (!$token) {
-                // Generate new token if doesn't exist
                 $token = hash('sha256', $dvRequest->id . $dvRequest->dv_number . now()->timestamp . uniqid());
                 $dvRequest->update([
                     'qr_code_token' => $token,
@@ -694,11 +996,17 @@ public function updateStatusViaQr(Request $request, $token)
 
             $base64QrCode = 'data:image/png;base64,' . base64_encode($qrCodeImage);
 
+            // Save the generated QR code to the database for future use
+            $dvRequest->update([
+                'qr_code_data' => $base64QrCode
+            ]);
+
             return response()->json([
                 'success' => true,
                 'qr_code' => $base64QrCode,
                 'dv_number' => $dvRequest->dv_number,
-                'token' => $token
+                'token' => $token,
+                'source' => 'generated'
             ]);
 
         } catch (\Exception $e) {
@@ -706,7 +1014,46 @@ public function updateStatusViaQr(Request $request, $token)
             
             return response()->json([
                 'success' => false,
-                'message' => 'Error generating QR code'
+                'message' => 'Error generating QR code: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get existing QR code from database
+     */
+    public function getQrCode($dvRequestId)
+    {
+        try {
+            $dvRequest = DvRequest::find($dvRequestId);
+            
+            if (!$dvRequest) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'DV request not found'
+                ], 404);
+            }
+
+            if (!$dvRequest->qr_code_data) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'QR code not found for this DV'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'qr_code' => $dvRequest->qr_code_data,
+                'dv_number' => $dvRequest->dv_number,
+                'token' => $dvRequest->qr_code_token
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('QR Code Fetch Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching QR code'
             ], 500);
         }
     }
@@ -723,5 +1070,181 @@ public function updateStatusViaQr(Request $request, $token)
             'status' => $status,
             'remarks' => $remarks,
         ]);
+    }
+
+    /**
+     * Get status description for verification
+     */
+    private function getStatusDescription($status)
+    {
+        $descriptions = [
+            'RANCA_validated' => 'Validated by Accounting III - Ready for Regional Director',
+            'Regional_Director_received' => 'Received by Regional Director',
+            'Regional_Director_signed_approved' => 'Signed and Approved by Regional Director - Ready for Cashier',
+            'Cashier_received' => 'Received by Cashier - In Processing',
+            'Cashier_released' => 'Transaction Completed by Cashier'
+        ];
+
+        return $descriptions[$status] ?? $status;
+    }
+
+    /**
+     * Get required status for user role
+     */
+    private function getRequiredStatus($role)
+    {
+        $requirements = [
+            'Regional_Director' => ['RANCA_validated', 'Regional_Director_received'],
+            'Cashier' => ['Regional_Director_signed_approved', 'Cashier_received']
+        ];
+
+        return $requirements[$role] ?? [];
+    }
+
+     protected function saveRegionalDirectorHistory($dvRequest, $step, $remarks = null, $data = [])
+    {
+        try {
+            RegionalDirectorApprovedHistory::create([
+                'dv_request_id'   => $dvRequest->id,
+                'approved_by'     => auth()->id(),
+                'approval_step'   => $step,
+                'status_before'   => $data['status_before'] ?? $dvRequest->getOriginal('status'),
+                'status_after'    => $data['status_after'] ?? $dvRequest->status,
+                'approval_data'   => $data,
+                'remarks'         => $remarks,
+                'approved_at'     => now(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to save Regional Director approval history', [
+                'dv_request_id' => $dvRequest->id ?? null,
+                'step' => $step,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ NEW: Save Cashier History
+     */
+    protected function saveCashierHistory($dvRequest, $step, $remarks = null, $data = [])
+    {
+        try {
+            CashierReleasedHistory::create([
+                'dv_request_id' => $dvRequest->id,
+                'released_by'   => auth()->id(),
+                'release_step'  => $step,
+                'status_before' => $data['status_before'] ?? $dvRequest->getOriginal('status'),
+                'status_after'  => $data['status_after'] ?? $dvRequest->status,
+                'release_data'  => $data,
+                'remarks'       => $remarks,
+                'released_at'   => now(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to save Cashier release history', [
+                'dv_request_id' => $dvRequest->id ?? null,
+                'step' => $step,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ NEW: Regional Director History View
+     */
+    public function regionalDirectorHistory(Request $request)
+    {
+        $query = RegionalDirectorApprovedHistory::with([
+            'dvRequest.program',
+            'dvRequest.focalPerson',
+            'dvRequest.respocenter',
+            'regionalDirector'
+        ])
+        ->where('approved_by', auth()->id());
+
+        // Search by DV Number
+        if ($request->has('search') && $request->search) {
+            $query->whereHas('dvRequest', function($q) use ($request) {
+                $q->where('dv_number', 'like', '%' . $request->search . '%')
+                  ->orWhere('accounting_control_number', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        // Filter by Program
+        if ($request->has('program') && $request->program) {
+            $query->whereHas('dvRequest.program', function($q) use ($request) {
+                $q->where('prcode', $request->program);
+            });
+        }
+
+        // Filter by Approval Step
+        if ($request->has('step') && $request->step) {
+            $query->where('approval_step', $request->step);
+        }
+
+        // Date range filter
+        if ($request->has('date_from') && $request->date_from) {
+            $query->whereDate('approved_at', '>=', $request->date_from);
+        }
+
+        if ($request->has('date_to') && $request->date_to) {
+            $query->whereDate('approved_at', '<=', $request->date_to);
+        }
+
+        $approvalHistory = $query->orderBy('approved_at', 'desc')
+                                ->paginate(20)
+                                ->appends($request->all());
+
+        return view('DOLEQR.regional-director-approvedhistory', compact('approvalHistory'));
+    }
+
+    /**
+     * ✅ NEW: Cashier History View
+     */
+    public function cashierHistory(Request $request)
+    {
+        $query = CashierReleasedHistory::with([
+            'dvRequest.program',
+            'dvRequest.focalPerson',
+            'dvRequest.respocenter',
+            'cashier'
+        ])
+        ->where('released_by', auth()->id());
+
+        // Search by DV Number
+        if ($request->has('search') && $request->search) {
+            $query->whereHas('dvRequest', function($q) use ($request) {
+                $q->where('dv_number', 'like', '%' . $request->search . '%')
+                  ->orWhere('accounting_control_number', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        // Filter by Program
+        if ($request->has('program') && $request->program) {
+            $query->whereHas('dvRequest.program', function($q) use ($request) {
+                $q->where('prcode', $request->program);
+            });
+        }
+
+        // Filter by Release Step
+        if ($request->has('step') && $request->step) {
+            $query->where('release_step', $request->step);
+        }
+
+        // Date range filter
+        if ($request->has('date_from') && $request->date_from) {
+            $query->whereDate('released_at', '>=', $request->date_from);
+        }
+
+        if ($request->has('date_to') && $request->date_to) {
+            $query->whereDate('released_at', '<=', $request->date_to);
+            }
+
+        $releaseHistory = $query->orderBy('released_at', 'desc')
+                                ->paginate(20)
+                                ->appends($request->all());
+
+        return view('DOLEQR.cashier-releasedhistory', compact('releaseHistory'));
     }
 }
