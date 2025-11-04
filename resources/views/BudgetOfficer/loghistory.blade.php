@@ -313,7 +313,7 @@
                                         $statusColor = $statusColors[$history->status_after] ?? 'bg-gray-100 text-gray-800';
                                     @endphp
                                     <span class="px-2 py-1 text-xs font-medium rounded-full {{ $statusColor }}">
-                                        {{ ucwords(str_replace('_',' ', $history->status_after ?? 'N/A')) }}
+                                         {{$history->status_after ?? 'N/A' }}
                                     </span>
                                 </td>
                                 
@@ -452,7 +452,7 @@
                                 
                                 <!-- Action Column - ORS Preview -->
                                 <td class="table-cell">
-                                    @if($history->dvRequest && $history->dvRequest->status === 'ORS_obligated' && $history->orsRequest)
+                                      @if($history->status_after === 'ORS_obligated' && $history->orsRequest)
                                         <a href="{{ route('BudgetOfficer.dvrequests.previewOrs', $history->dvRequest->id) }}" 
                                            target="_blank"
                                            class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition duration-200 action-btn"

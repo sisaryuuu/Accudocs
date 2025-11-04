@@ -146,213 +146,173 @@ public function history()
         return view('FocalPerson.dvrequest.submitdvors', compact('programs','focalPerson','mops'));
     }
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'program_id'  => 'required|exists:programs,id',
-            'respocenter_id' =>'required|exists:responcenters,id',
-            'amount'      => 'required|numeric|min:0',
-            'particulars' => 'required|string|max:255',
-            'mode_of_payment_id' => 'required|exists:mode_of_payments,id',
-            'payment_details.bank_name'   => 'nullable|string|max:255',
-            'payment_details.bank_accnum' => 'nullable|string|max:255',
-            'payment_details.bank_address'=> 'nullable|string|max:255',
-        ]);
+  public function store(Request $request)
+{
+    $request->validate([
+        'program_id'  => 'required|exists:programs,id',
+        'respocenter_id' =>'required|exists:responcenters,id',
+        'amount'      => 'required|numeric|min:0',
+        'particulars' => 'required|string|max:255',
+        'mode_of_payment_id' => 'required|exists:mode_of_payments,id',
+        'payment_details.bank_name'   => 'nullable|string|max:255',
+        'payment_details.bank_accnum' => 'nullable|string|max:255',
+        'payment_details.bank_address'=> 'nullable|string|max:255',
+    ]);
 
-        $focalpersonId = Auth::guard('focal')->id();
+    $focalpersonId = Auth::guard('focal')->id();
 
-        if (!$focalpersonId) {
-            abort(403, 'Only focal persons can submit DV requests.');
-        }
+    if (!$focalpersonId) {
+        abort(403, 'Only focal persons can submit DV requests.');
+    }
 
-        $submissionKey = 'dv_submission_' . $focalpersonId . '_' . md5(
-            $request->program_id . 
-            $request->amount . 
-            $request->particulars . 
-            $request->mode_of_payment_id
-        );
+    $submissionKey = 'dv_submission_' . $focalpersonId . '_' . md5(
+        $request->program_id . 
+        $request->amount . 
+        $request->particulars . 
+        $request->mode_of_payment_id
+    );
 
-        if (Cache::has($submissionKey)) {
-            return redirect()->route('FocalPerson.dvrequest.index')
-                ->with('warning', 'Duplicate submission detected. Your request was already submitted.');
-        }
+    if (Cache::has($submissionKey)) {
+        return redirect()->route('FocalPerson.dvrequest.index')
+            ->with('warning', 'Duplicate submission detected. Your request was already submitted.');
+    }
 
-        Cache::put($submissionKey, true, now()->addSeconds(5));
+    Cache::put($submissionKey, true, now()->addSeconds(5));
 
-        $recentDuplicate = DvRequest::where('focalperson_id', $focalpersonId)
-            ->where('amount', $request->amount)
-            ->where('program_id', $request->program_id)
-            ->where('created_at', '>=', now()->subSeconds(10))
-            ->first();
+    $recentDuplicate = DvRequest::where('focalperson_id', $focalpersonId)
+        ->where('amount', $request->amount)
+        ->where('program_id', $request->program_id)
+        ->where('created_at', '>=', now()->subSeconds(10))
+        ->first();
 
-        if ($recentDuplicate) {
-            return redirect()->route('FocalPerson.dvrequest.index')
-                ->with('warning', 'A similar request was just submitted. Please check your submissions.');
-        }
+    if ($recentDuplicate) {
+        return redirect()->route('FocalPerson.dvrequest.index')
+            ->with('warning', 'A similar request was just submitted. Please check your submissions.');
+    }
 
-       try {
-    $dv = DB::transaction(function () use ($request, $focalpersonId) {
-        $nextControlNumber = (DvRequest::max('accounting_control_number') ?? 0) + 1;
-        $nextUserSequence = (DvRequest::where('focalperson_id', $focalpersonId)->max('user_sequence') ?? 0) + 1;
-
-        do {
-            $referenceNumber = 'DVORS-' . strtoupper(Str::random(8));
-        } while (DvRequest::where('reference_number', $referenceNumber)->exists());
-
-        $focalPerson = Auth::guard('focal')->user();
-
-        $dv = DvRequest::create([
-            'focalperson_id'            => $focalpersonId,
-            'reference_number'          => $referenceNumber,
-            'accounting_control_number' => $nextControlNumber,
-            'user_sequence'             => $nextUserSequence,
-            'program_id'                => $request->program_id,
-            'amount'                    => $request->amount,
-            'particulars'               => $request->particulars,
-            'fname'                     => $focalPerson->fname,
-            'mi'                        => $focalPerson->mi,
-            'lname'                     => $focalPerson->lname,
-            'tin_number'                => $focalPerson->TIN_number,
-            'respocenter_id'            => $request->respocenter_id,
-            'address'                   => $focalPerson->Address,
-            'status'                    => 'submitted',
-        ]);
-
-        $dv->modeOfPayments()->attach($request->mode_of_payment_id);
-
-        $dvRequestMop = DvRequestModeOfPayment::where('dv_request_id', $dv->id)
-            ->where('mode_of_payment_id', $request->mode_of_payment_id)
-            ->first();
-
-        $dvRequestMop->paymentDetail()->create([
-            'bank_name'   => $request->input("payment_details.bank_name"),
-            'bank_accnum' => $request->input("payment_details.bank_accnum"),
-            'bank_address'=> $request->input("payment_details.bank_address"),
-        ]);
+    try {
+        // Use a variable outside the transaction to store the DV request
+        $dv = null;
         
-                try {
-                    $verifyUrl = route('dv.verify', $dv->reference_number);
+        DB::transaction(function () use ($request, $focalpersonId, &$dv) {
+            $nextControlNumber = (DvRequest::max('accounting_control_number') ?? 0) + 1;
+            $nextUserSequence = (DvRequest::where('focalperson_id', $focalpersonId)->max('user_sequence') ?? 0) + 1;
 
-                    $qrPath = 'qrcodes/' . $dv->reference_number . '.png';
-                    $fullPath = storage_path('app/public/' . $qrPath);
+            do {
+                $referenceNumber = 'DVORS-' . strtoupper(Str::random(8));
+            } while (DvRequest::where('reference_number', $referenceNumber)->exists());
 
-                    // Create directory if it doesn't exist
-                    $directory = dirname($fullPath);
-                    if (!is_dir($directory)) {
-                        mkdir($directory, 0777, true);
-                    }
+            $focalPerson = Auth::guard('focal')->user();
 
-                    // Use external QR API (most reliable - always works!)
-                    $apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&data=' . urlencode($verifyUrl);
-                    
-                    // Download QR code image
-                    $qrCodeContent = @file_get_contents($apiUrl);
-                    
-                    if ($qrCodeContent === false) {
-                        // Fallback: Try alternative API
-                        $apiUrl2 = 'https://chart.googleapis.com/chart?chs=600x600&cht=qr&chl=' . urlencode($verifyUrl);
-                        $qrCodeContent = @file_get_contents($apiUrl2);
-                        
-                        if ($qrCodeContent === false) {
-                            throw new \Exception('Failed to generate QR code from both APIs');
-                        }
-                    }
-                    
-                    // Save to file
-                    file_put_contents($fullPath, $qrCodeContent);
+            $dv = DvRequest::create([
+                'focalperson_id'            => $focalpersonId,
+                'reference_number'          => $referenceNumber,
+                'accounting_control_number' => $nextControlNumber,
+                'user_sequence'             => $nextUserSequence,
+                'program_id'                => $request->program_id,
+                'amount'                    => $request->amount,
+                'particulars'               => $request->particulars,
+                'fname'                     => $focalPerson->fname,
+                'mi'                        => $focalPerson->mi,
+                'lname'                     => $focalPerson->lname,
+                'tin_number'                => $focalPerson->TIN_number,
+                'respocenter_id'            => $request->respocenter_id,
+                'address'                   => $focalPerson->Address,
+                'status'                    => 'submitted',
+            ]);
 
-                    // Verify file was created and is a valid image
-                    if (file_exists($fullPath) && filesize($fullPath) > 0) {
-                        // Verify it's a valid PNG
-                        $imageInfo = @getimagesize($fullPath);
-                        
-                        if ($imageInfo !== false && $imageInfo['mime'] === 'image/png') {
-                            $dv->qr_code_path = $qrPath;
-                            $dv->save();
-                            
-                            \Log::info('QR Code PNG generated successfully', [
-                                'dv_id' => $dv->id,
-                                'path' => $qrPath,
-                                'file_size' => filesize($fullPath),
-                                'image_size' => $imageInfo[0] . 'x' . $imageInfo[1],
-                                'reference' => $dv->reference_number,
-                                'verify_url' => $verifyUrl
-                            ]);
-                        } else {
-                            throw new \Exception('Generated file is not a valid PNG image');
-                        }
-                    } else {
-                        throw new \Exception('QR Code file not created or is empty');
-                    }
+            $dv->modeOfPayments()->attach($request->mode_of_payment_id);
 
-                } catch (\Exception $qrError) {
-                    \Log::error('QR Code generation failed but DV created', [
-                        'dv_id' => $dv->id,
-                        'reference' => $dv->reference_number,
-                        'error' => $qrError->getMessage(),
-                        'line' => $qrError->getLine()
-                    ]);
-                    
-                    // Continue without QR code - don't fail the entire request
-                    // Users can still use manual verification
+            $dvRequestMop = DvRequestModeOfPayment::where('dv_request_id', $dv->id)
+                ->where('mode_of_payment_id', $request->mode_of_payment_id)
+                ->first();
+
+            if ($dvRequestMop) {
+                $dvRequestMop->paymentDetail()->create([
+                    'bank_name'   => $request->input("payment_details.bank_name"),
+                    'bank_accnum' => $request->input("payment_details.bank_accnum"),
+                    'bank_address'=> $request->input("payment_details.bank_address"),
+                ]);
+            }
+            
+            // QR Code generation - make it non-blocking
+            try {
+                $verifyUrl = route('dv.verify', $dv->reference_number);
+                $qrPath = 'qrcodes/' . $dv->reference_number . '.png';
+                $fullPath = storage_path('app/public/' . $qrPath);
+
+                // Create directory if it doesn't exist
+                $directory = dirname($fullPath);
+                if (!is_dir($directory)) {
+                    mkdir($directory, 0777, true);
                 }
 
-        return $dv;
-        
-    });
+                // Use external QR API
+                $apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&data=' . urlencode($verifyUrl);
+                $qrCodeContent = @file_get_contents($apiUrl);
+                
+                if ($qrCodeContent === false) {
+                    // Fallback: Try alternative API
+                    $apiUrl2 = 'https://chart.googleapis.com/chart?chs=600x600&cht=qr&chl=' . urlencode($verifyUrl);
+                    $qrCodeContent = @file_get_contents($apiUrl2);
+                }
+                
+                if ($qrCodeContent !== false) {
+                    file_put_contents($fullPath, $qrCodeContent);
+                    
+                    // Verify file was created
+                    if (file_exists($fullPath) && filesize($fullPath) > 0) {
+                        $dv->qr_code_path = $qrPath;
+                        $dv->save();
+                    }
+                }
+                // If QR generation fails, just continue without it
+            } catch (\Exception $qrError) {
+                \Log::warning('QR Code generation failed but continuing', [
+                    'dv_id' => $dv->id,
+                    'error' => $qrError->getMessage()
+                ]);
+            }
+        });
 
-    $this->logAction($dv, 'SUBMITTED', 'submitted', 'Request submitted by Focal Person');
+        // Check if DV was created successfully
+        if (!$dv) {
+            throw new \Exception('Failed to create DV request in transaction');
+        }
 
-    $this->pusher->trigger('dv-requests-imsd', 'dv-request-submitted', [
-        'id' => $dv->id,
-        'control_number' => $dv->accounting_control_number,
-        'program' => $dv->program->prcode,
-        'amount' => number_format($dv->amount, 2),
-        'status' => 'submitted',
-    ]);
+        // Log the action
+        $this->logAction($dv, 'SUBMITTED', 'submitted', 'Request submitted by Focal Person');
 
-    // ==== 🔴 Real-time Dashboard Broadcast ====
-$payload = [
-    'requestsPerProgram' => DB::table('programs')
-        ->leftJoin('dv_requests', 'dv_requests.program_id', '=', 'programs.id')
-        ->select('programs.prcode', DB::raw('COUNT(dv_requests.id) as total'))
-        ->groupBy('programs.prcode')
-        ->pluck('total', 'prcode'),
+        // Trigger Pusher events
+        $this->pusher->trigger('dv-requests-imsd', 'dv-request-submitted', [
+            'id' => $dv->id,
+            'control_number' => $dv->accounting_control_number,
+            'program' => $dv->program->prcode,
+            'amount' => number_format($dv->amount, 2),
+            'status' => 'submitted',
+        ]);
+        Cache::forget($submissionKey);
 
-    'monthlyRequests' => DB::table('dv_requests')
-        ->select(DB::raw("DATE_FORMAT(created_at, '%M %Y') as month"), DB::raw('COUNT(*) as total'))
-        ->groupBy('month')
-        ->orderByRaw('MIN(created_at)')
-        ->pluck('total', 'month'),
-];
+        // EXPLICIT REDIRECT - This should fix the issue
+        return redirect()->route('FocalPerson.dvrequest.preview', $dv->id)
+            ->with('success', 'DV Request submitted successfully!');
 
-broadcast(new DashboardUpdated($payload)); // 🚀 Send data to Pusher for dashboard update
+    } catch (\Exception $e) {
+        Cache::forget($submissionKey);
 
+        \Log::error('DV Request submission failed', [
+            'user_id' => $focalpersonId,
+            'error_message' => $e->getMessage(),
+            'error_line' => $e->getLine(),
+            'error_file' => $e->getFile(),
+            'request_data' => $request->all()
+        ]);
 
-    Cache::forget($submissionKey);
-
-    return redirect()->route('FocalPerson.dvrequest.preview', $dv->id)
-        ->with('success', 'DV Request submitted successfully! QR Code generated.');
-
-} catch (\Exception $e) {
-    Cache::forget($submissionKey);
-
-    \Log::error('DV Request submission failed', [
-        'user_id' => $focalpersonId,
-        'error_message' => $e->getMessage(),
-        'error_line' => $e->getLine(),
-        'error_file' => $e->getFile(),
-        'error_trace' => $e->getTraceAsString(),
-        'request_data' => $request->all()
-    ]);
-
-    return redirect()->back()
-        ->withInput()
-        ->with('error', 'Failed: ' . $e->getMessage() . ' (Line: ' . $e->getLine() . ')');
-}
-
+        return redirect()->back()
+            ->withInput()
+            ->with('error', 'Failed to submit DV request: ' . $e->getMessage());
     }
-    
+}
     public function showQR($id)
     {
         $dvRequest = DvRequest::findOrFail($id); 

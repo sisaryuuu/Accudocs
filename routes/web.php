@@ -37,17 +37,12 @@ use App\Http\Controllers\AnalyticsController;
 
 
 
+// Dashboard Routes
 Route::get('/admin/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
 Route::get('/admin/dashboard/fetch-data', [DashboardController::class, 'fetchData'])->name('admin.dashboard.fetch');
-
-Route::get('/admin/dashboard/data', [DashboardController::class, 'fetchData'])
-    ->name('admin.dashboard.data');
-
-
-Route::get('/admin/dashboard/filter', [App\Http\Controllers\Admin\DashboardController::class, 'filter'])
-    ->name('admin.dashboard.filter');
-
-
+Route::get('/admin/dashboard/data', [DashboardController::class, 'fetchData'])->name('admin.dashboard.data');
+Route::get('/admin/dashboard/filter', [DashboardController::class, 'filter'])->name('admin.dashboard.filter');
+Route::post('/admin/dashboard/refresh', [DashboardController::class, 'refresh'])->name('admin.dashboard.refresh'); // Add this line
 
 Route::get('/test-chart', function () {
     return view('test-chart');
@@ -284,14 +279,15 @@ Route::get('/dv/{id}/generate-qr', [DOLEQRController::class, 'generateQrCode'])
 
 Route::get('/api/dv/{id}/qr-code', [DOLEQRController::class, 'getQrCode'])
     ->name('dv.get-qr');
-    
+
 Route::prefix('regional-director')->name('regional.director.')->middleware(['auth:web','verified', 'role:Regional_Director'])->group(function () {
     Route::get('/dashboard', [DOLEQRController::class, 'regionalDirectorDashboard'])->name('dashboard');
     Route::get('/scanner', [DOLEQRController::class, 'regionalDirectorScanner'])->name('scanner');
     Route::get('/scannable-dvs', [DOLEQRController::class, 'scannableDvs'])->name('scannable-dvs');
     Route::post('/bulk-receive', [DOLEQRController::class, 'bulkReceiveDVs'])->name('bulk-receive');
+    Route::post('/bulk-sign-approve', [DOLEQRController::class, 'bulkSignApproveDVs'])->name('bulk-sign-approve'); // ✅ ADDED
     Route::get('/history', [DOLEQRController::class, 'regionalDirectorHistory'])->name('history');
-
+    Route::get('/stats', [DOLEQRController::class, 'getRegionalDirectorStats'])->name('stats'); // ✅ ADDED if not exists
 });
 
 // Cashier Routes  
@@ -301,21 +297,14 @@ Route::prefix('cashier')->name('cashier.')->middleware(['auth:web', 'verified', 
     Route::get('/todays-transactions', [DOLEQRController::class, 'getTodaysTransactions'])->name('todays-transactions');
     Route::get('/pending-payments', [DOLEQRController::class, 'cashierDashboard'])->name('pending-payments');
     Route::post('/bulk-receive', [DOLEQRController::class, 'cashierBulkReceive'])->name('bulk-receive');
+    Route::post('/bulk-release', [DOLEQRController::class, 'cashierBulkRelease'])->name('bulk-release'); // ✅ ADDED
     Route::get('/history', [DOLEQRController::class, 'cashierHistory'])->name('history');
-
+    Route::get('/stats', [DOLEQRController::class, 'getCashierStats'])->name('stats'); // ✅ ADDED if not exists
 });
-
-
-
-
 
 Route::get('/qr/scanner', function () {
     return view('qr.scanner');
 })->name('qr.scanner');
-
-
-
-
 
 Route::get('/dv/verify/{reference}', [DvRequestController::class, 'verifyQR'])->name('dv.verify');
 

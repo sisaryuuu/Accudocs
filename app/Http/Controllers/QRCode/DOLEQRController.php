@@ -10,12 +10,15 @@ use App\Models\Notification;
 use App\Models\RegionalDirectorApprovedHistory;
 use App\Models\CashierReleasedHistory;
 use App\Services\PusherService;
+use App\Services\SendPulseServices;
+use App\Traits\TriggersDashboardUpdate; 
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\DB;
 
 class DOLEQRController extends Controller
 {
     protected PusherService $pusher;
+    use TriggersDashboardUpdate;
 
     public function __construct(PusherService $pusher)
     {
@@ -185,6 +188,7 @@ class DOLEQRController extends Controller
             ]);
 
             $this->updateDashboardStatistics();
+            $this->triggerDashboardUpdate();
 
             return response()->json([
                 'success' => true,
@@ -212,6 +216,184 @@ class DOLEQRController extends Controller
             ], 500);
         }
     }
+
+    /**
+ * Bulk sign and approve DVs for Regional Director
+ */
+public function bulkSignApproveDVs(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            
+            if (!$user || !$user->hasRole('Regional_Director')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Only Regional Director can perform this action.'
+                ], 403);
+            }
+
+            $dvIds = $request->input('dv_ids', []);
+            
+            if (empty($dvIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No DVs selected for bulk sign and approve.'
+                ], 400);
+            }
+
+            $results = [
+                'successful' => [],
+                'failed' => []
+            ];
+
+            DB::beginTransaction();
+
+            foreach ($dvIds as $dvId) {
+                try {
+                    $dvRequest = DvRequest::with(['focalPerson', 'program'])
+                        ->where('id', $dvId)
+                        ->where('qr_status', 'active')
+                        ->first();
+
+                    if (!$dvRequest) {
+                        $results['failed'][] = [
+                            'dv_id' => $dvId,
+                            'reason' => 'DV not found or QR not active'
+                        ];
+                        continue;
+                    }
+
+                    if ($dvRequest->status !== 'Regional_Director_received') {
+                        $results['failed'][] = [
+                            'dv_id' => $dvId,
+                            'dv_number' => $dvRequest->dv_number,
+                            'reason' => "Invalid status for sign and approve. Current status: {$dvRequest->status}. Expected: Regional_Director_received"
+                        ];
+                        continue;
+                    }
+
+                    $previousStatus = $dvRequest->status;
+                    $newStatus = 'Regional_Director_signed_approved';
+                    $action = 'Signed and Approved by Regional Director - Bulk processed';
+                    $approvedAt = now();
+
+                    $dvRequest->update([
+                        'status' => $newStatus,
+                        'updated_by' => $user->id
+                    ]);
+
+                    $dvRequest->refresh();
+
+                    // ✅ Save Regional Director History
+                    $this->saveRegionalDirectorHistory(
+                        $dvRequest,
+                        'signed_approved',
+                        $action,
+                        [
+                            'status_before' => $previousStatus,
+                            'status_after' => $newStatus,
+                            'approved_by' => $user->id,
+                            'approved_at' => $approvedAt->toISOString(),
+                            'amount' => $dvRequest->amount,
+                            'dv_number' => $dvRequest->dv_number,
+                            'processing_type' => 'bulk_sign_approve'
+                        ]
+                    );
+
+                    $this->logQrAction(
+                        $dvRequest->id,
+                        $user->id,
+                        'Regional_Director',
+                        $newStatus,
+                        $action . ' at: ' . $approvedAt->format('Y-m-d H:i:s')
+                    );
+
+                    $this->broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, 'Regional_Director');
+
+                    if ($dvRequest->focalperson_id) {
+                        Notification::create([
+                            'focalperson_id' => $dvRequest->focalperson_id,
+                            'dv_request_id'  => $dvRequest->id,
+                            'status'         => $newStatus,
+                            'action'         => 'Status Updated via Bulk Sign & Approve',
+                            'remarks'        => "DV status updated to {$newStatus} by Regional Director via bulk sign and approve",
+                        ]);
+
+                        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                            'dv_request_id' => $dvRequest->id,
+                            'status'        => $newStatus,
+                            'remarks'       => "Status updated by Regional Director via bulk sign and approve",
+                            'timestamp'     => $approvedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        ]);
+                    }
+
+                    $results['successful'][] = [
+                        'dv_id' => $dvRequest->id,
+                        'dv_number' => $dvRequest->dv_number,
+                        'previous_status' => $previousStatus,
+                        'new_status' => $newStatus
+                    ];
+
+                    \Log::info('DV bulk signed and approved by Regional Director', [
+                        'dv_id' => $dvRequest->id,
+                        'dv_number' => $dvRequest->dv_number,
+                        'previous_status' => $previousStatus,
+                        'new_status' => $newStatus,
+                        'updated_by' => $user->id
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Error processing DV in bulk sign and approve: ' . $e->getMessage(), [
+                        'dv_id' => $dvId,
+                        'error' => $e->getMessage()
+                    ]);
+
+                    $results['failed'][] = [
+                        'dv_id' => $dvId,
+                        'reason' => 'Processing error: ' . $e->getMessage()
+                    ];
+                }
+            }
+
+            DB::commit();
+
+            $this->pusher->trigger('regional-director-dashboard', 'bulk-sign-approve-completed', [
+                'successful_dvs' => $results['successful'],
+                'successful_count' => count($results['successful']),
+                'failed_count' => count($results['failed']),
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+
+            $this->updateDashboardStatistics();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bulk sign and approve completed',
+                'results' => $results,
+                'summary' => [
+                    'total_processed' => count($dvIds),
+                    'successful' => count($results['successful']),
+                    'failed' => count($results['failed'])
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            \Log::error('Bulk sign and approve error: ' . $e->getMessage(), [
+                'dv_ids' => $dvIds,
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error during bulk sign and approve: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
 
     /**
      * Bulk receive DVs for Cashier
@@ -279,6 +461,10 @@ class DOLEQRController extends Controller
                     ]);
 
                     $dvRequest->refresh();
+
+                         if ($newStatus === 'Cashier_released') {
+                    $this->sendReleaseEmailNotification($dvRequest, $user);
+                }
 
                     // ✅ Save Cashier History
                     $this->saveCashierHistory(
@@ -360,7 +546,7 @@ class DOLEQRController extends Controller
             ]);
 
             $this->updateDashboardStatistics();
-
+            $this->triggerDashboardUpdate();
             return response()->json([
                 'success' => true,
                 'message' => 'Bulk receive completed',
@@ -388,53 +574,241 @@ class DOLEQRController extends Controller
         }
     }
 
-    /**
-     * Update dashboard statistics after bulk operations
+        /**
+     * Bulk release DVs for Cashier
      */
-    private function updateDashboardStatistics()
+    public function cashierBulkRelease(Request $request)
     {
         try {
-            // Get updated stats for regional director
-            $rdStats = [
-                'total_pending' => DvRequest::whereIn('status', ['RANCA_validated', 'Regional_Director_received'])
-                    ->where('qr_status', 'active')
-                    ->count(),
-                'awaiting_receipt' => DvRequest::where('status', 'RANCA_validated')
-                    ->where('qr_status', 'active')
-                    ->count(),
-                'awaiting_approval' => DvRequest::where('status', 'Regional_Director_received')
-                    ->where('qr_status', 'active')
-                    ->count(),
+            $user = auth()->user();
+            
+            if (!$user || !$user->hasRole('Cashier')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Only Cashier can perform this action.'
+                ], 403);
+            }
+
+            $dvIds = $request->input('dv_ids', []);
+            
+            if (empty($dvIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No DVs selected for bulk release.'
+                ], 400);
+            }
+
+            $results = [
+                'successful' => [],
+                'failed' => []
             ];
 
-            // Get updated stats for cashier
-            $cashierStats = [
-                'total_pending' => DvRequest::whereIn('status', ['Regional_Director_signed_approved', 'Cashier_received'])
-                    ->where('qr_status', 'active')
-                    ->count(),
-                'awaiting_processing' => DvRequest::where('status', 'Regional_Director_signed_approved')
-                    ->where('qr_status', 'active')
-                    ->count(),
-                'in_processing' => DvRequest::where('status', 'Cashier_received')
-                    ->where('qr_status', 'active')
-                    ->count(),
-            ];
+            DB::beginTransaction();
 
-            // Broadcast updated statistics
-            $this->pusher->trigger('regional-director-dashboard', 'stats-updated', [
-                'stats' => $rdStats,
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
+            foreach ($dvIds as $dvId) {
+                try {
+                    $dvRequest = DvRequest::with(['focalPerson', 'program'])
+                        ->where('id', $dvId)
+                        ->where('qr_status', 'active')
+                        ->first();
+
+                    if (!$dvRequest) {
+                        $results['failed'][] = [
+                            'dv_id' => $dvId,
+                            'reason' => 'DV not found or QR not active'
+                        ];
+                        continue;
+                    }
+
+                    if ($dvRequest->status !== 'Cashier_received') {
+                        $results['failed'][] = [
+                            'dv_id' => $dvId,
+                            'dv_number' => $dvRequest->dv_number,
+                            'reason' => "Invalid status for release. Current status: {$dvRequest->status}. Expected: Cashier_received"
+                        ];
+                        continue;
+                    }
+
+                    $previousStatus = $dvRequest->status;
+                    $newStatus = 'Cashier_released';
+                    $action = 'Transaction Released by Cashier - Bulk processed';
+                    $releasedAt = now();
+
+                    $dvRequest->update([
+                        'status' => $newStatus,
+                        'updated_by' => $user->id
+                    ]);
+
+                    $dvRequest->refresh();
+
+                    // ✅ Send email notification for release
+                    $this->sendReleaseEmailNotification($dvRequest, $user);
+
+                    // ✅ Save Cashier History
+                    $this->saveCashierHistory(
+                        $dvRequest,
+                        'released',
+                        $action,
+                        [
+                            'status_before' => $previousStatus,
+                            'status_after' => $newStatus,
+                            'released_by' => $user->id,
+                            'released_at' => $releasedAt->toISOString(),
+                            'amount' => $dvRequest->amount,
+                            'dv_number' => $dvRequest->dv_number,
+                            'processing_type' => 'bulk_release'
+                        ]
+                    );
+
+                    $this->logQrAction(
+                        $dvRequest->id,
+                        $user->id,
+                        'Cashier',
+                        $newStatus,
+                        $action . ' at: ' . $releasedAt->format('Y-m-d H:i:s')
+                    );
+
+                    $this->broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, 'Cashier');
+
+                    if ($dvRequest->focalperson_id) {
+                        Notification::create([
+                            'focalperson_id' => $dvRequest->focalperson_id,
+                            'dv_request_id'  => $dvRequest->id,
+                            'status'         => $newStatus,
+                            'action'         => 'Status Updated via Bulk Release',
+                            'remarks'        => "DV status updated to {$newStatus} by Cashier via bulk release",
+                        ]);
+
+                        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                            'dv_request_id' => $dvRequest->id,
+                            'status'        => $newStatus,
+                            'remarks'       => "Status updated by Cashier via bulk release",
+                            'timestamp'     => $releasedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        ]);
+                    }
+
+                    $results['successful'][] = [
+                        'dv_id' => $dvRequest->id,
+                        'dv_number' => $dvRequest->dv_number,
+                        'previous_status' => $previousStatus,
+                        'new_status' => $newStatus
+                    ];
+
+                    \Log::info('DV bulk released by Cashier', [
+                        'dv_id' => $dvRequest->id,
+                        'dv_number' => $dvRequest->dv_number,
+                        'previous_status' => $previousStatus,
+                        'new_status' => $newStatus,
+                        'updated_by' => $user->id
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Error processing DV in cashier bulk release: ' . $e->getMessage(), [
+                        'dv_id' => $dvId,
+                        'error' => $e->getMessage()
+                    ]);
+
+                    $results['failed'][] = [
+                        'dv_id' => $dvId,
+                        'reason' => 'Processing error: ' . $e->getMessage()
+                    ];
+                }
+            }
+
+            DB::commit();
+
+            $this->pusher->trigger('cashier-dashboard', 'bulk-release-completed', [
+                'successful_dvs' => $results['successful'],
+                'successful_count' => count($results['successful']),
+                'failed_count' => count($results['failed']),
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
-            $this->pusher->trigger('cashier-dashboard', 'stats-updated', [
-                'stats' => $cashierStats,
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
+            $this->updateDashboardStatistics();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bulk release completed',
+                'results' => $results,
+                'summary' => [
+                    'total_processed' => count($dvIds),
+                    'successful' => count($results['successful']),
+                    'failed' => count($results['failed'])
+                ]
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Error updating dashboard statistics: ' . $e->getMessage());
+            DB::rollBack();
+            
+            \Log::error('Cashier bulk release error: ' . $e->getMessage(), [
+                'dv_ids' => $dvIds,
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error during bulk release: ' . $e->getMessage()
+            ], 500);
         }
     }
+
+    /**
+     * Update dashboard statistics after bulk operations
+     */
+   /**
+ * Update dashboard statistics after bulk operations
+ */
+private function updateDashboardStatistics()
+{
+    try {
+        // Get updated stats for regional director
+        $rdStats = [
+            'total_pending' => DvRequest::whereIn('status', ['RANCA_validated', 'Regional_Director_received'])
+                ->where('qr_status', 'active')
+                ->count(),
+            'awaiting_receipt' => DvRequest::where('status', 'RANCA_validated')
+                ->where('qr_status', 'active')
+                ->count(),
+            'awaiting_approval' => DvRequest::where('status', 'Regional_Director_received')
+                ->where('qr_status', 'active')
+                ->count(),
+            'awaiting_sign_approve' => DvRequest::where('status', 'Regional_Director_received')
+                ->where('qr_status', 'active')
+                ->count(),
+        ];
+
+        // Get updated stats for cashier
+        $cashierStats = [
+            'total_pending' => DvRequest::whereIn('status', ['Regional_Director_signed_approved', 'Cashier_received'])
+                ->where('qr_status', 'active')
+                ->count(),
+            'awaiting_processing' => DvRequest::where('status', 'Regional_Director_signed_approved')
+                ->where('qr_status', 'active')
+                ->count(),
+            'in_processing' => DvRequest::where('status', 'Cashier_received')
+                ->where('qr_status', 'active')
+                ->count(),
+            'awaiting_release' => DvRequest::where('status', 'Cashier_received')
+                ->where('qr_status', 'active')
+                ->count(),
+        ];
+
+        // Broadcast updated statistics
+        $this->pusher->trigger('regional-director-dashboard', 'stats-updated', [
+            'stats' => $rdStats,
+            'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
+        ]);
+
+        $this->pusher->trigger('cashier-dashboard', 'stats-updated', [
+            'stats' => $cashierStats,
+            'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Error updating dashboard statistics: ' . $e->getMessage());
+    }
+}
 
     public function getCashierStats()
     {
@@ -777,6 +1151,10 @@ class DOLEQRController extends Controller
 
                 $dvRequest->refresh();
 
+                  if ($newStatus === 'Cashier_released') {
+                $this->sendReleaseEmailNotification($dvRequest, $user);
+            }
+
                 // ✅ Save history based on role
                 if ($role === 'Regional_Director') {
                     $this->saveRegionalDirectorHistory(
@@ -848,7 +1226,7 @@ class DOLEQRController extends Controller
                     'user_role' => $role,
                     'action' => $action
                 ]);
-
+                  $this->triggerDashboardUpdate();
                 return response()->json([
                     'success' => true,
                     'message' => "Status updated successfully: {$action}",
@@ -881,6 +1259,58 @@ class DOLEQRController extends Controller
             ], 500);
         }
     }
+
+
+    private function sendReleaseEmailNotification($dvRequest, $user)
+{
+    try {
+        $focalPerson = $dvRequest->focalPerson;
+        
+        if ($focalPerson && $focalPerson->email) {
+            \Log::info('Attempting to send release email notification', [
+                'dv_id' => $dvRequest->id,
+                'dv_number' => $dvRequest->dv_number,
+                'recipient_email' => $focalPerson->email,
+                'recipient_name' => $focalPerson->fname . ' ' . $focalPerson->lname,
+                'status' => $dvRequest->status
+            ]);
+            
+            $sendPulseService = new SendPulseServices();
+            $emailSent = $sendPulseService->sendReleaseEmail(
+                $focalPerson->email,
+                $focalPerson->fname . ' ' . $focalPerson->lname,
+                $dvRequest
+            );
+            
+            if ($emailSent) {
+                \Log::info('Release email notification sent successfully', [
+                    'dv_id' => $dvRequest->id,
+                    'dv_number' => $dvRequest->dv_number,
+                    'recipient' => $focalPerson->email
+                ]);
+            } else {
+                \Log::error('Failed to send release email notification - SendPulse service returned false', [
+                    'dv_id' => $dvRequest->id,
+                    'dv_number' => $dvRequest->dv_number
+                ]);
+            }
+        } else {
+            \Log::warning('Cannot send release email - focal person or email missing', [
+                'dv_id' => $dvRequest->id,
+                'focal_person_id' => $dvRequest->focalperson_id,
+                'has_focal_person' => !is_null($focalPerson),
+                'has_email' => $focalPerson && !empty($focalPerson->email)
+            ]);
+        }
+    } catch (\Exception $e) {
+        \Log::error('Failed to send release email notification: ' . $e->getMessage(), [
+            'dv_id' => $dvRequest->id,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+}
+
 
     /**
      * Verify DV endpoint (public access)

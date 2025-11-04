@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Incoming;
 
 use App\Http\Controllers\Controller;
+use App\Traits\TriggersDashboardUpdate; // ✅ Add trait
 use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
@@ -16,6 +17,9 @@ use Illuminate\Support\Facades\DB;
 
 class TupadDvRequestProcessingController extends Controller
 {
+
+     use TriggersDashboardUpdate; 
+
      protected PusherService $pusher;
 
     public function __construct(PusherService $pusher)
@@ -185,6 +189,9 @@ public function receive(Request $request, $id)
             'received_by_user_id' => $currentUserId, // ADD THIS
         ]);
 
+        $this->triggerDashboardUpdate();
+
+        // JSON response for AJAX
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
@@ -286,6 +293,8 @@ public function startProcessing(Request $request, $id)
             'processed_by_user_id' => $currentUserId, // ADD THIS
         ]);
 
+
+        $this->triggerDashboardUpdate();
         // JSON response for AJAX
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -305,6 +314,9 @@ public function startProcessing(Request $request, $id)
 
     } catch (\Exception $e) {
         \Log::error('Error starting processing: ' . $e->getMessage());
+
+
+
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -518,6 +530,7 @@ public function startProcessing(Request $request, $id)
         $request->remarks ?? 'DV Request approved forwarded to Budget Officer.'
     );
 
+    $this->triggerDashboardUpdate();
     return redirect()->route('Incoming.TUPAD.index')
         ->with('success', 'DV Request Approved.');
 }
@@ -575,6 +588,8 @@ public function reject(Request $request, $id)
             "Rejected by Incoming-TUPAD: {$remarks}"
         );
 
+          $emailSent = $this->sendRejectionEmail($dvRequest, $remarks);
+
         // ✅ Notify focal person
         Notification::create([
             'focalperson_id' => $focalId,
@@ -602,15 +617,23 @@ public function reject(Request $request, $id)
                 'verified_by_user_id' => $currentUserId, // ADD THIS
             ]);
         }
+            $this->triggerDashboardUpdate();
+
+            $responseMessage = $emailSent ?? false
+                ? 'DV request has been rejected and notification sent.' 
+                : 'DV request has been rejected but email notification failed.';
+
+
 
         // ✅ Always return JSON
         return response()->json([
             'success' => true,
-            'message' => 'DV request has been rejected successfully.',
+            'message' => $responseMessage,
             'data' => [
                 'id'         => $dvRequest->id,
                 'status'     => 'Incoming-TUPAD_rejected',
                 'remarks'    => $remarks,
+                'email_sent' => $emailSent,
             ]
         ], 200);
 
@@ -641,13 +664,103 @@ public function reject(Request $request, $id)
     }
 }
 
+     /**
+     * ✅ SEND REJECTION EMAIL - SendPulse with SMTP fallback
+     */
+    protected function sendRejectionEmail($dvRequest, $rejectionRemarks)
+    {
+        try {
+            $focalPerson = $dvRequest->focalPerson;
+            
+            if (!$focalPerson || empty($focalPerson->email)) {
+                Log::warning('Cannot send rejection email: focal person or email missing', [
+                    'dv_request_id' => $dvRequest->id,
+                    'focal_person_id' => $focalPerson->id ?? 'null'
+                ]);
+                return false;
+            }
+
+            $toEmail = $focalPerson->email;
+            $toName = trim($focalPerson->fname . ' ' . $focalPerson->lname);
+            
+            Log::info('Attempting to send rejection email via SendPulse', [
+                'to_email' => $toEmail,
+                'to_name' => $toName,
+                'dv_request_id' => $dvRequest->id
+            ]);
+
+            // Try SendPulse first
+            if (class_exists(SendPulseServices::class)) {
+                $sendPulseService = new SendPulseServices();
+                $result = $sendPulseService->sendRejectionEmail($toEmail, $toName, $dvRequest, $rejectionRemarks);
+                
+                if ($result) {
+                    Log::info('SendPulse rejection email sent successfully', [
+                        'dv_request_id' => $dvRequest->id,
+                        'to_email' => $toEmail
+                    ]);
+                    return true;
+                }
+            }
+
+            // Fallback to SMTP
+            return $this->sendFallbackEmail($toEmail, $toName, $dvRequest, $rejectionRemarks);
+            
+        } catch (\Exception $e) {
+            Log::error('SendPulse rejection email failed: ' . $e->getMessage(), [
+                'dv_request_id' => $dvRequest->id,
+                'exception' => $e->getTraceAsString()
+            ]);
+            
+            // Try fallback
+            return $this->sendFallbackEmail($toEmail ?? null, $toName ?? null, $dvRequest, $rejectionRemarks);
+        }
+    }
+
+    /**
+     * ✅ FALLBACK EMAIL - Using Laravel SMTP
+     */
+    protected function sendFallbackEmail($toEmail, $toName, $dvRequest, $rejectionRemarks)
+    {
+        try {
+            if (!$toEmail) {
+                return false;
+            }
+
+            Log::info('Using fallback SMTP email');
+            
+            $subject = "DV Request Rejected - Incoming-TUPAD - " . ($dvRequest->accounting_control_number ?? 'Pending-CN');
+            $htmlContent = view('emails.dv_rejected', [
+                'focalPerson' => $dvRequest->focalPerson,
+                'dvRequest' => $dvRequest,
+                'rejectionRemarks' => $rejectionRemarks,
+                'rejectedAt' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'rejectedBy' => auth()->user()->name ?? 'Incoming-TUPAD User',
+                'department' => 'Incoming-TUPAD'
+            ])->render();
+
+            Mail::send([], [], function ($message) use ($toEmail, $toName, $subject, $htmlContent) {
+                $message->to($toEmail, $toName)
+                       ->subject($subject)
+                       ->from(config('mail.from.address'), config('mail.from.name'))
+                       ->html($htmlContent);
+            });
+
+            Log::info('Fallback SMTP email sent successfully', ['to' => $toEmail]);
+            return true;
+            
+        } catch (\Exception $e) {
+            Log::error('Fallback SMTP also failed: ' . $e->getMessage());
+            return false;
+        }
+    }
     
     public function redirectToFirstPending()
 {
     $currentUserId = auth()->id();
     $lockDuration = now()->subMinutes(10);
 
-    // Get all pending GIP requests
+    // Get all pending TUPAD requests
     $pendingRequests = DvRequest::whereHas('program', fn($q) => 
                                 $q->where('prcode', 'TUPAD')) 
                             ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
@@ -764,7 +877,7 @@ public function reject(Request $request, $id)
         ]);
 
     } catch (\Exception $e) {
-        \Log::error('Failed to save Incoming-GIP verification history', [
+        \Log::error('Failed to save Incoming-TUPAD verification history', [
             'dv_request_id' => $dvRequest->id ?? null,
             'step' => $step,
             'error' => $e->getMessage(),

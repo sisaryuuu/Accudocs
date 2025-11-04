@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Incoming;
 
 use App\Http\Controllers\Controller;
+use App\Traits\TriggersDashboardUpdate; // ✅ Add trait
 use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
@@ -10,13 +11,17 @@ use App\Models\IncomingTEVVerificationHistory;
 use App\Models\DocumentAgingAlert;
 use App\Models\Notification;
 use App\Services\PusherService;
+use App\Services\SendPulseServices;
 use App\Models\TEVAttachment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class TEVDvRequestProcessingController extends Controller
 {
+      use TriggersDashboardUpdate; // ✅ This trait provides getDashboardData() and triggerDashboardUpdate()
+
       protected PusherService $pusher;
+      
 
     public function __construct(PusherService $pusher)
     {
@@ -53,8 +58,7 @@ class TEVDvRequestProcessingController extends Controller
         }
 
         $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
-         $sidebarCounts = $this->getSidebarCounts();
-        return view('Incoming.TEV.index', compact('dvRequests','sidebarCounts'));
+        return view('Incoming.TEV.index', compact('dvRequests'));
     }
     
     public function show($id)
@@ -180,6 +184,9 @@ class TEVDvRequestProcessingController extends Controller
             'received_by_user_id' => $currentUserId, // ADD THIS
         ]);
 
+          $this->triggerDashboardUpdate();
+        // JSON response for AJAX
+
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
@@ -284,6 +291,8 @@ public function startProcessing(Request $request, $id)
             'action_performer_id' => $currentUserId, // ADD THIS
             'processed_by_user_id' => $currentUserId, // ADD THIS
         ]);
+        
+          $this->triggerDashboardUpdate();
         // JSON response for AJAX
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -296,7 +305,7 @@ public function startProcessing(Request $request, $id)
                 ]
             ]);
         }
-
+        
         // Fallback redirect
         return redirect()->route('Incoming.TEV.index')
             ->with('success', 'Processing started.');
@@ -531,139 +540,244 @@ public function startProcessing(Request $request, $id)
         'verified_by_user_id' => $currentUserId, // ADD THIS
     ]);
 
+    $this->triggerDashboardUpdate();
+
     return redirect()->route('Incoming.TEV.index')
-        ->with('success', 'DV Request has been verified and forwarded to Budget Officer.');
+        ->with('success', 'DV Request Approved.');
 }
-        public function reject(Request $request, $id)
-{
-    try {
-        // Validate input
-        $request->validate([
-            'remarks' => 'required|string|max:1000|min:10',
-        ]);
 
-        // Find the DV request
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
-                              ->findOrFail($id);
+    public function reject(Request $request, $id)
+    {
+        try {
+            // Validate input
+            $request->validate([
+                'remarks' => 'required|string|max:1000|min:10',
+            ]);
 
-        $statusBefore = $dvRequest->status;
-         $currentUserId = auth()->id();
-        // ✅ Only allow rejection if status is currently in Incoming-TEV stage
-        if (!in_array($dvRequest->status, ['Incoming-TEV_received', 'Incoming-TEV_in_process'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This DV request cannot be rejected at its current stage.'
-            ], 422);
-        }
+            // Find the DV request
+            $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
+                                ->findOrFail($id);
 
-        $rejectedAt = now();
-        $focalId = $dvRequest->focalperson_id;
-        $remarks = trim($request->remarks);
+            $statusBefore = $dvRequest->status;
+            $currentUserId = auth()->id();
+            // ✅ Only allow rejection if status is currently in Incoming-TEV stage
+            if (!in_array($dvRequest->status, ['Incoming-TEV_received', 'Incoming-TEV_in_process'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This DV request cannot be rejected at its current stage.'
+                ], 422);
+            }
 
-        // ✅ Update DV request
-        $dvRequest->update([
-            'status'     => 'Incoming-TEV_rejected',
-            'locked_by'  => null,
-            'locked_at'  => null,
-        ]);
+            $rejectedAt = now();
+            $focalId = $dvRequest->focalperson_id;
+            $remarks = trim($request->remarks);
+
+            // ✅ Update DV request
+            $dvRequest->update([
+                'status'     => 'Incoming-TEV_rejected',
+                'locked_by'  => null,
+                'locked_at'  => null,
+            ]);
 
 
-        $this->saveIncomingGIPVerificationHistory(
-                $dvRequest,
-                'reject',
-                $remarks,
-                [
-                    'status_before'   => $statusBefore,
-                    'status_after'    => 'Incoming-GIP_rejected',
-                    'action'          => 'rejected',
-                    'rejected_by'     =>  $currentUserId,
-                    'rejected_at'     => $rejectedAt->toISOString(),
-                    'rejection_reason'=> $remarks,
-                ]
+            $this->saveIncomingTEVVerificationHistory(
+                    $dvRequest,
+                    'reject',
+                    $remarks,
+                    [
+                        'status_before'   => $statusBefore,
+                        'status_after'    => 'Incoming-TEV_rejected',
+                        'action'          => 'rejected',
+                        'rejected_by'     =>  $currentUserId,
+                        'rejected_at'     => $rejectedAt->toISOString(),
+                        'rejection_reason'=> $remarks,
+                    ]
+                );
+
+
+            // ✅ Log rejection
+            $this->logAction(
+                $dvRequest->id,
+                'Incoming-TEV',
+                'Incoming-TEV_rejected',
+                "Rejected by Incoming-TEV: {$remarks}"
             );
 
+              $emailSent = $this->sendRejectionEmail($dvRequest, $remarks);
 
-        // ✅ Log rejection
-        $this->logAction(
-            $dvRequest->id,
-            'Incoming-TEV',
-            'Incoming-TEV_rejected',
-            "Rejected by Incoming-TEV: {$remarks}"
-        );
-
-        // ✅ Notify focal person
-        Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => 'Incoming-TEV_rejected',
-            'action'         => 'Rejected',
-            'remarks'        => $remarks,
-        ]);
-
-        // ✅ Real-time push to focal person
-        if (isset($this->pusher)) {
-            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => 'Incoming-TEV_rejected',
-                'remarks'       => $remarks,
-                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            // ✅ Notify focal person
+            Notification::create([
+                'focalperson_id' => $focalId,
+                'dv_request_id'  => $dvRequest->id,
+                'status'         => 'Incoming-TEV_rejected',
+                'action'         => 'Rejected',
+                'remarks'        => $remarks,
             ]);
 
-            // ✅ Real-time push to Incoming-TEV dashboard
-            $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-rejected', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => 'Incoming-TEV_rejected',
-                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                'action_performer_id' => $currentUserId, // ADD THIS
-                'rejected_by_user_id' => $currentUserId, // ADD THIS
-            ]);
+            // ✅ Real-time push to focal person
+            if (isset($this->pusher)) {
+                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                    'dv_request_id' => $dvRequest->id,
+                    'status'        => 'Incoming-TEV_rejected',
+                    'remarks'       => $remarks,
+                    'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                ]);
+
+                // ✅ Real-time push to Incoming-TEV dashboard
+                $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-rejected', [
+                    'dv_request_id' => $dvRequest->id,
+                    'status'        => 'Incoming-TEV_rejected',
+                    'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'action_performer_id' => $currentUserId, // ADD THIS
+                    'rejected_by_user_id' => $currentUserId, // ADD THIS
+                ]);
+            }
+
+               $this->triggerDashboardUpdate();
+
+            $responseMessage = $emailSent ?? false
+                ? 'DV request has been rejected and notification sent.' 
+                : 'DV request has been rejected but email notification failed.';
+
+
+            // ✅ Always return JSON
+            return response()->json([
+                'success' => true,
+                'message' => $responseMessage,
+                'data' => [
+                    'id'         => $dvRequest->id,
+                    'status'     => 'Incoming-TEV_rejected',
+                    'remarks'    => $remarks,
+                    'email_sent' => $emailSent,
+                ]
+            ], 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            \Log::error('DV Request not found: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'DV request not found.'
+            ], 404);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation error: ' . json_encode($e->errors()));
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed: ' . implode(', ', $e->errors()['remarks'] ?? ['Invalid input'])
+            ], 422);
+
+        } catch (\Exception $e) {
+            \Log::error('Error rejecting TEV DV request: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while rejecting the DV request: ' . $e->getMessage()
+            ], 500);
         }
-
-        // ✅ Always return JSON
-        return response()->json([
-            'success' => true,
-            'message' => 'DV request has been rejected successfully.',
-            'data' => [
-                'id'         => $dvRequest->id,
-                'status'     => 'Incoming-TEV_rejected',
-                'remarks'    => $remarks,
-            ]
-        ], 200);
-
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        \Log::error('DV Request not found: ' . $e->getMessage());
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'DV request not found.'
-        ], 404);
-
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        \Log::error('Validation error: ' . json_encode($e->errors()));
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Validation failed: ' . implode(', ', $e->errors()['remarks'] ?? ['Invalid input'])
-        ], 422);
-
-    } catch (\Exception $e) {
-        \Log::error('Error rejecting TEV DV request: ' . $e->getMessage());
-        \Log::error('Stack trace: ' . $e->getTraceAsString());
-
-        return response()->json([
-            'success' => false,
-            'message' => 'An error occurred while rejecting the DV request: ' . $e->getMessage()
-        ], 500);
     }
-}
 
-    
+     /**
+     * ✅ SEND REJECTION EMAIL - SendPulse with SMTP fallback
+     */
+    protected function sendRejectionEmail($dvRequest, $rejectionRemarks)
+    {
+        try {
+            $focalPerson = $dvRequest->focalPerson;
+            
+            if (!$focalPerson || empty($focalPerson->email)) {
+                Log::warning('Cannot send rejection email: focal person or email missing', [
+                    'dv_request_id' => $dvRequest->id,
+                    'focal_person_id' => $focalPerson->id ?? 'null'
+                ]);
+                return false;
+            }
+
+            $toEmail = $focalPerson->email;
+            $toName = trim($focalPerson->fname . ' ' . $focalPerson->lname);
+            
+            Log::info('Attempting to send rejection email via SendPulse', [
+                'to_email' => $toEmail,
+                'to_name' => $toName,
+                'dv_request_id' => $dvRequest->id
+            ]);
+
+            // Try SendPulse first
+            if (class_exists(SendPulseServices::class)) {
+                $sendPulseService = new SendPulseServices();
+                $result = $sendPulseService->sendRejectionEmail($toEmail, $toName, $dvRequest, $rejectionRemarks);
+                
+                if ($result) {
+                    Log::info('SendPulse rejection email sent successfully', [
+                        'dv_request_id' => $dvRequest->id,
+                        'to_email' => $toEmail
+                    ]);
+                    return true;
+                }
+            }
+
+            // Fallback to SMTP
+            return $this->sendFallbackEmail($toEmail, $toName, $dvRequest, $rejectionRemarks);
+            
+        } catch (\Exception $e) {
+            Log::error('SendPulse rejection email failed: ' . $e->getMessage(), [
+                'dv_request_id' => $dvRequest->id,
+                'exception' => $e->getTraceAsString()
+            ]);
+            
+            // Try fallback
+            return $this->sendFallbackEmail($toEmail ?? null, $toName ?? null, $dvRequest, $rejectionRemarks);
+        }
+    }
+
+    /**
+     * ✅ FALLBACK EMAIL - Using Laravel SMTP
+     */
+    protected function sendFallbackEmail($toEmail, $toName, $dvRequest, $rejectionRemarks)
+    {
+        try {
+            if (!$toEmail) {
+                return false;
+            }
+
+            Log::info('Using fallback SMTP email');
+            
+            $subject = "DV Request Rejected - Incoming-TEV - " . ($dvRequest->accounting_control_number ?? 'Pending-CN');
+            $htmlContent = view('emails.dv_rejected', [
+                'focalPerson' => $dvRequest->focalPerson,
+                'dvRequest' => $dvRequest,
+                'rejectionRemarks' => $rejectionRemarks,
+                'rejectedAt' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'rejectedBy' => auth()->user()->name ?? 'Incoming-TEV User',
+                'department' => 'Incoming-TEV'
+            ])->render();
+
+            Mail::send([], [], function ($message) use ($toEmail, $toName, $subject, $htmlContent) {
+                $message->to($toEmail, $toName)
+                       ->subject($subject)
+                       ->from(config('mail.from.address'), config('mail.from.name'))
+                       ->html($htmlContent);
+            });
+
+            Log::info('Fallback SMTP email sent successfully', ['to' => $toEmail]);
+            return true;
+            
+        } catch (\Exception $e) {
+            Log::error('Fallback SMTP also failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+
+
     public function redirectToFirstPending()
 {
     $currentUserId = auth()->id();
     $lockDuration = now()->subMinutes(10);
 
-    // Get all pending GIP requests
+    // Get all pending TEV requests
     $pendingRequests = DvRequest::whereHas('program', fn($q) => 
                                 $q->where('prcode', 'TEV')) 
                             ->whereIn('status', ['IMSD_verified', 'Incoming-TEV_in_process','Incoming-TEV_received'])
@@ -781,7 +895,7 @@ public function startProcessing(Request $request, $id)
                 ]);
 
             } catch (\Exception $e) {
-                \Log::error('Failed to save Incoming-GIP verification history', [
+                \Log::error('Failed to save Incoming-TEV verification history', [
                     'dv_request_id' => $dvRequest->id ?? null,
                     'step' => $step,
                     'error' => $e->getMessage(),

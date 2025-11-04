@@ -1,6 +1,6 @@
 import Chart from "chart.js/auto";
-
-
+    
+/*
 const ctxProgram = document.getElementById("requestsPerProgram");
 if (ctxProgram) {
     new Chart(ctxProgram, {
@@ -61,3 +61,4 @@ if (ctxTrend) {
         },
     });
 }
+*/

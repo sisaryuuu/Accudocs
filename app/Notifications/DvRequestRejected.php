@@ -35,7 +35,7 @@ class DvRequestRejected extends Notification implements ShouldQueue
         return (new MailMessage)
             ->subject('DV Request Rejected - ' . $controlNumber)
             ->greeting('Hello ' . $notifiable->fname . '!')
-            ->line('Your DV Request has been **rejected by IMSD**.')
+            ->line('Your DV Request has been Rejected.')
             ->line('**Request Details:**')
             ->line('- **Control Number:** ' . $controlNumber)
             ->line('- **Program:** ' . ($this->dvRequest->program->prcode ?? 'N/A'))
@@ -43,11 +43,10 @@ class DvRequestRejected extends Notification implements ShouldQueue
             ->line('- **Rejection Date:** ' . now()->timezone('Asia/Manila')->format('M d, Y h:i A'))
             ->line('**Rejection Remarks:**')
             ->line($this->rejectionRemarks)
-            ->action('View Request Details', url('/focal/dv-requests/' . $this->dvRequest->id))
+            ->action('View Request Details', url('/FocalPerson/dvrequest/logs/' . $this->dvRequest->id))
             ->line('Please review the remarks and resubmit your request with the necessary corrections.')
-            ->salutation('Best regards, IMSD Team - ACCUDOCS DOLE XI');
+            ->salutation('Best regards, ACCUDOCS DOLE XI');
     }
-
     public function toArray($notifiable): array
     {
         return [

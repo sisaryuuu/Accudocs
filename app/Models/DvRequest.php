@@ -125,6 +125,12 @@ public function modeOfPaymentsWithDetails()
         return $this->belongsTo(AccountingUnit::class, 'accountingunit_id');
     }
 
+
+    public function verificationHistories()
+{
+    return $this->hasMany(BudgetObligationHistory::class, 'dv_request_id');
+}
+
      public function regionalDirectorHistory()
     {
         return $this->hasMany(RegionalDirectorApprovedHistory::class);

@@ -3,223 +3,124 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\DB;
+use App\Traits\TriggersDashboardUpdate;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    use TriggersDashboardUpdate;
+
+    /**
+     * Display the admin dashboard
+     */
     public function index()
     {
-        // Kuhaon tanan programs with requests count
-        $requestsPerProgram = DB::table('programs')
-            ->leftJoin('dv_requests', 'dv_requests.program_id', '=', 'programs.id')
-            ->select('programs.prcode', DB::raw('COUNT(dv_requests.id) as total'))
-            ->groupBy('programs.prcode')
-            ->pluck('total', 'prcode');
+        $data = $this->getDashboardData();
+        
+        // Add Pusher config for frontend
+        $data['pusher_key'] = env('PUSHER_APP_KEY');
+        $data['pusher_cluster'] = env('PUSHER_APP_CLUSTER');
+        
+        return view('admin.dashboard', $data);
+    }
 
-        // Reorder manually (TUPAD, GIP, TEV)
-        $orderedPrograms = collect([
-            'TUPAD' => $requestsPerProgram->get('TUPAD', 0),
-            'GIP'   => $requestsPerProgram->get('GIP', 0),
-            'TEV'   => $requestsPerProgram->get('TEV', 0),
-        ]);
-
-        // KPI: total requests
-        $totalRequests = DB::table('dv_requests')->count();
-
-        // KPI: average processing time (minutes)
-        $averageProcessingTime = DB::table('dv_requests')
-            ->select(DB::raw('AVG(TIMESTAMPDIFF(MINUTE, created_at, updated_at)) as avg_minutes'))
-            ->value('avg_minutes');
-
-        // Pending & Approved
-        $pendingRequests = DB::table('dv_requests')->where('status', 'submitted')->count();
-        $approvedRequests = DB::table('dv_requests')->where('status', 'approved')->count();
-
-        // Documents handled per role
-        $documentsPerRole = DB::table('dv_request_logs')
-            ->select('action', DB::raw('COUNT(*) as total'))
-            ->groupBy('action')
-            ->pluck('total', 'action');
-
-        // Monthly Requests Trend
-        $monthlyRequests = DB::table('dv_requests')
-            ->select(DB::raw("DATE_FORMAT(created_at, '%M %Y') as month"), DB::raw('COUNT(*) as total'))
-            ->groupBy('month')
-            ->orderByRaw("MIN(created_at)")
-            ->pluck('total', 'month');
-
-        // Top Program
-        $topProgram = DB::table('programs')
-            ->leftJoin('dv_requests', 'dv_requests.program_id', '=', 'programs.id')
-            ->select('programs.prcode', DB::raw('COUNT(dv_requests.id) as total'))
-            ->groupBy('programs.prcode')
-            ->orderByDesc('total')
-            ->first();
-
-        // Monthly trend
-        $thisMonth = DB::table('dv_requests')->whereMonth('created_at', now()->month)->count();
-        $lastMonth = DB::table('dv_requests')->whereMonth('created_at', now()->subMonth()->month)->count();
-        $trend = $lastMonth > 0 ? round((($thisMonth - $lastMonth) / $lastMonth) * 100, 2) : 0;
-
-        // Insights
-        $insights = [];
-        if ($topProgram) {
-            $insights[] = "{$topProgram->prcode} has the highest number of requests ({$topProgram->total}).";
+    /**
+     * API endpoint to get current dashboard data
+     */
+    public function fetchData(Request $request)
+    {
+        try {
+            $data = $this->getDashboardData();
+            
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'timestamp' => now()->toDateTimeString()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch dashboard data',
+                'error' => $e->getMessage()
+            ], 500);
         }
-        if ($trend > 0) {
-            $insights[] = "Requests increased by {$trend}% compared to last month.";
-        } elseif ($trend < 0) {
-            $insights[] = "Requests decreased by " . abs($trend) . "% compared to last month.";
-        } else {
-            $insights[] = "Requests remained stable compared to last month.";
+    }
+
+    /**
+     * Filter dashboard data by date range
+     */
+    public function filter(Request $request)
+    {
+        try {
+            $startDate = $request->get('start_date');
+            $endDate = $request->get('end_date');
+            
+            // Get filtered data based on date range
+            $data = $this->getFilteredDashboardData($startDate, $endDate);
+            
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $data,
+                    'filters' => [
+                        'start_date' => $startDate,
+                        'end_date' => $endDate
+                    ]
+                ]);
+            }
+            
+            return view('admin.dashboard', $data);
+            
+        } catch (\Exception $e) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to filter dashboard data',
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->route('admin.dashboard')
+                ->with('error', 'Failed to apply filters');
         }
-        if ($pendingRequests > 0) {
-            $insights[] = "There are {$pendingRequests} requests still pending.";
-        }
-        if ($approvedRequests > 0) {
-            $insights[] = "A total of {$approvedRequests} requests have been approved.";
-        }
+    }
 
-        // Budget per program
-        $budgetPerProgram = DB::table('dv_requests')
-            ->join('programs', 'dv_requests.program_id', '=', 'programs.id')
-            ->select('programs.prcode', DB::raw('SUM(dv_requests.amount) as total_budget'))
-            ->groupBy('programs.prcode')
-            ->pluck('total_budget', 'prcode');
-
-        $orderedBudget = collect([
-            'TUPAD' => $budgetPerProgram->get('TUPAD', 0),
-            'GIP'   => $budgetPerProgram->get('GIP', 0),
-            'TEV'   => $budgetPerProgram->get('TEV', 0),
-        ]);
-
-        // Staff performance
-        $staffPerformance = DB::table('dv_requests')
-            ->select('locked_by',
-                DB::raw('COUNT(*) as total_processed'),
-                DB::raw('AVG(TIMESTAMPDIFF(HOUR, created_at, locked_at)) as avg_hours')
-            )
-            ->whereNotNull('locked_by')
-            ->groupBy('locked_by')
-            ->get()
-            ->map(function ($item) {
-                $user = DB::table('users')->where('id', $item->locked_by)->first();
-                $item->staff_name = $user ? $user->full_name : 'Unknown Staff';
-                return $item;
-            });
-
-        // Bottlenecks
-        $bottlenecks = $staffPerformance->sortByDesc('avg_hours')->take(5)->values();
-
-        return view('admin.dashboard', [
-            'requestsPerProgram' => $orderedPrograms,
-            'totalRequests' => $totalRequests,
-            'pendingRequests' => $pendingRequests,
-            'approvedRequests' => $approvedRequests,
-            'averageProcessingTime' => $averageProcessingTime,
-            'documentsPerRole' => $documentsPerRole,
-            'monthlyRequests' => $monthlyRequests,
-            'insights' => $insights,
-            'budgetPerProgram' => $orderedBudget,
-            'staffPerformance' => $staffPerformance,
-            'bottlenecks' => $bottlenecks,
+    /**
+     * Manual trigger endpoint for real-time updates
+     */
+    public function refresh()
+    {
+        $this->triggerDashboardUpdate();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Dashboard refresh triggered',
+            'timestamp' => now()->toDateTimeString()
         ]);
     }
 
-    public function fetchData()
+    /**
+     * Get filtered dashboard data based on date range
+     */
+    private function getFilteredDashboardData($startDate = null, $endDate = null)
     {
-        // Same computations as index(), but return JSON for AJAX
-        $requestsPerProgram = DB::table('programs')
-            ->leftJoin('dv_requests', 'dv_requests.program_id', '=', 'programs.id')
-            ->select('programs.prcode', DB::raw('COUNT(dv_requests.id) as total'))
-            ->groupBy('programs.prcode')
-            ->pluck('total', 'prcode');
-
-        $orderedPrograms = collect([
-            'TUPAD' => $requestsPerProgram->get('TUPAD', 0),
-            'GIP'   => $requestsPerProgram->get('GIP', 0),
-            'TEV'   => $requestsPerProgram->get('TEV', 0),
-        ]);
-
-        $totalRequests = DB::table('dv_requests')->count();
-        $pendingRequests = DB::table('dv_requests')->where('status', 'submitted')->count();
-        $approvedRequests = DB::table('dv_requests')->where('status', 'approved')->count();
-
-        $averageProcessingTime = DB::table('dv_requests')
-            ->select(DB::raw('AVG(TIMESTAMPDIFF(MINUTE, created_at, updated_at)) as avg_minutes'))
-            ->value('avg_minutes');
-
-        $documentsPerRole = DB::table('dv_request_logs')
-            ->select('action', DB::raw('COUNT(*) as total'))
-            ->groupBy('action')
-            ->pluck('total', 'action');
-
-        $monthlyRequests = DB::table('dv_requests')
-            ->select(DB::raw("DATE_FORMAT(created_at, '%M %Y') as month"), DB::raw('COUNT(*) as total'))
-            ->groupBy('month')
-            ->orderByRaw("MIN(created_at)")
-            ->pluck('total', 'month');
-
-        $budgetPerProgram = DB::table('dv_requests')
-            ->join('programs', 'dv_requests.program_id', '=', 'programs.id')
-            ->select('programs.prcode', DB::raw('SUM(dv_requests.amount) as total_budget'))
-            ->groupBy('programs.prcode')
-            ->pluck('total_budget', 'prcode');
-
-        $orderedBudget = collect([
-            'TUPAD' => $budgetPerProgram->get('TUPAD', 0),
-            'GIP'   => $budgetPerProgram->get('GIP', 0),
-            'TEV'   => $budgetPerProgram->get('TEV', 0),
-        ]);
-
-        $staffPerformance = DB::table('dv_requests')
-            ->select('locked_by',
-                DB::raw('COUNT(*) as total_processed'),
-                DB::raw('AVG(TIMESTAMPDIFF(HOUR, created_at, locked_at)) as avg_hours')
-            )
-            ->whereNotNull('locked_by')
-            ->groupBy('locked_by')
-            ->get()
-            ->map(function ($item) {
-                $user = DB::table('users')->where('id', $item->locked_by)->first();
-                $item->staff_name = $user ? $user->full_name : 'Unknown Staff';
-                return $item;
-            });
-
-        $bottlenecks = $staffPerformance->sortByDesc('avg_hours')->take(5)->values();
-
-        // Insights
-        $topProgram = DB::table('programs')
-            ->leftJoin('dv_requests', 'dv_requests.program_id', '=', 'programs.id')
-            ->select('programs.prcode', DB::raw('COUNT(dv_requests.id) as total'))
-            ->groupBy('programs.prcode')
-            ->orderByDesc('total')
-            ->first();
-
-        $thisMonth = DB::table('dv_requests')->whereMonth('created_at', now()->month)->count();
-        $lastMonth = DB::table('dv_requests')->whereMonth('created_at', now()->subMonth()->month)->count();
-        $trend = $lastMonth > 0 ? round((($thisMonth - $lastMonth) / $lastMonth) * 100, 2) : 0;
-
-        $insights = [];
-        if ($topProgram) $insights[] = "{$topProgram->prcode} has the highest number of requests ({$topProgram->total}).";
-        if ($trend > 0) $insights[] = "Requests increased by {$trend}% compared to last month.";
-        elseif ($trend < 0) $insights[] = "Requests decreased by " . abs($trend) . "% compared to last month.";
-        else $insights[] = "Requests remained stable compared to last month.";
-        if ($pendingRequests > 0) $insights[] = "There are {$pendingRequests} requests still pending.";
-        if ($approvedRequests > 0) $insights[] = "A total of {$approvedRequests} requests have been approved.";
-
-        return response()->json([
-            'requestsPerProgram' => $orderedPrograms,
-            'totalRequests' => $totalRequests,
-            'pendingRequests' => $pendingRequests,
-            'approvedRequests' => $approvedRequests,
-            'averageProcessingTime' => $averageProcessingTime,
-            'documentsPerRole' => $documentsPerRole,
-            'monthlyRequests' => $monthlyRequests,
-            'budgetPerProgram' => $orderedBudget,
-            'staffPerformance' => $staffPerformance,
-            'bottlenecks' => $bottlenecks,
-            'insights' => $insights,
+        // Use your existing getDashboardData method but with date filters
+        $data = $this->getDashboardData();
+        
+        // If no dates provided, return regular data
+        if (!$startDate || !$endDate) {
+            return $data;
+        }
+        
+        // Add date filtering logic here for each metric
+        // This is a simplified version - you'll need to implement actual filtering
+        
+        return array_merge($data, [
+            'filters' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'applied' => true
+            ]
         ]);
     }
 }

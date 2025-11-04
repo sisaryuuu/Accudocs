@@ -90,14 +90,27 @@
                     <div class="text-sm text-gray-600">
                         <span id="selectedCount">0</span> DVs selected
                     </div>
+                    <div id="selectedStatusInfo" class="text-sm text-gray-500 hidden">
+                        <!-- Will show status breakdown of selected DVs -->
+                    </div>
                 </div>
                 <div class="flex space-x-3">
-                    <button id="bulkReceiveBtn" class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
+                    <!-- Bulk Receive Button (for RANCA_validated DVs) -->
+                    <button id="bulkReceiveBtn" class="hidden inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                         Bulk Receive
                     </button>
+                    
+                    <!-- Bulk Sign & Approve Button (for Regional_Director_received DVs) -->
+                    <button id="bulkSignApproveBtn" class="hidden inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                        </svg>
+                        Bulk Sign & Approve
+                    </button>
+                    
                     <button id="clearSelectionBtn" class="inline-flex items-center px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
                         Clear Selection
                     </button>
@@ -146,12 +159,12 @@
                             @foreach($pendingDvs as $dv)
                             <tr class="hover:bg-gray-50 transition-colors duration-150 group" data-dv-id="{{ $dv->id }}" data-dv-status="{{ $dv->status }}">
                                <td class="px-6 py-6 whitespace-nowrap text-center">
-                                    @if($dv->status === 'RANCA_validated')
-                                        <!-- Show checkbox only for awaiting receipt -->
+                                    @if(in_array($dv->status, ['RANCA_validated', 'Regional_Director_received']))
+                                        <!-- Show checkbox for both receivable and approvable DVs -->
                                         <input type="checkbox" name="dvCheckbox" value="{{ $dv->id }}" 
                                             class="dv-checkbox w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                                     @else
-                                        <!-- Show checkmark icon for received DVs -->
+                                        <!-- Show checkmark icon for completed DVs -->
                                         <div class="w-5 h-5 flex items-center justify-center text-green-500">
                                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
@@ -316,7 +329,7 @@
 
 <!-- QR Modal -->
 <div id="qrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl p-8 max-w-2xl w-full mx-auto"> <!-- Changed max-w-md to max-w-2xl -->
+    <div class="bg-white rounded-2xl p-8 max-w-2xl w-full mx-auto">
         <div class="flex justify-between items-center mb-6">
             <h3 class="text-2xl font-bold text-gray-900">QR Code Details</h3>
             <button onclick="closeQRModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
@@ -332,30 +345,33 @@
     </div>
 </div>
 
-<!-- Bulk Receive Confirmation Modal -->
-<div id="bulkReceiveModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-    <div class="bg-white rounded-2xl p-8 max-w-lg w-full mx-4">
+<!-- Bulk Action Modal -->
+<div id="bulkActionModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
         <div class="flex justify-between items-center mb-6">
-            <h3 class="text-2xl font-bold text-gray-900">Confirm Bulk Receive</h3>
-            <button onclick="closeBulkReceiveModal()" class="text-gray-400 hover:text-gray-600">
+            <h3 id="bulkActionModalTitle" class="text-2xl font-bold text-gray-900">Confirm Bulk Action</h3>
+            <button onclick="closeBulkActionModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                 </svg>
             </button>
         </div>
-        <div class="mb-6">
-            <p class="text-gray-700 mb-4">You are about to receive the following DVs:</p>
-            <div id="bulkReceiveList" class="max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <div class="mb-6 flex-1 overflow-hidden">
+            <p id="bulkActionModalMessage" class="text-gray-700 mb-4">You are about to process the following DVs:</p>
+            <div id="bulkActionList" class="h-64 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <!-- Selected DVs will be listed here -->
             </div>
-            <p class="text-sm text-gray-600 mt-4">This action will mark these DVs as received and move them to the next stage.</p>
+            <p class="text-sm text-gray-600 mt-4">
+                <span class="font-semibold">Note:</span> Only DVs with appropriate status will be processed. 
+                Grayed-out items are not eligible for this action.
+            </p>
         </div>
-        <div class="flex justify-end space-x-3">
-            <button onclick="closeBulkReceiveModal()" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors duration-200">
+        <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+            <button onclick="closeBulkActionModal()" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors duration-200">
                 Cancel
             </button>
-            <button id="confirmBulkReceiveBtn" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200">
-                Confirm Receive
+            <button id="confirmBulkActionBtn" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200">
+                Confirm Action
             </button>
         </div>
     </div>
@@ -371,6 +387,7 @@
         <p class="text-gray-600" id="loadingMessage">Please wait while we process your request...</p>
     </div>
 </div>
+
 <!-- Add Pusher Script -->
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 
@@ -384,7 +401,6 @@ let selectedDVs = new Set();
 // ========== PUSHER REAL-TIME UPDATES ==========
 function initializePusher() {
     try {
-        // Check if Pusher is available
         if (typeof Pusher === 'undefined') {
             console.error('[Pusher] Pusher library not loaded. Please include pusher.min.js');
             updateRealtimeStatus(false);
@@ -393,7 +409,6 @@ function initializePusher() {
         
         console.log('[Pusher] Initializing...');
         
-        // Use Laravel configuration
         pusher = new Pusher('{{ config('broadcasting.connections.pusher.key') }}', {
             cluster: '{{ config('broadcasting.connections.pusher.options.cluster') }}',
             encrypted: true,
@@ -402,7 +417,6 @@ function initializePusher() {
 
         console.log('[Pusher] ✓ Instance created with Laravel config');
 
-        // Set up connection listeners
         pusher.connection.bind('connecting', function() {
             console.log('[Pusher] Connecting...');
             updateRealtimeStatus(false);
@@ -423,7 +437,6 @@ function initializePusher() {
             updateRealtimeStatus(false);
         });
 
-        // Subscribe to regional director dashboard channel
         rdChannel = pusher.subscribe('regional-director-dashboard');
         
         console.log('[Channel] Subscribing to regional-director-dashboard');
@@ -436,34 +449,34 @@ function initializePusher() {
             console.error('[Channel] Subscription error:', status);
         });
         
-        // Listen for DV status updates
         rdChannel.bind('dv-status-updated', function(data) {
             console.log('[Event] DV Status Updated:', data);
             handleDvStatusUpdate(data);
         });
 
-        // Listen for new DV added
         rdChannel.bind('new-dv-added', function(data) {
             console.log('[Event] New DV Added:', data);
             handleNewDvAdded(data);
         });
 
-        // Listen for DV removed (approved/moved)
         rdChannel.bind('dv-removed', function(data) {
             console.log('[Event] DV Removed:', data);
             handleDvRemoved(data);
         });
 
-        // Listen for stats updates
         rdChannel.bind('stats-updated', function(data) {
             console.log('[Event] Stats Updated:', data);
             updateStatisticsDisplay(data.stats);
         });
 
-        // Listen for bulk receive updates
         rdChannel.bind('bulk-receive-completed', function(data) {
             console.log('[Event] Bulk Receive Completed:', data);
             handleBulkReceiveCompleted(data);
+        });
+
+        rdChannel.bind('bulk-sign-approve-completed', function(data) {
+            console.log('[Event] Bulk Sign & Approve Completed:', data);
+            handleBulkSignApproveCompleted(data);
         });
 
     } catch (error) {
@@ -472,7 +485,6 @@ function initializePusher() {
     }
 }
 
-// Update real-time status indicator
 function updateRealtimeStatus(isConnected) {
     const statusElement = document.getElementById('realtimeStatus');
     
@@ -497,23 +509,18 @@ function updateRealtimeStatus(isConnected) {
 }
 
 // ========== PUSHER EVENT HANDLERS ==========
-
-// Handle individual DV status updates
 function handleDvStatusUpdate(data) {
     console.log('[Handler] Processing status update for DV:', data.dv_id);
     
     const dvRow = document.querySelector(`tr[data-dv-id="${data.dv_id}"]`);
     
     if (dvRow) {
-        // Update the row with new status
         updateDvRowInTable(data.dv_id, data.new_status);
         
-        // Remove checkbox if received
         if (data.new_status === 'Regional_Director_received') {
             removeCheckboxForReceivedDV(data.dv_id);
         }
         
-        // Show toast notification for individual updates (optional)
         if (!data.is_bulk_action) {
             showToast(`DV ${data.dv_number} status updated to ${data.new_status.replace(/_/g, ' ')}`, 'success');
         }
@@ -523,34 +530,27 @@ function handleDvStatusUpdate(data) {
     updateTableHeader();
 }
 
-// Handle new DV added to RD queue
 function handleNewDvAdded(data) {
     console.log('[Handler] New DV added:', data.dv.dv_number);
     
-    // Check if DV already exists
     const existingRow = document.querySelector(`tr[data-dv-id="${data.dv.id}"]`);
     if (existingRow) {
         console.log('[Handler] DV already exists in table, skipping');
         return;
     }
     
-    // You can implement adding new DV to table here if needed
     showToast(`New DV ${data.dv.dv_number} ready for review`, 'info');
     updateLastUpdatedTime();
 }
 
-// Handle DV removed from queue
 function handleDvRemoved(data) {
     console.log('[Handler] DV removed:', data.dv_id);
     
     const dvRow = document.querySelector(`tr[data-dv-id="${data.dv_id}"]`);
     if (dvRow) {
-        // For bulk actions, we don't remove the row - we just update the status
         if (data.reason === 'bulk_received') {
-            // The row stays but status is updated via handleDvStatusUpdate
             console.log('DV marked as received via bulk action, keeping row');
         } else {
-            // Remove with animation for other removal reasons
             dvRow.style.transition = 'all 0.5s ease-out';
             dvRow.style.opacity = '0';
             dvRow.style.transform = 'translateX(-100%)';
@@ -569,34 +569,67 @@ function handleDvRemoved(data) {
     updateLastUpdatedTime();
 }
 
-// Handle bulk receive completion
 function handleBulkReceiveCompleted(data) {
     console.log('[Handler] Bulk receive completed:', data);
     
-    // Update the UI for all successfully processed DVs
     data.successful_dvs.forEach(dv => {
         updateDvRowInTable(dv.dv_id, dv.new_status);
-        // Remove checkbox for received DVs
         removeCheckboxForReceivedDV(dv.dv_id);
     });
     
-    // Update statistics
     updateStatistics();
     
-    // Show final success message
     let message = `Bulk receive completed: ${data.successful_count} DVs received`;
     if (data.failed_count > 0) {
         message += `, ${data.failed_count} failed`;
     }
     showToast(message, data.failed_count > 0 ? 'warning' : 'success');
     
-    // Clear selection and hide loading
     clearBulkSelection();
     const loadingOverlay = document.getElementById('loadingOverlay');
     if (loadingOverlay) {
         loadingOverlay.classList.add('hidden');
     }
-    closeBulkReceiveModal();
+    closeBulkActionModal();
+    
+    updateLastUpdatedTime();
+    updateTableHeader();
+}
+
+function handleBulkSignApproveCompleted(data) {
+    console.log('[Handler] Bulk sign & approve completed:', data);
+    
+    data.successful_dvs.forEach(dv => {
+        // Remove the DV row from the table since it's completed and forwarded to cashier
+        const dvRow = document.querySelector(`tr[data-dv-id="${dv.dv_id}"]`);
+        if (dvRow) {
+            dvRow.style.transition = 'all 0.5s ease-out';
+            dvRow.style.opacity = '0';
+            dvRow.style.transform = 'translateX(-100%)';
+            
+            setTimeout(() => {
+                dvRow.remove();
+                updateStatistics();
+                checkEmptyState();
+                updateTableHeader();
+            }, 500);
+        }
+    });
+    
+    updateStatistics();
+    
+    let message = `Bulk sign & approve completed: ${data.successful_count} DVs approved`;
+    if (data.failed_count > 0) {
+        message += `, ${data.failed_count} failed`;
+    }
+    showToast(message, data.failed_count > 0 ? 'warning' : 'success');
+    
+    clearBulkSelection();
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
+    closeBulkActionModal();
     
     updateLastUpdatedTime();
     updateTableHeader();
@@ -609,21 +642,87 @@ function initializeBulkActions() {
     const dvCheckboxes = document.querySelectorAll('.dv-checkbox');
     const selectedCount = document.getElementById('selectedCount');
     const bulkReceiveBtn = document.getElementById('bulkReceiveBtn');
+    const bulkSignApproveBtn = document.getElementById('bulkSignApproveBtn');
     const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+    const statusInfo = document.getElementById('selectedStatusInfo');
     
-    // Show/hide bulk actions section based on selection
     function updateBulkSectionVisibility() {
         if (selectedDVs.size > 0) {
             bulkSection.classList.remove('hidden');
+            updateBulkButtonsVisibility();
+            updateSelectedStatusInfo();
         } else {
             bulkSection.classList.add('hidden');
+            bulkReceiveBtn.classList.add('hidden');
+            bulkSignApproveBtn.classList.add('hidden');
         }
         if (selectedCount) {
             selectedCount.textContent = selectedDVs.size;
         }
     }
     
-    // Handle individual checkbox changes
+    function updateBulkButtonsVisibility() {
+        let hasReceivableDVs = false;
+        let hasApprovableDVs = false;
+        
+        selectedDVs.forEach(dvId => {
+            const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
+            if (dvRow) {
+                const status = dvRow.getAttribute('data-dv-status');
+                if (status === 'RANCA_validated') {
+                    hasReceivableDVs = true;
+                } else if (status === 'Regional_Director_received') {
+                    hasApprovableDVs = true;
+                }
+            }
+        });
+        
+        // Show bulk receive button if any selected DVs are receivable
+        if (hasReceivableDVs) {
+            bulkReceiveBtn.classList.remove('hidden');
+        } else {
+            bulkReceiveBtn.classList.add('hidden');
+        }
+        
+        // Show bulk sign & approve button if any selected DVs are approvable
+        if (hasApprovableDVs) {
+            bulkSignApproveBtn.classList.remove('hidden');
+        } else {
+            bulkSignApproveBtn.classList.add('hidden');
+        }
+    }
+    
+    function updateSelectedStatusInfo() {
+        let receivableCount = 0;
+        let approvableCount = 0;
+        
+        selectedDVs.forEach(dvId => {
+            const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
+            if (dvRow) {
+                const status = dvRow.getAttribute('data-dv-status');
+                if (status === 'RANCA_validated') {
+                    receivableCount++;
+                } else if (status === 'Regional_Director_received') {
+                    approvableCount++;
+                }
+            }
+        });
+        
+        let infoText = '';
+        if (receivableCount > 0 && approvableCount > 0) {
+            infoText = `${receivableCount} to receive, ${approvableCount} to approve`;
+        } else if (receivableCount > 0) {
+            infoText = `${receivableCount} ready to receive`;
+        } else if (approvableCount > 0) {
+            infoText = `${approvableCount} ready to approve`;
+        }
+        
+        if (statusInfo) {
+            statusInfo.textContent = infoText;
+            statusInfo.classList.toggle('hidden', !infoText);
+        }
+    }
+    
     dvCheckboxes.forEach(checkbox => {
         checkbox.addEventListener('change', function() {
             if (this.checked) {
@@ -638,7 +737,6 @@ function initializeBulkActions() {
         });
     });
     
-    // Handle select all checkbox
     if (selectAllCheckbox) {
         selectAllCheckbox.addEventListener('change', function() {
             const isChecked = this.checked;
@@ -655,16 +753,22 @@ function initializeBulkActions() {
         });
     }
     
-    // Handle bulk receive button
     if (bulkReceiveBtn) {
         bulkReceiveBtn.addEventListener('click', function() {
             if (selectedDVs.size > 0) {
-                showBulkReceiveModal();
+                showBulkActionModal('receive');
             }
         });
     }
     
-    // Handle clear selection button
+    if (bulkSignApproveBtn) {
+        bulkSignApproveBtn.addEventListener('click', function() {
+            if (selectedDVs.size > 0) {
+                showBulkActionModal('sign_approve');
+            }
+        });
+    }
+    
     if (clearSelectionBtn) {
         clearSelectionBtn.addEventListener('click', function() {
             selectedDVs.clear();
@@ -678,53 +782,92 @@ function initializeBulkActions() {
         });
     }
     
-    // Initialize with hidden section
     updateBulkSectionVisibility();
 }
 
-// Show bulk receive confirmation modal
-function showBulkReceiveModal() {
-    const modal = document.getElementById('bulkReceiveModal');
-    const listContainer = document.getElementById('bulkReceiveList');
+function showBulkActionModal(actionType) {
+    const modal = document.getElementById('bulkActionModal');
+    const modalTitle = document.getElementById('bulkActionModalTitle');
+    const modalMessage = document.getElementById('bulkActionModalMessage');
+    const listContainer = document.getElementById('bulkActionList');
+    const confirmBtn = document.getElementById('confirmBulkActionBtn');
     
-    if (!modal || !listContainer) return;
+    if (!modal || !modalTitle || !modalMessage || !listContainer || !confirmBtn) return;
     
-    // Clear previous list
+    const isReceive = actionType === 'receive';
+    const isSignApprove = actionType === 'sign_approve';
+    const actionText = isReceive ? 'receive' : 'sign and approve';
+    const actionTextCapitalized = isReceive ? 'Receive' : 'Sign & Approve';
+    
+    modalTitle.textContent = `Confirm Bulk ${actionTextCapitalized}`;
+    modalMessage.textContent = `You are about to ${actionText} the following DVs:`;
+    
     listContainer.innerHTML = '';
     
-    // Add selected DVs to the list
+    let actionDVs = [];
+    let otherDVs = [];
+    
     selectedDVs.forEach(dvId => {
         const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
         if (dvRow) {
             const dvNumber = dvRow.querySelector('td:nth-child(2) .text-base')?.textContent || 'N/A';
             const payee = dvRow.querySelector('td:nth-child(3) .text-base')?.textContent || 'N/A';
             const amount = dvRow.querySelector('td:nth-child(4) .text-xl')?.textContent || 'N/A';
+            const status = dvRow.getAttribute('data-dv-status');
+            
+            const isActionable = isReceive ? 
+                status === 'RANCA_validated' : 
+                status === 'Regional_Director_received';
             
             const listItem = document.createElement('div');
-            listItem.className = 'flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0';
+            listItem.className = `flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0 ${!isActionable ? 'opacity-50' : ''}`;
             listItem.innerHTML = `
                 <div>
                     <div class="font-medium text-gray-900">${dvNumber}</div>
                     <div class="text-sm text-gray-600">${payee}</div>
+                    <div class="text-xs text-gray-500 mt-1">Status: ${status.replace(/_/g, ' ')}</div>
                 </div>
-                <div class="font-semibold text-green-600">${amount}</div>
+                <div class="text-right">
+                    <div class="font-semibold text-green-600">${amount}</div>
+                    ${!isActionable ? '<div class="text-xs text-red-500 mt-1">Not eligible</div>' : ''}
+                </div>
             `;
-            listContainer.appendChild(listItem);
+            
+            if (isActionable) {
+                actionDVs.push({ dvId, listItem });
+            } else {
+                otherDVs.push({ dvId, listItem });
+            }
         }
     });
+    
+    // Show actionable DVs first
+    actionDVs.forEach(item => listContainer.appendChild(item.listItem));
+    otherDVs.forEach(item => listContainer.appendChild(item.listItem));
+    
+    // Update confirm button
+    confirmBtn.textContent = `Confirm ${actionTextCapitalized}`;
+    confirmBtn.onclick = function() {
+        if (actionType === 'receive') {
+            processBulkReceive();
+        } else {
+            processBulkSignApprove();
+        }
+    };
+    
+    // Show/hide confirm button based on whether there are actionable DVs
+    confirmBtn.style.display = actionDVs.length > 0 ? 'block' : 'none';
     
     modal.classList.remove('hidden');
 }
 
-// Close bulk receive modal
-function closeBulkReceiveModal() {
-    const modal = document.getElementById('bulkReceiveModal');
+function closeBulkActionModal() {
+    const modal = document.getElementById('bulkActionModal');
     if (modal) {
         modal.classList.add('hidden');
     }
 }
 
-// Process bulk receive with real-time updates
 async function processBulkReceive() {
     if (selectedDVs.size === 0) return;
     
@@ -739,8 +882,7 @@ async function processBulkReceive() {
     try {
         const dvIds = Array.from(selectedDVs);
         
-        // Send all DVs in one request
-        const response = await fetch('/regional-director/bulk-receive', {
+        const response = await fetch('{{ route("regional.director.bulk-receive") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -758,7 +900,6 @@ async function processBulkReceive() {
         const result = await response.json();
         
         if (result.success) {
-            // The real-time updates will handle the UI changes via Pusher
             loadingMessage.textContent = 'Waiting for real-time updates...';
             console.log('Bulk receive initiated, waiting for Pusher updates');
         } else {
@@ -769,15 +910,62 @@ async function processBulkReceive() {
         console.error('Error in bulk receive:', error);
         showToast('Error processing bulk receive: ' + error.message, 'error');
         
-        // Hide loading overlay on error
         if (loadingOverlay) {
             loadingOverlay.classList.add('hidden');
         }
-        closeBulkReceiveModal();
+        closeBulkActionModal();
     }
 }
 
-// Remove checkbox for received DVs
+async function processBulkSignApprove() {
+    if (selectedDVs.size === 0) return;
+    
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingMessage = document.getElementById('loadingMessage');
+    
+    if (loadingOverlay) {
+        loadingOverlay.classList.remove('hidden');
+        loadingMessage.textContent = 'Processing bulk sign & approve...';
+    }
+    
+    try {
+        const dvIds = Array.from(selectedDVs);
+        
+        const response = await fetch('{{ route("regional.director.bulk-sign-approve") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                dv_ids: dvIds
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            loadingMessage.textContent = 'Waiting for real-time updates...';
+            console.log('Bulk sign & approve initiated, waiting for Pusher updates');
+        } else {
+            throw new Error(result.message || 'Bulk sign & approve failed');
+        }
+        
+    } catch (error) {
+        console.error('Error in bulk sign & approve:', error);
+        showToast('Error processing bulk sign & approve: ' + error.message, 'error');
+        
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('hidden');
+        }
+        closeBulkActionModal();
+    }
+}
+
 function removeCheckboxForReceivedDV(dvId) {
     const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
     if (!dvRow) return;
@@ -793,27 +981,22 @@ function removeCheckboxForReceivedDV(dvId) {
         `;
     }
     
-    // Remove from selected DVs if it was selected
     if (selectedDVs.has(dvId.toString())) {
         selectedDVs.delete(dvId.toString());
         updateBulkSectionVisibility();
     }
 }
 
-// Update DV row in table
 function updateDvRowInTable(dvId, newStatus) {
     const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
     if (!dvRow) return;
     
-    // Update the status attribute
     dvRow.setAttribute('data-dv-status', newStatus);
     
-    // Remove checkbox if DV is received
     if (newStatus === 'Regional_Director_received') {
         removeCheckboxForReceivedDV(dvId);
     }
     
-    // Update status badge
     const statusCell = dvRow.querySelector('td:nth-child(7)');
     if (statusCell) {
         const isAwaitingApproval = newStatus === 'Regional_Director_received';
@@ -834,7 +1017,6 @@ function updateDvRowInTable(dvId, newStatus) {
         `;
     }
     
-    // Update action button text
     const actionButton = dvRow.querySelector('td:nth-child(9) a');
     if (actionButton) {
         const buttonText = newStatus === 'Regional_Director_received' ? 'Sign & Approve' : 'Receive DV';
@@ -846,7 +1028,6 @@ function updateDvRowInTable(dvId, newStatus) {
         `;
     }
     
-    // Add animation to show the update
     dvRow.style.transition = 'all 0.3s ease';
     dvRow.style.backgroundColor = '#dbeafe';
     
@@ -855,7 +1036,6 @@ function updateDvRowInTable(dvId, newStatus) {
     }, 1000);
 }
 
-// Clear bulk selection
 function clearBulkSelection() {
     selectedDVs.clear();
     document.querySelectorAll('.dv-checkbox').forEach(cb => {
@@ -866,17 +1046,14 @@ function clearBulkSelection() {
     document.getElementById('bulkActionsSection').classList.add('hidden');
 }
 
-// Update table header based on selectable DVs
 function updateTableHeader() {
     const selectAllHeader = document.querySelector('thead th:nth-child(1)');
     if (!selectAllHeader) return;
     
-    // Count selectable DVs (those with checkboxes)
     const selectableDVs = document.querySelectorAll('.dv-checkbox');
     const receivedDVs = document.querySelectorAll('tr[data-dv-status="Regional_Director_received"]');
     
     if (selectableDVs.length === 0 && receivedDVs.length > 0) {
-        // All DVs are received, show checkmark icon
         selectAllHeader.innerHTML = `
             <div class="flex items-center justify-center">
                 <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
@@ -885,16 +1062,13 @@ function updateTableHeader() {
             </div>
         `;
     } else {
-        // Some DVs are still selectable, show checkbox
         selectAllHeader.innerHTML = `
             <input type="checkbox" id="selectAllDVs" class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
         `;
-        // Re-initialize the select all functionality
         initializeSelectAllCheckbox();
     }
 }
 
-// Re-initialize select all checkbox when header changes
 function initializeSelectAllCheckbox() {
     const selectAllCheckbox = document.getElementById('selectAllDVs');
     if (selectAllCheckbox) {
@@ -935,29 +1109,19 @@ function showQRModal(dvId) {
     }
     
     try {
-        // Find the DV row to get the QR code data directly from the table
         const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
         if (!dvRow) {
             throw new Error('DV row not found');
         }
         
-        // Get the QR code image from the table
         const qrImage = dvRow.querySelector('td:nth-child(8) img');
         if (!qrImage || !qrImage.src) {
             throw new Error('QR code not found in table');
         }
         
         const qrCodeSrc = qrImage.src;
-        
-        // Get the QR code token from the image alt attribute or data attribute
-        const qrCodeToken = qrImage.getAttribute('alt')?.replace('QR Code for DV ', '') || 
-                           dvRow.getAttribute('data-qr-token') || 
-                           'Unknown QR Code';
-
-        // Truncate the QR token for display
-        const displayToken = qrCodeToken.length > 30 
-            ? qrCodeToken.substring(0, 30) + '...' 
-            : qrCodeToken;
+        const qrCodeToken = qrImage.getAttribute('alt')?.replace('QR Code for DV ', '') || 'Unknown QR Code';
+        const displayToken = qrCodeToken.length > 30 ? qrCodeToken.substring(0, 30) + '...' : qrCodeToken;
         
         content.innerHTML = `
             <div class="space-y-4">
@@ -1002,7 +1166,6 @@ function showQRModal(dvId) {
     }
 }
 
-// Add this function to copy QR token to clipboard
 function copyQrToken(token) {
     navigator.clipboard.writeText(token).then(function() {
         showToast('QR token copied to clipboard!', 'success');
@@ -1031,12 +1194,8 @@ function downloadQR() {
     document.body.removeChild(link);
 }
 
-// ========== DV DETAILS FUNCTION ==========
 function showDvDetails(dvId) {
     alert(`Viewing details for DV ID: ${dvId}\n\nThis would typically show detailed information about the disbursement voucher.`);
-    
-    // You can implement a modal or redirect here:
-    // window.location.href = `/dv/${dvId}/details`;
 }
 
 // ========== SEARCH FUNCTIONALITY ==========
@@ -1062,7 +1221,7 @@ function initializeSearch() {
 // ========== STATISTICS FUNCTIONS ==========
 async function updateStatistics() {
     try {
-        const response = await fetch('/regional.director/dashboard/stats');
+        const response = await fetch('{{ route("regional.director.stats") }}');
         const stats = await response.json();
         
         if (stats.success) {
@@ -1095,7 +1254,6 @@ function updateStatisticsDisplay(stats) {
     }
 }
 
-// Update last updated timestamp
 function updateLastUpdatedTime() {
     const now = formatDateTime(new Date());
     
@@ -1110,7 +1268,6 @@ function updateLastUpdatedTime() {
     }
 }
 
-// Check if table is empty and show empty state
 function checkEmptyState() {
     const tableBody = document.getElementById('dvTableBody');
     const rows = tableBody ? tableBody.querySelectorAll('tr') : [];
@@ -1144,11 +1301,11 @@ function initializeModalHandlers() {
         });
     }
     
-    const bulkReceiveModal = document.getElementById('bulkReceiveModal');
-    if (bulkReceiveModal) {
-        bulkReceiveModal.addEventListener('click', function(e) {
+    const bulkActionModal = document.getElementById('bulkActionModal');
+    if (bulkActionModal) {
+        bulkActionModal.addEventListener('click', function(e) {
             if (e.target === this) {
-                closeBulkReceiveModal();
+                closeBulkActionModal();
             }
         });
     }
@@ -1202,7 +1359,6 @@ function formatDateTime(date) {
 }
 
 // ========== EVENT LISTENERS ==========
-// Close modal with Escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         const qrModal = document.getElementById('qrModal');
@@ -1210,14 +1366,13 @@ document.addEventListener('keydown', function(e) {
             closeQRModal();
         }
         
-        const bulkReceiveModal = document.getElementById('bulkReceiveModal');
-        if (bulkReceiveModal && !bulkReceiveModal.classList.contains('hidden')) {
-            closeBulkReceiveModal();
+        const bulkActionModal = document.getElementById('bulkActionModal');
+        if (bulkActionModal && !bulkActionModal.classList.contains('hidden')) {
+            closeBulkActionModal();
         }
     }
 });
 
-// Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
@@ -1229,15 +1384,12 @@ document.addEventListener('keydown', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing dashboard...');
     
-    // Initialize table header first
     updateTableHeader();
     
-    // Check if Pusher is available before initializing
     if (typeof Pusher !== 'undefined') {
         initializePusher();
     } else {
         console.warn('Pusher not available, real-time features disabled');
-        // Show warning status
         const statusElement = document.getElementById('realtimeStatus');
         if (statusElement) {
             statusElement.innerHTML = `
@@ -1247,7 +1399,6 @@ document.addEventListener('DOMContentLoaded', function() {
             statusElement.className = 'flex items-center space-x-2 px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg';
         }
         
-        // Fallback: Poll for updates every 30 seconds
         setInterval(updateStatistics, 30000);
     }
     
@@ -1255,16 +1406,9 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeModalHandlers();
     initializeBulkActions();
     
-    // Set up bulk receive confirmation button
-    const confirmBulkReceiveBtn = document.getElementById('confirmBulkReceiveBtn');
-    if (confirmBulkReceiveBtn) {
-        confirmBulkReceiveBtn.addEventListener('click', processBulkReceive);
-    }
-    
     console.log('Dashboard initialization complete');
 });
 
-// Cleanup on page unload
 window.addEventListener('beforeunload', function() {
     if (pusher) {
         pusher.disconnect();

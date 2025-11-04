@@ -41,6 +41,38 @@
             border-collapse: collapse;
             border-spacing: 0;
         }
+        
+        /* Header specific styles */
+        .header-table td {
+            vertical-align: middle;
+            padding: 8px;
+        }
+        .dole-logo {
+            width: 120px;
+            height: auto;
+            display: block;
+        }
+        .org-info {
+            text-align: center;
+            line-height: 1.5;
+        }
+        .org-info .small-text {
+            font-size: 14px;
+        }
+        .org-info .dept-name {
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .org-info .red-text {
+            font-size: 12px;
+        }
+        .section-header {
+            text-align: center;
+            font-weight: bold;
+            padding: 6px 0;
+            font-size: 11px;
+        }
+        
         @media print {
             body { 
                 margin: 0.3cm;
@@ -69,33 +101,40 @@
 <body>
     <button class="print-button no-print" onclick="window.print()">🖨️ Print ORS</button>
 
-    <!-- First Table - Header -->
-    <table class="compact-table no-bottom-margin tight-table">
-        <tr>
-            <td rowspan="3" style="width: 15%; text-align: center; border: 1px solid #000; padding: 2px 3px;">
-                <img src="{{ asset('storage/logo/DOLE.png') }}" alt="DOLE Logo" style="width: 70px; height: auto;">
-            </td>
-            <td colspan="4" class="center bold" style="border: 1px solid #000; padding: 2px 3px;">
-                Republic of the Philippines<br>
-                DEPARTMENT OF LABOR AND EMPLOYMENT<br>
-                Regional Office No. XI<br>
-                Davao City
-            </td>
-        </tr>
-        <tr>
-            <td colspan="4" class="center bold" style="border: 1px solid #000; padding: 2px 3px;">OBLIGATION REQUEST AND STATUS</td>
-        </tr>
-    </table>
+   <!-- Header Table -->
+<table class="header-table compact-table no-bottom-margin tight-table">
+    <tr>
+        <td style="width: 12%; text-align: left; border: 1px solid #000; border-right: none; padding: 10px;">
+            <img src="{{ asset('storage/logo/DOLE.png') }}" alt="DOLE Logo" class="dole-logo">
+        </td>
+        <td style="width: 88%; border: 1px solid #000; border-left: none; padding: 10px;">
+            <div class="org-info">
+                <span class="small-text">Republic of the Philippines</span><br>
+                <span class="dept-name">DEPARTMENT OF LABOR AND EMPLOYMENT</span><br>
+                <span class="red-text">Regional Office No. XI</span><br>
+                <span class="small-text">Davao City</span>
+            </div>
+        </td>
+    </tr>
+</table>
 
-    <table>
-        
-    </table>
+<!-- Title Section -->
+<table class="compact-table no-bottom-margin tight-table">
+    <tr>
+        <td style="width: 12%; text-align: left; border: 1px solid #000; border-right: none; border-top: none; padding: 10px;">
+            <!-- Empty cell -->
+        </td>
+        <td class="section-header" style="border: 1px solid #000; border-left: none; border-top: none;">
+            OBLIGATION REQUEST AND STATUS
+        </td>
+    </tr>
+</table>
+
     <!-- Second Table - Payee Information -->
     <table class="compact-table no-bottom-margin tight-table">
         <tr>
-            <td style="width: 30%; border: 1px solid #000; padding: 2px 3px;"><br>NAME OF PAYEE: {{ strtoupper($data['payee']) }}</td> 
-             <td style="width: 10%; border: 1px solid #000; padding: 2px 3px;">No.: {{ $data['ors_no'] }} <br><br>
-                                                                                 Date: {{ $data['date'] }}</td>
+            <td style="width: 70%; border: 1px solid #000; padding: 2px 3px;"><br>NAME OF PAYEE: {{ strtoupper($data['payee']) }}</td> 
+            <td style="width: 30%; border: 1px solid #000; padding: 2px 3px;">No.: {{ $data['ors_no'] }} <br><br>Date: {{ $data['date'] }}</td>
         </tr>
         <tr>
             <td style="border: 1px solid #000; padding: 2px 3px;" colspan="2">Address:<b> {{ strtoupper($data['address']) }}</b></td>
@@ -119,6 +158,7 @@
             <td class="center" style="border: 1px solid #000; padding: 2px 3px;"><strong>₱{{ number_format($data['amount'], 2) }}</strong></td>
         </tr>
     </table>
+    
 <!-- Certification Section - Structured like Sections C and D -->
 <table class="compact-table no-bottom-margin tight-table">
     <tr>

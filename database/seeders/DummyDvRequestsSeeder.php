@@ -48,25 +48,35 @@ class DummyDvRequestsSeeder extends Seeder
         foreach ($months as $month) {
             $records = [];
 
-            for ($i = 0; $i < 100; $i++) {
-                $randomDay = rand(1, $month->daysInMonth);
-                $randomDate = $month->copy()->day($randomDay)->addHours(rand(0, 23))->addMinutes(rand(0, 59));
+                for ($i = 0; $i < 100; $i++) {
+                    $focalpersonId = rand(1, 3);
+                    $randomDay = rand(1, $month->daysInMonth);
+                    $randomDate = $month->copy()->day($randomDay)->addHours(rand(0, 23))->addMinutes(rand(0, 59));
 
-                $records[] = [
-                    'reference_number' => 'REF-' . strtoupper(Str::random(10)),
-                    'accountingunit_id' => rand(1, 3),
-                    'focalperson_id' => rand(1, 3),
-                    'program_id' => $pickProgram(),
-                    'respoCenter_id' => rand(1, 3),
-                    'particulars' => 'Auto-generated DV entry for ' . $month->format('F Y'),
-                    'amount' => rand(10000, 90000),
-                    'status' => 'submitted',
-                    'locked_by' => rand(1, 3),
-                    'locked_at' => $randomDate,
-                    'created_at' => $randomDate,
-                    'updated_at' => $randomDate->copy()->addDays(rand(0, 5)),
-                ];
-            }
+                    static $sequenceTracker = [];
+
+                    if (!isset($sequenceTracker[$focalpersonId])) {
+                        $sequenceTracker[$focalpersonId] = 1;
+                    } else {
+                        $sequenceTracker[$focalpersonId]++;
+                    }
+
+                    $records[] = [
+                        'reference_number' => 'DVORS-' . strtoupper(Str::random(10)),
+                        'accountingunit_id' => rand(1, 3),
+                        'focalperson_id' => $focalpersonId,
+                        'program_id' => $pickProgram(),
+                        'respoCenter_id' => rand(1, 3),
+                        'particulars' => 'Auto-generated DV entry for ' . $month->format('F Y'),
+                        'amount' => rand(10000, 90000),
+                        'status' => 'submitted',
+                        'locked_by' => rand(1, 3),
+                        'locked_at' => $randomDate,
+                        'user_sequence' => $sequenceTracker[$focalpersonId],
+                        'created_at' => $randomDate,
+                        'updated_at' => $randomDate->copy()->addDays(rand(0, 5)),
+                    ];
+        }
 
             DB::table('dv_requests')->insert($records);
             $this->command->info('✅ Inserted 100 realistic records for ' . $month->format('F Y'));

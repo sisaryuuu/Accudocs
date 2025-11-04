@@ -14,6 +14,7 @@ use App\Models\IMSDVerificationHistory;
 use App\Models\DvRequestHistory;
 use App\Models\TEVAttachment;
 use App\Models\Notification;
+use App\Traits\TriggersDashboardUpdate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,7 @@ class DvRequestProcessingController extends Controller
 
 {
     protected PusherService $pusher;
-
+    use TriggersDashboardUpdate;
     public function __construct(PusherService $pusher)
     {
         $this->pusher = $pusher;
@@ -295,7 +296,8 @@ class DvRequestProcessingController extends Controller
             }
             
             DB::commit();
-            
+            $this->triggerDashboardUpdate();
+
             // ✅ JSON response for AJAX
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
@@ -387,7 +389,7 @@ class DvRequestProcessingController extends Controller
             'IMSD_in_process',
             'Processing started by IMSD'
         );
-
+         $this->triggerDashboardUpdate();
         // Notify focal person
         $focalId = $dvRequest->focalperson_id;
         $status  = 'IMSD_in_process';
@@ -653,7 +655,7 @@ public function verify(Request $request, $id)
         'Approved',
         $remarks
     );
-
+     $this->triggerDashboardUpdate();
     return redirect()->route('RegionalOffices.IMSD.index')
         ->with('success', 'DV Request has been verified successfully.');
 }
@@ -814,7 +816,7 @@ public function reject(Request $request, $id)
             ]);
 
             DB::commit();
-
+             $this->triggerDashboardUpdate();
             $responseMessage = $emailSent 
                 ? 'DV request has been rejected and notification sent.' 
                 : 'DV request has been rejected but email notification failed.';    

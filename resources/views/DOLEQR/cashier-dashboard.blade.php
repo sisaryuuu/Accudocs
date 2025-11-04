@@ -92,14 +92,27 @@
                     <div class="text-sm text-gray-600">
                         <span id="selectedCount">0</span> DVs selected
                     </div>
+                    <div id="selectedStatusInfo" class="text-sm text-gray-500 hidden">
+                        <!-- Will show status breakdown of selected DVs -->
+                    </div>
                 </div>
                 <div class="flex space-x-3">
-                    <button id="bulkReceiveBtn" class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
+                    <!-- Bulk Receive Button (for Regional_Director_signed_approved DVs) -->
+                    <button id="bulkReceiveBtn" class="hidden inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                         Bulk Receive
                     </button>
+                    
+                    <!-- Bulk Release Button (for Cashier_received DVs) -->
+                    <button id="bulkReleaseBtn" class="hidden inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Bulk Release
+                    </button>
+                    
                     <button id="clearSelectionBtn" class="inline-flex items-center px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg shadow-sm transition-colors duration-200 ease-in-out">
                         Clear Selection
                     </button>
@@ -147,12 +160,12 @@
                             @foreach($pendingDvs as $dv)
                             <tr class="hover:bg-gray-50 transition-colors duration-150 group" data-dv-id="{{ $dv->id }}" data-dv-status="{{ $dv->status }}">
                                 <td class="px-6 py-6 whitespace-nowrap text-center">
-                                    @if($dv->status === 'Regional_Director_signed_approved')
-                                        <!-- Show checkbox only for awaiting receipt -->
+                                    @if(in_array($dv->status, ['Regional_Director_signed_approved', 'Cashier_received']))
+                                        <!-- Show checkbox for both receivable and releasable DVs -->
                                         <input type="checkbox" name="dvCheckbox" value="{{ $dv->id }}" 
-                                            class="dv-checkbox w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                                               class="dv-checkbox w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
                                     @else
-                                        <!-- Show checkmark icon for received DVs -->
+                                        <!-- Show checkmark icon for completed DVs -->
                                         <div class="w-5 h-5 flex items-center justify-center text-green-500">
                                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
@@ -185,7 +198,8 @@
                                 <td class="px-8 py-6 whitespace-nowrap">
                                     <div class="flex flex-col space-y-2">
                                         <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium 
-                                            {{ $dv->status == 'Regional_Director_signed_approved' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-green-100 text-green-800 border border-green-200' }}">
+                                            {{ $dv->status == 'Regional_Director_signed_approved' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
+                                               ($dv->status == 'Cashier_received' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-gray-100 text-gray-800 border border-gray-200') }}">
                                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                             </svg>
@@ -196,63 +210,63 @@
                                         </div>
                                     </div>
                                 </td>
-                               <td class="px-8 py-6">
-                    @if($dv->qr_code_token)
-                        <div class="flex flex-col items-center space-y-3">
-                            <div class="flex justify-center relative group/qr">
-                                <img 
-                                    src="{{ $dv->qr_code_data }}" 
-                                    width="80" 
-                                    height="80"
-                                    alt="QR Code for DV {{ $dv->qr_code_token }}" 
-                                    class="rounded-xl border-2 border-gray-200 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-105 hover:border-blue-300"
-                                    onclick="showQRModal({{ $dv->id }})"
-                                    loading="lazy"
-                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
-                                >
-                                <div class="hidden text-red-400 text-xs text-center" style="display: none;">
-                                    <svg class="w-12 h-12 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                                    </svg>
-                                    Failed to load
-                                </div>
-                            </div>
-                            
-                            <div class="text-center">
-                                @if($dv->qr_status === 'active')
-                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-300 shadow-sm">
-                                        <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                                        </svg>
-                                        QR Active
-                                    </span>
-                                @else
-                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300 shadow-sm">
-                                        <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M10 1a9 9 0 100 18A9 9 0 0010 1zm0 16a7 7 0 100-14 7 7 0 000 14zm1-7a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/>
-                                        </svg>
-                                        QR Inactive
-                                    </span>
-                                @endif
-                            </div>
-                            
-                            <button onclick="showQRModal({{ $dv->id }})" 
-                                    class="text-sm text-blue-600 hover:text-blue-800 font-medium underline transition-colors">
-                                View Large QR
-                            </button>
-                        </div>
-                    @else
-                        <div class="text-center py-4">
-                            <div class="mx-auto w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-3 border-2 border-gray-200">
-                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                                </svg>
-                            </div>
-                            <span class="text-gray-500 font-medium block">No QR Code</span>
-                            <span class="text-gray-400 text-sm">Generate in RANCA</span>
-                        </div>
-                    @endif
-                </td>
+                                <td class="px-8 py-6">
+                                    @if($dv->qr_code_token)
+                                        <div class="flex flex-col items-center space-y-3">
+                                            <div class="flex justify-center relative group/qr">
+                                                <img 
+                                                    src="{{ $dv->qr_code_data }}" 
+                                                    width="80" 
+                                                    height="80"
+                                                    alt="QR Code for DV {{ $dv->qr_code_token }}" 
+                                                    class="rounded-xl border-2 border-gray-200 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-105 hover:border-blue-300"
+                                                    onclick="showQRModal({{ $dv->id }})"
+                                                    loading="lazy"
+                                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                                                >
+                                                <div class="hidden text-red-400 text-xs text-center" style="display: none;">
+                                                    <svg class="w-12 h-12 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                                    </svg>
+                                                    Failed to load
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="text-center">
+                                                @if($dv->qr_status === 'active')
+                                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-300 shadow-sm">
+                                                        <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                                        </svg>
+                                                        QR Active
+                                                    </span>
+                                                @else
+                                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300 shadow-sm">
+                                                        <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd" d="M10 1a9 9 0 100 18A9 9 0 0010 1zm0 16a7 7 0 100-14 7 7 0 000 14zm1-7a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/>
+                                                        </svg>
+                                                        QR Inactive
+                                                    </span>
+                                                @endif
+                                            </div>
+                                            
+                                            <button onclick="showQRModal({{ $dv->id }})" 
+                                                    class="text-sm text-blue-600 hover:text-blue-800 font-medium underline transition-colors">
+                                                View Large QR
+                                            </button>
+                                        </div>
+                                    @else
+                                        <div class="text-center py-4">
+                                            <div class="mx-auto w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-3 border-2 border-gray-200">
+                                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                                </svg>
+                                            </div>
+                                            <span class="text-gray-500 font-medium block">No QR Code</span>
+                                            <span class="text-gray-400 text-sm">Generate in RANCA</span>
+                                        </div>
+                                    @endif
+                                </td>
                                 <td class="px-8 py-6">
                                     <div class="flex flex-col space-y-3">
                                         <a href="{{ route('dv.qr.interface', $dv->qr_code_token) }}" 
@@ -330,30 +344,33 @@
     </div>
 </div>
 
-<!-- Bulk Receive Confirmation Modal -->
-<div id="bulkReceiveModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-    <div class="bg-white rounded-2xl p-8 max-w-lg w-full mx-4">
+<!-- Bulk Action Modal -->
+<div id="bulkActionModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
         <div class="flex justify-between items-center mb-6">
-            <h3 class="text-2xl font-bold text-gray-900">Confirm Bulk Receive</h3>
-            <button onclick="closeBulkReceiveModal()" class="text-gray-400 hover:text-gray-600">
+            <h3 id="bulkActionModalTitle" class="text-2xl font-bold text-gray-900">Confirm Bulk Action</h3>
+            <button onclick="closeBulkActionModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                 </svg>
             </button>
         </div>
-        <div class="mb-6">
-            <p class="text-gray-700 mb-4">You are about to receive the following DVs:</p>
-            <div id="bulkReceiveList" class="max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <div class="mb-6 flex-1 overflow-hidden">
+            <p id="bulkActionModalMessage" class="text-gray-700 mb-4">You are about to process the following DVs:</p>
+            <div id="bulkActionList" class="h-64 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <!-- Selected DVs will be listed here -->
             </div>
-            <p class="text-sm text-gray-600 mt-4">This action will mark these DVs as received and move them to the next stage.</p>
+            <p class="text-sm text-gray-600 mt-4">
+                <span class="font-semibold">Note:</span> Only DVs with appropriate status will be processed. 
+                Grayed-out items are not eligible for this action.
+            </p>
         </div>
-        <div class="flex justify-end space-x-3">
-            <button onclick="closeBulkReceiveModal()" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors duration-200">
+        <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+            <button onclick="closeBulkActionModal()" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors duration-200">
                 Cancel
             </button>
-            <button id="confirmBulkReceiveBtn" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200">
-                Confirm Receive
+            <button id="confirmBulkActionBtn" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200">
+                Confirm Action
             </button>
         </div>
     </div>
@@ -456,6 +473,11 @@ function initializePusher() {
         cashierChannel.bind('bulk-receive-completed', function(data) {
             console.log('[Event] Bulk Receive Completed:', data);
             handleBulkReceiveCompleted(data);
+        });
+
+        cashierChannel.bind('bulk-release-completed', function(data) {
+            console.log('[Event] Bulk Release Completed:', data);
+            handleBulkReleaseCompleted(data);
         });
 
         console.log('[Pusher] ✓ Initialization complete');
@@ -571,7 +593,46 @@ function handleBulkReceiveCompleted(data) {
     if (loadingOverlay) {
         loadingOverlay.classList.add('hidden');
     }
-    closeBulkReceiveModal();
+    closeBulkActionModal();
+    
+    updateLastUpdatedTime();
+    updateTableHeader();
+}
+
+function handleBulkReleaseCompleted(data) {
+    console.log('[Handler] Bulk release completed:', data);
+    
+    data.successful_dvs.forEach(dv => {
+        // Remove the DV row from the table since it's completed
+        const dvRow = document.querySelector(`tr[data-dv-id="${dv.dv_id}"]`);
+        if (dvRow) {
+            dvRow.style.transition = 'all 0.5s ease-out';
+            dvRow.style.opacity = '0';
+            dvRow.style.transform = 'translateX(-100%)';
+            
+            setTimeout(() => {
+                dvRow.remove();
+                updateStatistics();
+                checkEmptyState();
+                updateTableHeader();
+            }, 500);
+        }
+    });
+    
+    updateStatistics();
+    
+    let message = `Bulk release completed: ${data.successful_count} DVs released`;
+    if (data.failed_count > 0) {
+        message += `, ${data.failed_count} failed`;
+    }
+    showToast(message, data.failed_count > 0 ? 'warning' : 'success');
+    
+    clearBulkSelection();
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
+    closeBulkActionModal();
     
     updateLastUpdatedTime();
     updateTableHeader();
@@ -584,16 +645,84 @@ function initializeBulkActions() {
     const dvCheckboxes = document.querySelectorAll('.dv-checkbox');
     const selectedCount = document.getElementById('selectedCount');
     const bulkReceiveBtn = document.getElementById('bulkReceiveBtn');
+    const bulkReleaseBtn = document.getElementById('bulkReleaseBtn');
     const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+    const statusInfo = document.getElementById('selectedStatusInfo');
     
     function updateBulkSectionVisibility() {
         if (selectedDVs.size > 0) {
             bulkSection.classList.remove('hidden');
+            updateBulkButtonsVisibility();
+            updateSelectedStatusInfo();
         } else {
             bulkSection.classList.add('hidden');
+            bulkReceiveBtn.classList.add('hidden');
+            bulkReleaseBtn.classList.add('hidden');
         }
         if (selectedCount) {
             selectedCount.textContent = selectedDVs.size;
+        }
+    }
+    
+    function updateBulkButtonsVisibility() {
+        let hasReceivableDVs = false;
+        let hasReleasableDVs = false;
+        
+        selectedDVs.forEach(dvId => {
+            const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
+            if (dvRow) {
+                const status = dvRow.getAttribute('data-dv-status');
+                if (status === 'Regional_Director_signed_approved') {
+                    hasReceivableDVs = true;
+                } else if (status === 'Cashier_received') {
+                    hasReleasableDVs = true;
+                }
+            }
+        });
+        
+        // Show bulk receive button if any selected DVs are receivable
+        if (hasReceivableDVs) {
+            bulkReceiveBtn.classList.remove('hidden');
+        } else {
+            bulkReceiveBtn.classList.add('hidden');
+        }
+        
+        // Show bulk release button if any selected DVs are releasable
+        if (hasReleasableDVs) {
+            bulkReleaseBtn.classList.remove('hidden');
+        } else {
+            bulkReleaseBtn.classList.add('hidden');
+        }
+    }
+    
+    function updateSelectedStatusInfo() {
+        let receivableCount = 0;
+        let releasableCount = 0;
+        
+        selectedDVs.forEach(dvId => {
+            const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
+            if (dvRow) {
+                const status = dvRow.getAttribute('data-dv-status');
+                if (status === 'Regional_Director_signed_approved') {
+                    receivableCount++;
+                } else if (status === 'Cashier_received') {
+                    releasableCount++;
+                }
+            }
+        });
+        
+        let infoText = '';
+        if (receivableCount > 0 && releasableCount > 0) {
+            infoText = `${receivableCount} to receive, ${releasableCount} to release`;
+        } else if (receivableCount > 0) {
+            infoText = `${receivableCount} ready to receive`;
+        } else if (releasableCount > 0) {
+            infoText = `${releasableCount} ready to release`;
+        }
+        
+        if (statusInfo) {
+            statusInfo.textContent = infoText;
+            statusInfo.classList.toggle('hidden', !infoText);
         }
     }
     
@@ -630,7 +759,15 @@ function initializeBulkActions() {
     if (bulkReceiveBtn) {
         bulkReceiveBtn.addEventListener('click', function() {
             if (selectedDVs.size > 0) {
-                showBulkReceiveModal();
+                showBulkActionModal('receive');
+            }
+        });
+    }
+    
+    if (bulkReleaseBtn) {
+        bulkReleaseBtn.addEventListener('click', function() {
+            if (selectedDVs.size > 0) {
+                showBulkActionModal('release');
             }
         });
     }
@@ -651,13 +788,26 @@ function initializeBulkActions() {
     updateBulkSectionVisibility();
 }
 
-function showBulkReceiveModal() {
-    const modal = document.getElementById('bulkReceiveModal');
-    const listContainer = document.getElementById('bulkReceiveList');
+function showBulkActionModal(actionType) {
+    const modal = document.getElementById('bulkActionModal');
+    const modalTitle = document.getElementById('bulkActionModalTitle');
+    const modalMessage = document.getElementById('bulkActionModalMessage');
+    const listContainer = document.getElementById('bulkActionList');
+    const confirmBtn = document.getElementById('confirmBulkActionBtn');
     
-    if (!modal || !listContainer) return;
+    if (!modal || !modalTitle || !modalMessage || !listContainer || !confirmBtn) return;
+    
+    const isReceive = actionType === 'receive';
+    const actionText = isReceive ? 'receive' : 'release';
+    const actionTextCapitalized = isReceive ? 'Receive' : 'Release';
+    
+    modalTitle.textContent = `Confirm Bulk ${actionTextCapitalized}`;
+    modalMessage.textContent = `You are about to ${actionText} the following DVs:`;
     
     listContainer.innerHTML = '';
+    
+    let actionDVs = [];
+    let otherDVs = [];
     
     selectedDVs.forEach(dvId => {
         const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
@@ -665,25 +815,56 @@ function showBulkReceiveModal() {
             const dvNumber = dvRow.querySelector('td:nth-child(2) .text-base')?.textContent || 'N/A';
             const payee = dvRow.querySelector('td:nth-child(3) .text-base')?.textContent || 'N/A';
             const amount = dvRow.querySelector('td:nth-child(4) .text-xl')?.textContent || 'N/A';
+            const status = dvRow.getAttribute('data-dv-status');
+            
+            const isActionable = isReceive ? 
+                status === 'Regional_Director_signed_approved' : 
+                status === 'Cashier_received';
             
             const listItem = document.createElement('div');
-            listItem.className = 'flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0';
+            listItem.className = `flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0 ${!isActionable ? 'opacity-50' : ''}`;
             listItem.innerHTML = `
                 <div>
                     <div class="font-medium text-gray-900">${dvNumber}</div>
                     <div class="text-sm text-gray-600">${payee}</div>
+                    <div class="text-xs text-gray-500 mt-1">Status: ${status.replace(/_/g, ' ')}</div>
                 </div>
-                <div class="font-semibold text-green-600">${amount}</div>
+                <div class="text-right">
+                    <div class="font-semibold text-green-600">${amount}</div>
+                    ${!isActionable ? '<div class="text-xs text-red-500 mt-1">Not eligible</div>' : ''}
+                </div>
             `;
-            listContainer.appendChild(listItem);
+            
+            if (isActionable) {
+                actionDVs.push({ dvId, listItem });
+            } else {
+                otherDVs.push({ dvId, listItem });
+            }
         }
     });
+    
+    // Show actionable DVs first
+    actionDVs.forEach(item => listContainer.appendChild(item.listItem));
+    otherDVs.forEach(item => listContainer.appendChild(item.listItem));
+    
+    // Update confirm button
+    confirmBtn.textContent = `Confirm ${actionTextCapitalized}`;
+    confirmBtn.onclick = function() {
+        if (actionType === 'receive') {
+            processBulkReceive();
+        } else {
+            processBulkRelease();
+        }
+    };
+    
+    // Show/hide confirm button based on whether there are actionable DVs
+    confirmBtn.style.display = actionDVs.length > 0 ? 'block' : 'none';
     
     modal.classList.remove('hidden');
 }
 
-function closeBulkReceiveModal() {
-    const modal = document.getElementById('bulkReceiveModal');
+function closeBulkActionModal() {
+    const modal = document.getElementById('bulkActionModal');
     if (modal) {
         modal.classList.add('hidden');
     }
@@ -703,7 +884,7 @@ async function processBulkReceive() {
     try {
         const dvIds = Array.from(selectedDVs);
         
-        const response = await fetch('/cashier/bulk-receive', {
+        const response = await fetch('{{ route("cashier.bulk-receive") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -734,7 +915,56 @@ async function processBulkReceive() {
         if (loadingOverlay) {
             loadingOverlay.classList.add('hidden');
         }
-        closeBulkReceiveModal();
+        closeBulkActionModal();
+    }
+}
+
+async function processBulkRelease() {
+    if (selectedDVs.size === 0) return;
+    
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingMessage = document.getElementById('loadingMessage');
+    
+    if (loadingOverlay) {
+        loadingOverlay.classList.remove('hidden');
+        loadingMessage.textContent = 'Processing bulk release...';
+    }
+    
+    try {
+        const dvIds = Array.from(selectedDVs);
+        
+        const response = await fetch('{{ route("cashier.bulk-release") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                dv_ids: dvIds
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            loadingMessage.textContent = 'Waiting for real-time updates...';
+            console.log('Bulk release initiated, waiting for Pusher updates');
+        } else {
+            throw new Error(result.message || 'Bulk release failed');
+        }
+        
+    } catch (error) {
+        console.error('Error in bulk release:', error);
+        showToast('Error processing bulk release: ' + error.message, 'error');
+        
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('hidden');
+        }
+        closeBulkActionModal();
     }
 }
 
@@ -873,6 +1103,7 @@ function updateBulkSectionVisibility() {
         selectedCount.textContent = selectedDVs.size;
     }
 }
+
 // ========== QR CODE FUNCTIONS ==========
 function showQRModal(dvId) {
     const modal = document.getElementById('qrModal');
@@ -1016,7 +1247,7 @@ function initializeSearch() {
 // ========== STATISTICS FUNCTIONS ==========
 async function updateStatistics() {
     try {
-        const response = await fetch('/cashier/dashboard/stats');
+        const response = await fetch('{{ route("cashier.stats") }}');
         const stats = await response.json();
         
         if (stats.success) {
@@ -1096,11 +1327,11 @@ function initializeModalHandlers() {
         });
     }
     
-    const bulkReceiveModal = document.getElementById('bulkReceiveModal');
-    if (bulkReceiveModal) {
-        bulkReceiveModal.addEventListener('click', function(e) {
+    const bulkActionModal = document.getElementById('bulkActionModal');
+    if (bulkActionModal) {
+        bulkActionModal.addEventListener('click', function(e) {
             if (e.target === this) {
-                closeBulkReceiveModal();
+                closeBulkActionModal();
             }
         });
     }
@@ -1165,9 +1396,9 @@ document.addEventListener('keydown', function(e) {
             closeQRModal();
         }
         
-        const bulkReceiveModal = document.getElementById('bulkReceiveModal');
-        if (bulkReceiveModal && !bulkReceiveModal.classList.contains('hidden')) {
-            closeBulkReceiveModal();
+        const bulkActionModal = document.getElementById('bulkActionModal');
+        if (bulkActionModal && !bulkActionModal.classList.contains('hidden')) {
+            closeBulkActionModal();
         }
     }
 });
@@ -1203,11 +1434,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeSearch();
     initializeModalHandlers();
     initializeBulkActions();
-    
-    const confirmBulkReceiveBtn = document.getElementById('confirmBulkReceiveBtn');
-    if (confirmBulkReceiveBtn) {
-        confirmBulkReceiveBtn.addEventListener('click', processBulkReceive);
-    }
     
     console.log('[App] ✓ Dashboard initialization complete');
 });

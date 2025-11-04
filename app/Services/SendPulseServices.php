@@ -61,7 +61,7 @@ class SendPulseServices
                 'dvRequest' => $dvRequest,
                 'rejectionRemarks' => $rejectionRemarks,
                 'rejectedAt' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                'rejectedBy' => auth()->user()->name ?? 'IMSD User'
+                'rejectedBy' => auth()->user()->name ?? 'System'
             ])->render();
 
             $response = Http::withHeaders([
@@ -135,6 +135,100 @@ class SendPulseServices
             return true;
         } catch (\Exception $e) {
             Log::error('Fallback SMTP also failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function sendReleaseEmail($toEmail, $toName, $dvRequest)
+    {
+        try {
+            Log::info('Preparing to send release email via SendPulse', [
+                'to_email' => $toEmail,
+                'to_name' => $toName,
+                'dv_request_id' => $dvRequest->id
+            ]);
+
+            $accessToken = $this->getAccessToken();
+
+            $subject = "DV Request Released - " . ($dvRequest->dv_number ?? $dvRequest->accounting_control_number ?? 'Pending-CN');
+            
+            $htmlContent = view('emails.dv_request_released', [
+                'focalPerson' => $dvRequest->focalPerson,
+                'dvRequest' => $dvRequest,
+                'releasedAt' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'releasedBy' => auth()->user()->name ?? 'Cashier'
+            ])->render();
+
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken,
+                'Content-Type' => 'application/json',
+            ])->timeout(30)->post("{$this->baseUrl}/smtp/emails", [
+                'email' => [
+                    'html' => base64_encode($htmlContent),
+                    'text' => strip_tags($htmlContent),
+                    'subject' => $subject,
+                    'from' => [
+                        'name' => config('mail.from_name', 'ACCUDOCS DOLE XI'),
+                        'email' => config('mail.from_address', 'c.mulato.517213@umindanao.edu.ph')
+                    ],
+                    'to' => [
+                        [
+                            'name' => $toName,
+                            'email' => $toEmail
+                        ]
+                    ]
+                ]
+            ]);
+
+            if ($response->successful()) {
+                $responseData = $response->json();
+                Log::info('SendPulse release email sent successfully', [
+                    'to' => $toEmail,
+                    'dv_request_id' => $dvRequest->id,
+                    'subject' => $subject,
+                    'sendpulse_response' => $responseData
+                ]);
+                return true;
+            }
+
+            Log::warning('SendPulse release email failed, falling back to SMTP', [
+                'status' => $response->status(),
+                'response' => $response->body()
+            ]);
+            
+            // Fallback to SMTP
+            return $this->sendReleaseViaSMTP($toEmail, $toName, $subject, $htmlContent);
+
+        } catch (\Exception $e) {
+            Log::error('SendPulse service exception for release email, falling back to SMTP: ' . $e->getMessage());
+            
+            // Fallback to SMTP
+            $subject = "DV Request Released - " . ($dvRequest->dv_number ?? $dvRequest->accounting_control_number ?? 'Pending-CN');
+            $htmlContent = view('emails.dv_request_released', [
+                'focalPerson' => $dvRequest->focalPerson,
+                'dvRequest' => $dvRequest,
+                'releasedAt' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'releasedBy' => auth()->user()->name ?? 'Cashier'
+            ])->render();
+            
+            return $this->sendReleaseViaSMTP($toEmail, $toName, $subject, $htmlContent);
+        }
+    }
+
+    private function sendReleaseViaSMTP($toEmail, $toName, $subject, $htmlContent)
+    {
+        try {
+            \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($toEmail, $toName, $subject, $htmlContent) {
+                $message->to($toEmail, $toName)
+                       ->subject($subject)
+                       ->from(config('mail.from.address'), config('mail.from.name'))
+                       ->html($htmlContent);
+            });
+
+            Log::info('Fallback SMTP release email sent successfully', ['to' => $toEmail]);
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Fallback SMTP for release email also failed: ' . $e->getMessage());
             return false;
         }
     }

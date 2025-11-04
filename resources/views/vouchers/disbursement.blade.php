@@ -119,21 +119,26 @@
 <body>
     <!-- Header -->
     <table class="header-table">
-        <tr style="border-bottom: none;">
-           <td rowspan="2" style="width: 15%; text-align: center; border-right: none;">
-            <img src="{{ asset('storage/logo/DOLE.png') }}" 
-                alt="DOLE Logo" 
-                style="width: 100px; height: auto; display: block; margin: 0 auto;">
-        </td>
-        
-            <td class="center no-inner-border" style="width: 60%; border-bottom: none;">
-                <br>
-                Republic of the Philippines<br><br>
-                <strong style="font-size: 11px;">DEPARTMENT OF LABOR AND EMPLOYMENT XI</strong><br><br>
-                <strong style="font-size: 12px; text-decoration: underline;">DISBURSEMENT VOUCHER</strong><br><br>
+         <tr>
+            <!-- Left: Logo -->
+            <td rowspan="3" style="width: 15%; text-align: center; border: 1px solid #000; border-right: none;">
+                <img src="{{ asset('storage/logo/DOLE.png') }}" 
+                     alt="DOLE Logo" 
+                     class="dole-logo"
+                     style="margin: 5px auto; display: block;">
             </td>
-            <td style="width: 20%;">
-                Fund Cluster: ___________
+
+            <!-- Middle: Header -->
+            <td rowspan="3" style="width: 65%; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; border-left: none; border-right: none; padding: 4px 0;">
+                <br>
+                <strong style="font-size: 16px;">DEPARTMENT OF LABOR AND EMPLOYMENT XI</strong><br><br><br><br><br><br><br><br>
+                <strong style="font-size: 20px;">DISBURSEMENT VOUCHER</strong>
+            </td>
+
+            <!-- Right: Fund Cluster -->
+            <td style="width: 20%; border: 1px solid #000; padding: 4px 6px;">
+                Fund Cluster :
+                <br><br><br>
             </td>
         </tr>
         <tr>
