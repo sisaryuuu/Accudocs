@@ -4,7 +4,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\UACSCode;
+use App\Models\UacsCode;
 
 class UACSCodeSeeder extends Seeder
 {
@@ -13,7 +13,7 @@ class UACSCodeSeeder extends Seeder
         // ==========================================
         // LEVEL 0: ROOT CATEGORIES
         // ==========================================
-        $expenses = UACSCode::create([
+        $expenses = UacsCode::create([
             'parent_id' => null,
             'uacscode' => '',
             'description' => 'Expenses',
@@ -22,7 +22,7 @@ class UACSCodeSeeder extends Seeder
             'sort_order' => 1,
         ]);
 
-        $maintenanceAndOtherOperatingExpenses = UACSCode::create([
+        $maintenanceAndOtherOperatingExpenses = UacsCode::create([
             'parent_id' => null,
             'uacscode' => '',
             'description' => 'Maintenance and Other Operating Expenses',
@@ -31,7 +31,7 @@ class UACSCodeSeeder extends Seeder
             'sort_order' => 2,
         ]);
 
-        $assets = UACSCode::create([
+        $assets = UacsCode::create([
             'parent_id' => null,
             'uacscode' => '',
             'description' => 'Assets',
@@ -45,7 +45,7 @@ class UACSCodeSeeder extends Seeder
         // ==========================================
         
         // Under Expenses
-        $financialAssistance = UACSCode::create([
+        $financialAssistance = UacsCode::create([
             'parent_id' => $expenses->id,
             'uacscode' => '5021400000',
             'description' => 'Financial Assistance/Subsidy',
@@ -55,7 +55,7 @@ class UACSCodeSeeder extends Seeder
         ]);
 
         // Under Maintenance and Other Operating Expenses
-        $travelingExpenses = UACSCode::create([
+        $travelingExpenses = UacsCode::create([
             'parent_id' => $maintenanceAndOtherOperatingExpenses->id,
             'uacscode' => '5020100000',
             'description' => 'Traveling Expenses',
@@ -65,7 +65,7 @@ class UACSCodeSeeder extends Seeder
         ]);
 
         // Under Assets
-        $otherAssets = UACSCode::create([
+        $otherAssets = UacsCode::create([
             'parent_id' => $assets->id,
             'uacscode' => '1990000000',
             'description' => 'Other Assets',
@@ -79,7 +79,7 @@ class UACSCodeSeeder extends Seeder
         // ==========================================
         
         // Under Financial Assistance (Expenses)
-        UACSCode::create([
+        UacsCode::create([
             'parent_id' => $financialAssistance->id,
             'uacscode' => '5021499000',
             'description' => 'Subsidies - Other',
@@ -89,7 +89,7 @@ class UACSCodeSeeder extends Seeder
         ]);
 
         // Under Traveling Expenses (Maintenance)
-        UACSCode::create([
+        UacsCode::create([
             'parent_id' => $travelingExpenses->id,
             'uacscode' => '5020101000',
             'description' => 'Traveling Expenses - Local',
@@ -98,7 +98,7 @@ class UACSCodeSeeder extends Seeder
             'sort_order' => 1,
         ]);
 
-        UACSCode::create([
+        UacsCode::create([
             'parent_id' => $travelingExpenses->id,
             'uacscode' => '5020102000',
             'description' => 'Traveling Expenses - Foreign',
@@ -108,7 +108,7 @@ class UACSCodeSeeder extends Seeder
         ]);
 
         // Under Other Assets (Assets) - Non-selectable (has children)
-        $advances = UACSCode::create([
+        $advances = UacsCode::create([
             'parent_id' => $otherAssets->id,
             'uacscode' => '1990100000',
             'description' => 'Advances',
@@ -120,7 +120,7 @@ class UACSCodeSeeder extends Seeder
         // ==========================================
         // LEVEL 3: SELECTABLE CODES under Advances
         // ==========================================
-        UACSCode::create([
+        UacsCode::create([
             'parent_id' => $advances->id,
             'uacscode' => '1990101000',
             'description' => 'Advances for Operating Expenses',
@@ -129,7 +129,7 @@ class UACSCodeSeeder extends Seeder
             'sort_order' => 1,
         ]);
 
-        UACSCode::create([
+        UacsCode::create([
             'parent_id' => $advances->id,
             'uacscode' => '1990102000',
             'description' => 'Advances for Payroll',
@@ -138,7 +138,7 @@ class UACSCodeSeeder extends Seeder
             'sort_order' => 2,
         ]);
 
-        UACSCode::create([
+        UacsCode::create([
             'parent_id' => $advances->id,
             'uacscode' => '1990103000',
             'description' => 'Advances to Special Disbursing Officer',
@@ -147,7 +147,7 @@ class UACSCodeSeeder extends Seeder
             'sort_order' => 3,
         ]);
 
-        UACSCode::create([
+        UacsCode::create([
             'parent_id' => $advances->id,
             'uacscode' => '1990104000',
             'description' => 'Advances to Officers and Employees',

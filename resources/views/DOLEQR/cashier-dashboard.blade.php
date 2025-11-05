@@ -309,21 +309,68 @@
                     </div>
                 @endif
             </div>
-
-            @if($pendingDvs->count() > 0)
-            <div class="px-8 py-4 border-t border-gray-200 bg-gray-50">
-                <div class="flex items-center justify-between">
-                    <div class="text-sm text-gray-600">
-                        Showing <span class="font-semibold" id="dvCount">{{ $pendingDvs->count() }}</span> DVs ready for processing
-                    </div>
-                    <div class="text-sm text-gray-600">
-                        Last updated: <span id="lastUpdatedFooter">{{ now()->format('M d, Y h:i A') }}</span>
-                    </div>
-                </div>
-            </div>
+@if($pendingDvs->count() > 0)
+<!-- Pagination Section -->
+<div class="px-8 py-4 border-t border-gray-200 bg-gray-50">
+    <div class="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
+        <div class="text-sm text-gray-600">
+            Showing <span class="font-semibold">{{ $pendingDvs->firstItem() }}</span> to 
+            <span class="font-semibold">{{ $pendingDvs->lastItem() }}</span> of 
+            <span class="font-semibold">{{ $pendingDvs->total() }}</span> DVs pending for processing
+        </div>
+        
+        <!-- Pagination Links -->
+        <nav class="flex items-center space-x-2">
+            <!-- Previous Page Link -->
+            @if ($pendingDvs->onFirstPage())
+                <span class="px-3 py-2 text-sm font-medium text-gray-400 bg-white border border-gray-200 rounded-lg cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </span>
+            @else
+                <a href="{{ $pendingDvs->previousPageUrl() }}" class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
             @endif
+
+            <!-- Page Numbers -->
+            @foreach ($pendingDvs->getUrlRange(1, $pendingDvs->lastPage()) as $page => $url)
+                @if ($page == $pendingDvs->currentPage())
+                    <span class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg shadow-sm">
+                        {{ $page }}
+                    </span>
+                @else
+                    <a href="{{ $url }}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200">
+                        {{ $page }}
+                    </a>
+                @endif
+            @endforeach
+
+            <!-- Next Page Link -->
+            @if ($pendingDvs->hasMorePages())
+                <a href="{{ $pendingDvs->nextPageUrl() }}" class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            @else
+                <span class="px-3 py-2 text-sm font-medium text-gray-400 bg-white border border-gray-200 rounded-lg cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </span>
+            @endif
+        </nav>
+
+        <div class="text-sm text-gray-600">
+            Last updated: <span id="lastUpdatedFooter">{{ now()->format('M d, Y h:i A') }}</span>
         </div>
     </div>
+</div>
+@endif
 </div>
 
 <!-- QR Modal -->
@@ -902,8 +949,14 @@ async function processBulkReceive() {
         const result = await response.json();
         
         if (result.success) {
-            loadingMessage.textContent = 'Waiting for real-time updates...';
-            console.log('Bulk receive initiated, waiting for Pusher updates');
+            // Clear selection immediately
+            clearBulkSelection();
+            
+            // Close modal immediately
+            closeBulkActionModal();
+            
+            // Reload page immediately without waiting for Pusher
+            window.location.reload();
         } else {
             throw new Error(result.message || 'Bulk receive failed');
         }
@@ -951,8 +1004,14 @@ async function processBulkRelease() {
         const result = await response.json();
         
         if (result.success) {
-            loadingMessage.textContent = 'Waiting for real-time updates...';
-            console.log('Bulk release initiated, waiting for Pusher updates');
+            // Clear selection immediately
+            clearBulkSelection();
+            
+            // Close modal immediately
+            closeBulkActionModal();
+            
+            // Reload page immediately without waiting for Pusher
+            window.location.reload();
         } else {
             throw new Error(result.message || 'Bulk release failed');
         }

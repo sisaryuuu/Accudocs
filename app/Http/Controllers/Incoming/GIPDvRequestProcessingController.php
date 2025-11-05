@@ -36,7 +36,7 @@ class GIPDvRequestProcessingController extends Controller
         $lockDuration = now()->subMinutes(10);
 
         $query = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
-            ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process','Incoming-GIP_received'])
+            ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received'])
             ->where(function ($q) use ($currentUserId, $lockDuration) {
                 $q->whereNull('locked_by')
                 ->orWhere('locked_by', $currentUserId)
@@ -93,7 +93,7 @@ class GIPDvRequestProcessingController extends Controller
         // Fetch recent DV requests
         $recentDvRequests = DvRequest::whereHas('program', fn($q) => 
                                         $q->where('prcode', 'GIP')) 
-                                    ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process', 'Incoming-GIP_received'])
+                                    ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received'])
                                     ->whereNotNull('focalperson_id')
                                     ->latest()
                                     ->take(5)
@@ -224,111 +224,6 @@ class GIPDvRequestProcessingController extends Controller
         }
     }
 
-    public function startProcessing(Request $request, $id)
-    {
-        try {
-            $dvRequest = DvRequest::findOrFail($id);
-            $statusBefore = $dvRequest->status;
-            $startedAt = now();
-            $newStatus = 'Incoming-GIP_in_process';
-            $currentUserId = auth()->id();
-
-            // Validation checks
-            if ($statusBefore === $newStatus) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Request is already being processed.'
-                ], 422);
-            }
-
-            if ($statusBefore !== 'Incoming-GIP_received') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Request must be received first before processing.'
-                ], 422);
-            }
-
-            DB::transaction(function () use ($dvRequest, $statusBefore, $newStatus, $startedAt, $currentUserId) {
-                $dvRequest->update([
-                    'status'    => $newStatus,
-                    'locked_by' => $currentUserId,
-                    'locked_at' => $startedAt,
-                ]);
-
-                $this->saveIncomingGIPVerificationHistory(
-                    $dvRequest,
-                    'process',
-                    'Processing started by Incoming-GIP',
-                    [
-                        'status_before' => $statusBefore,
-                        'status_after'  => $newStatus,
-                        'processed_by'  => $currentUserId,
-                        'processed_at'  => $startedAt->toISOString(),
-                    ]
-                );
-
-                $this->logAction(
-                    $dvRequest->id,
-                    'Incoming',
-                    $newStatus,
-                    'Processing started by Incoming-GIP'
-                );
-
-                Notification::create([
-                    'focalperson_id' => $dvRequest->focalperson_id,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $newStatus,
-                    'action'         => 'Processing Started',
-                    'remarks'        => 'Request is now being processed by Incoming-GIP',
-                ]);
-
-                if (isset($this->pusher)) {
-                    $timestamp = $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A');
-
-                    $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
-                        'dv_request_id' => $dvRequest->id,
-                        'status'        => $newStatus,
-                        'remarks'       => 'Request is now being processed by Incoming-GIP',
-                        'timestamp'     => $timestamp,
-                    ]);
-
-                    $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-processing', [
-                        'dv_request_id' => $dvRequest->id,
-                        'status'        => $newStatus,
-                        'timestamp'     => $timestamp,
-                        'action_performer_id' => $currentUserId,
-                        'processed_by_user_id' => $currentUserId,
-                    ]);
-                }
-            });
-
-            // ✅ TRIGGER DASHBOARD UPDATE
-            $this->triggerDashboardUpdate();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Processing started successfully.',
-                'data' => [
-                    'id'         => $dvRequest->id,
-                    'status'     => $newStatus,
-                    'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Error starting processing: ' . $e->getMessage(), [
-                'dv_request_id' => $id,
-                'user_id' => auth()->id(),
-                'line' => $e->getLine(),
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'An error occurred while starting processing.'
-            ], 500);
-        }
-    }
-
     public function fetchgipRecent()
     {
         $currentUserId = auth()->id();
@@ -336,7 +231,7 @@ class GIPDvRequestProcessingController extends Controller
         
         $recentDvRequests = DvRequest::with('focalPerson')
                                 ->whereHas('program', fn($q) => $q->where('prcode', 'GIP')) 
-                                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process','Incoming-GIP_received'])
+                                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received'])
                                 ->whereNotNull('focalperson_id')
                                 ->where(function ($q) use ($currentUserId,$lockDuration){
                                     $q->whereNull('locked_by')
@@ -357,7 +252,7 @@ class GIPDvRequestProcessingController extends Controller
 
         $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
             ->whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
-            ->whereIn('status', ['IMSD_verified','Incoming-GIP_in_process','Incoming-GIP_received'])
+            ->whereIn('status', ['IMSD_verified','Incoming-GIP_received'])
             ->where(function($q) use ($currentUserId, $lockDuration) {
                 $q->whereNull('locked_by')
                 ->orWhere('locked_by', $currentUserId)
@@ -389,7 +284,7 @@ class GIPDvRequestProcessingController extends Controller
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
             'amount'       => number_format($request->amount, 2),
             'status'       => $request->status,
-            'date'         => $request->created_at->format('M d, Y h:i A'),
+            'date'         => $request->created_at->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
         return response()->json($result);
@@ -498,8 +393,8 @@ class GIPDvRequestProcessingController extends Controller
                 return redirect()->back()->with('error', 'This request has already been verified.');
             }
 
-            if (!in_array($statusBefore, ['Incoming-GIP_in_process', 'Incoming-GIP_received'])) {
-                return redirect()->back()->with('error', 'Request must be processed or received first before verification.');
+            if ($statusBefore !== 'Incoming-GIP_received') {
+                return redirect()->back()->with('error', 'Request must be received first before verification.');
             }
 
             DB::transaction(function () use ($dvRequest, $statusBefore, $verifiedAt, $request, $newStatus, $currentUserId) {
@@ -617,7 +512,7 @@ class GIPDvRequestProcessingController extends Controller
             $statusBefore = $dvRequest->status;
             $currentUserId = auth()->id();
 
-            if (!in_array($dvRequest->status, ['Incoming-GIP_received', 'Incoming-GIP_in_process'])) {
+            if ($dvRequest->status !== 'Incoming-GIP_received') {
                 return response()->json([
                     'success' => false,
                     'message' => 'This DV request cannot be rejected at its current stage.'
@@ -831,7 +726,7 @@ class GIPDvRequestProcessingController extends Controller
 
         $pendingRequests = DvRequest::whereHas('program', fn($q) => 
                                     $q->where('prcode', 'GIP')) 
-                                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_in_process','Incoming-GIP_received'])
+                                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received'])
                                 ->orderBy('created_at', 'asc')
                                 ->get();
 

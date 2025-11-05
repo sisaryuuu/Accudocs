@@ -24,23 +24,11 @@ class FocalPersonSeeder extends Seeder
                 'lname' => 'Smith',
                 'TIN_number' => '123-456-789',
                 'Address' => '123 Main St, Cityville',
-                'email' => 'john.smith@example.com',
+                'email' => 'c.mulato.517213@umindanao.edu.ph',
                 'profile_image' => 'default.png',
                 'contactnumber' => '09123456789',
-                'password' => ('john123'), // Add hashed password
+                'password' => ('password'), // Add hashed password
                 'respocenter_id' => 1
-            ],
-            [
-                'fname' => 'Maria',
-                'mi' => 'R',
-                'lname' => 'Garcia',
-                'TIN_number' => '987-654-321',
-                'Address' => '456 Elm St, Townsville',
-                'email' => 'maria.garcia@example.com',
-                'profile_image' => 'default.png',
-                'contactnumber' => '09123456788',
-                'password' =>('maria123'), // Add hashed password
-                'respocenter_id' => 2
             ],
             [
                 'fname' => 'Robert',
@@ -48,12 +36,25 @@ class FocalPersonSeeder extends Seeder
                 'lname' => 'Johnson',
                 'TIN_number' => '555-666-777',
                 'Address' => '789 Oak St, Villagetown',
-                'email' => 'robert.johnson@example.com',
+                'email' => 'jellycasm@gmail.com',
                 'profile_image' => 'default.png',
                 'contactnumber' => '09123456787',
-                 'password' =>('robert123'), // Add hashed password
+                 'password' =>('password'), // Add hashed password
                 'respocenter_id' => 3
-            ]
+            ],
+            [
+                'fname' => 'Caesar Alexis',
+                'mi' => 'D',
+                'lname' => 'Mulato',
+                'TIN_number' => '555-666-999',
+                'Address' => '789 Oak St, Villagetown',
+                'email' => 'rhymeblind31@gmail.com',
+                'email_verified_at' => now(),              
+                'profile_image' => 'default.png',
+                'contactnumber' => '09676767676',
+                 'password' =>('password'), // Add hashed password
+                'respocenter_id' => 3
+            ],
         ];
 
         foreach ($focalPersons as $person) {

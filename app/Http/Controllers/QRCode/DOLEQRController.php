@@ -41,9 +41,7 @@ class DOLEQRController extends Controller
         return view('DOLEQR.cashier-scanner');
     }
 
-    /**
-     * Bulk receive DVs for Regional Director
-     */
+  
      public function bulkReceiveDVs(Request $request)
     {
         try {
@@ -53,7 +51,7 @@ class DOLEQRController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized. Only Regional Director can perform this action.'
-                ], 403);
+                ], 403);    
             }
 
             $dvIds = $request->input('dv_ids', []);
@@ -398,360 +396,355 @@ public function bulkSignApproveDVs(Request $request)
     /**
      * Bulk receive DVs for Cashier
      */
-   public function cashierBulkReceive(Request $request)
-    {
-        try {
-            $user = auth()->user();
-            
-            if (!$user || !$user->hasRole('Cashier')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unauthorized. Only Cashier can perform this action.'
-                ], 403);
-            }
+  public function cashierBulkReceive(Request $request)
+{
+    try {
+        $user = auth()->user();
+        
+        if (!$user || !$user->hasRole('Cashier')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only Cashier can perform this action.'
+            ], 403);
+        }
 
-            $dvIds = $request->input('dv_ids', []);
-            
-            if (empty($dvIds)) {
+        $dvIds = $request->input('dv_ids', []);
+        
+        if (empty($dvIds)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No DVs selected for bulk receive.'
+            ], 400);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            // Get all eligible DVs in one query
+            $eligibleDVs = DvRequest::with(['focalPerson', 'program'])
+                ->whereIn('id', $dvIds)
+                ->where('qr_status', 'active')
+                ->where('status', 'Regional_Director_signed_approved')
+                ->get();
+
+            if ($eligibleDVs->isEmpty()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No DVs selected for bulk receive.'
+                    'message' => 'No eligible DVs found for receiving'
                 ], 400);
             }
 
-            $results = [
-                'successful' => [],
-                'failed' => []
-            ];
+            $eligibleDvIds = $eligibleDVs->pluck('id')->toArray();
+            $receivedAt = now();
+            $newStatus = 'Cashier_received';
+            $action = 'Request Received by Cashier - Bulk processed';
 
-            DB::beginTransaction();
+            // Bulk update all DVs in one query
+            $updatedCount = DvRequest::whereIn('id', $eligibleDvIds)
+                ->update([
+                    'status' => $newStatus,
+                    'updated_by' => $user->id,
+                    'updated_at' => $receivedAt
+                ]);
 
-            foreach ($dvIds as $dvId) {
-                try {
-                    $dvRequest = DvRequest::with(['focalPerson', 'program'])
-                        ->where('id', $dvId)
-                        ->where('qr_status', 'active')
-                        ->first();
+            // Prepare data for bulk history and logging
+            $historyData = [];
+            $notificationData = [];
+            $qrActionData = [];
+            $successfulDVs = [];
 
-                    if (!$dvRequest) {
-                        $results['failed'][] = [
-                            'dv_id' => $dvId,
-                            'reason' => 'DV not found or QR not active'
-                        ];
-                        continue;
-                    }
+            foreach ($eligibleDVs as $dv) {
+                $historyData[] = [
+                    'dv_request_id' => $dv->id,
+                    'action' => 'received',
+                    'description' => $action,
+                    'metadata' => json_encode([
+                        'status_before' => 'Regional_Director_signed_approved',
+                        'status_after' => $newStatus,
+                        'received_by' => $user->id,
+                        'received_at' => $receivedAt->toISOString(),
+                        'amount' => $dv->amount,
+                        'dv_number' => $dv->dv_number,
+                        'processing_type' => 'bulk'
+                    ]),
+                    'created_at' => $receivedAt,
+                    'updated_at' => $receivedAt
+                ];
 
-                    if ($dvRequest->status !== 'Regional_Director_signed_approved') {
-                        $results['failed'][] = [
-                            'dv_id' => $dvId,
-                            'dv_number' => $dvRequest->dv_number,
-                            'reason' => "Invalid status for receiving. Current status: {$dvRequest->status}"
-                        ];
-                        continue;
-                    }
+                $qrActionData[] = [
+                    'dv_request_id' => $dv->id,
+                    'user_id' => $user->id,
+                    'user_role' => 'Cashier',
+                    'action' => $newStatus,
+                    'description' => $action . ' at: ' . $receivedAt->format('Y-m-d H:i:s'),
+                    'created_at' => $receivedAt,
+                    'updated_at' => $receivedAt
+                ];
 
-                    $previousStatus = $dvRequest->status;
-                    $newStatus = 'Cashier_received';
-                    $action = 'Request Received by Cashier';
-                    $receivedAt = now();
-
-                    $dvRequest->update([
+                if ($dv->focalperson_id) {
+                    $notificationData[] = [
+                        'focalperson_id' => $dv->focalperson_id,
+                        'dv_request_id' => $dv->id,
                         'status' => $newStatus,
-                        'updated_by' => $user->id
-                    ]);
-
-                    $dvRequest->refresh();
-
-                         if ($newStatus === 'Cashier_released') {
-                    $this->sendReleaseEmailNotification($dvRequest, $user);
-                }
-
-                    // ✅ Save Cashier History
-                    $this->saveCashierHistory(
-                        $dvRequest,
-                        'received',
-                        $action . ' - Bulk processed',
-                        [
-                            'status_before' => $previousStatus,
-                            'status_after' => $newStatus,
-                            'received_by' => $user->id,
-                            'received_at' => $receivedAt->toISOString(),
-                            'amount' => $dvRequest->amount,
-                            'dv_number' => $dvRequest->dv_number,
-                            'processing_type' => 'bulk'
-                        ]
-                    );
-
-                    $this->logQrAction(
-                        $dvRequest->id,
-                        $user->id,
-                        'Cashier',
-                        $newStatus,
-                        $action . ' - Bulk processed at: ' . $receivedAt->format('Y-m-d H:i:s')
-                    );
-
-                    $this->broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, 'Cashier');
-
-                    if ($dvRequest->focalperson_id) {
-                        Notification::create([
-                            'focalperson_id' => $dvRequest->focalperson_id,
-                            'dv_request_id'  => $dvRequest->id,
-                            'status'         => $newStatus,
-                            'action'         => 'Status Updated via Bulk Receive',
-                            'remarks'        => "DV status updated to {$newStatus} by Cashier via bulk receive",
-                        ]);
-
-                        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
-                            'dv_request_id' => $dvRequest->id,
-                            'status'        => $newStatus,
-                            'remarks'       => "Status updated by Cashier via bulk receive",
-                            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                        ]);
-                    }
-
-                    $results['successful'][] = [
-                        'dv_id' => $dvRequest->id,
-                        'dv_number' => $dvRequest->dv_number,
-                        'new_status' => $newStatus
-                    ];
-
-                    \Log::info('DV bulk received by Cashier', [
-                        'dv_id' => $dvRequest->id,
-                        'dv_number' => $dvRequest->dv_number,
-                        'previous_status' => $previousStatus,
-                        'new_status' => $newStatus,
-                        'updated_by' => $user->id
-                    ]);
-
-                } catch (\Exception $e) {
-                    \Log::error('Error processing DV in cashier bulk receive: ' . $e->getMessage(), [
-                        'dv_id' => $dvId,
-                        'error' => $e->getMessage()
-                    ]);
-
-                    $results['failed'][] = [
-                        'dv_id' => $dvId,
-                        'reason' => 'Processing error: ' . $e->getMessage()
+                        'action' => 'Status Updated via Bulk Receive',
+                        'remarks' => "DV status updated to {$newStatus} by Cashier via bulk receive",
+                        'created_at' => $receivedAt,
+                        'updated_at' => $receivedAt
                     ];
                 }
+
+                $successfulDVs[] = [
+                    'dv_id' => $dv->id,
+                    'dv_number' => $dv->dv_number,
+                    'new_status' => $newStatus
+                ];
+
+                // Broadcast individual status updates (if needed)
+                $this->broadcastStatusUpdate($dv, 'Regional_Director_signed_approved', $newStatus, 'Cashier');
+            }
+
+            // Bulk insert history records
+            if (!empty($historyData)) {
+                DB::table('cashier_histories')->insert($historyData);
+            }
+
+            // Bulk insert QR action logs
+            if (!empty($qrActionData)) {
+                DB::table('qr_code_actions')->insert($qrActionData);
+            }
+
+            // Bulk insert notifications
+            if (!empty($notificationData)) {
+                Notification::insert($notificationData);
             }
 
             DB::commit();
 
+            // Send single Pusher event for bulk completion
             $this->pusher->trigger('cashier-dashboard', 'bulk-receive-completed', [
-                'successful_dvs' => $results['successful'],
-                'successful_count' => count($results['successful']),
-                'failed_count' => count($results['failed']),
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'successful_dvs' => $successfulDVs,
+                'successful_count' => count($successfulDVs),
+                'failed_count' => count($dvIds) - count($successfulDVs),
+                'timestamp' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
+            // Update statistics
             $this->updateDashboardStatistics();
-            $this->triggerDashboardUpdate();
+
+            \Log::info('Cashier bulk receive completed', [
+                'total_selected' => count($dvIds),
+                'successful_count' => count($successfulDVs),
+                'failed_count' => count($dvIds) - count($successfulDVs),
+                'user_id' => $user->id
+            ]);
+
             return response()->json([
                 'success' => true,
-                'message' => 'Bulk receive completed',
-                'results' => $results,
+                'message' => 'Bulk receive completed successfully',
+                'results' => [
+                    'successful' => $successfulDVs,
+                    'failed' => array_values(array_diff($dvIds, $eligibleDvIds))
+                ],
                 'summary' => [
                     'total_processed' => count($dvIds),
-                    'successful' => count($results['successful']),
-                    'failed' => count($results['failed'])
+                    'successful' => count($successfulDVs),
+                    'failed' => count($dvIds) - count($successfulDVs)
                 ]
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            
-            \Log::error('Cashier bulk receive error: ' . $e->getMessage(), [
-                'dv_ids' => $dvIds,
-                'user_id' => auth()->id(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            throw $e;
+        }
 
+    } catch (\Exception $e) {
+        \Log::error('Cashier bulk receive error: ' . $e->getMessage(), [
+            'dv_ids' => $dvIds,
+            'user_id' => auth()->id(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error during bulk receive: ' . $e->getMessage()
+        ], 500);
+    }
+}   
+       public function cashierBulkRelease(Request $request)
+{
+    try {
+        $user = auth()->user();
+        
+        if (!$user || !$user->hasRole('Cashier')) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error during bulk receive: ' . $e->getMessage()
-            ], 500);
+                'message' => 'Unauthorized. Only Cashier can perform this action.'
+            ], 403);
         }
-    }
 
-        /**
-     * Bulk release DVs for Cashier
-     */
-    public function cashierBulkRelease(Request $request)
-    {
+        $dvIds = $request->input('dv_ids', []);
+        
+        if (empty($dvIds)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No DVs selected for bulk release.'
+            ], 400);
+        }
+
+        DB::beginTransaction();
+
         try {
-            $user = auth()->user();
-            
-            if (!$user || !$user->hasRole('Cashier')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unauthorized. Only Cashier can perform this action.'
-                ], 403);
-            }
+            // Get all eligible DVs in one query
+            $eligibleDVs = DvRequest::with(['focalPerson', 'program'])
+                ->whereIn('id', $dvIds)
+                ->where('qr_status', 'active')
+                ->where('status', 'Cashier_received')
+                ->get();
 
-            $dvIds = $request->input('dv_ids', []);
-            
-            if (empty($dvIds)) {
+            if ($eligibleDVs->isEmpty()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No DVs selected for bulk release.'
+                    'message' => 'No eligible DVs found for release'
                 ], 400);
             }
 
-            $results = [
-                'successful' => [],
-                'failed' => []
-            ];
+            $eligibleDvIds = $eligibleDVs->pluck('id')->toArray();
+            $releasedAt = now();
+            $newStatus = 'Cashier_released';
+            $action = 'Transaction Released by Cashier - Bulk processed';
 
-            DB::beginTransaction();
+            // Bulk update all DVs in one query
+            $updatedCount = DvRequest::whereIn('id', $eligibleDvIds)
+                ->update([
+                    'status' => $newStatus,
+                    'updated_by' => $user->id,
+                    'updated_at' => $releasedAt
+                ]);
 
-            foreach ($dvIds as $dvId) {
-                try {
-                    $dvRequest = DvRequest::with(['focalPerson', 'program'])
-                        ->where('id', $dvId)
-                        ->where('qr_status', 'active')
-                        ->first();
+            // Prepare data for bulk operations
+            $historyData = [];
+            $notificationData = [];
+            $qrActionData = [];
+            $successfulDVs = [];
 
-                    if (!$dvRequest) {
-                        $results['failed'][] = [
-                            'dv_id' => $dvId,
-                            'reason' => 'DV not found or QR not active'
-                        ];
-                        continue;
-                    }
+            foreach ($eligibleDVs as $dv) {
+                $historyData[] = [
+                    'dv_request_id' => $dv->id,
+                    'action' => 'released',
+                    'description' => $action,
+                    'metadata' => json_encode([
+                        'status_before' => 'Cashier_received',
+                        'status_after' => $newStatus,
+                        'released_by' => $user->id,
+                        'released_at' => $releasedAt->toISOString(),
+                        'amount' => $dv->amount,
+                        'dv_number' => $dv->dv_number,
+                        'processing_type' => 'bulk_release'
+                    ]),
+                    'created_at' => $releasedAt,
+                    'updated_at' => $releasedAt
+                ];
 
-                    if ($dvRequest->status !== 'Cashier_received') {
-                        $results['failed'][] = [
-                            'dv_id' => $dvId,
-                            'dv_number' => $dvRequest->dv_number,
-                            'reason' => "Invalid status for release. Current status: {$dvRequest->status}. Expected: Cashier_received"
-                        ];
-                        continue;
-                    }
+                $qrActionData[] = [
+                    'dv_request_id' => $dv->id,
+                    'user_id' => $user->id,
+                    'user_role' => 'Cashier',
+                    'action' => $newStatus,
+                    'description' => $action . ' at: ' . $releasedAt->format('Y-m-d H:i:s'),
+                    'created_at' => $releasedAt,
+                    'updated_at' => $releasedAt
+                ];
 
-                    $previousStatus = $dvRequest->status;
-                    $newStatus = 'Cashier_released';
-                    $action = 'Transaction Released by Cashier - Bulk processed';
-                    $releasedAt = now();
-
-                    $dvRequest->update([
+                if ($dv->focalperson_id) {
+                    $notificationData[] = [
+                        'focalperson_id' => $dv->focalperson_id,
+                        'dv_request_id' => $dv->id,
                         'status' => $newStatus,
-                        'updated_by' => $user->id
-                    ]);
-
-                    $dvRequest->refresh();
-
-                    // ✅ Send email notification for release
-                    $this->sendReleaseEmailNotification($dvRequest, $user);
-
-                    // ✅ Save Cashier History
-                    $this->saveCashierHistory(
-                        $dvRequest,
-                        'released',
-                        $action,
-                        [
-                            'status_before' => $previousStatus,
-                            'status_after' => $newStatus,
-                            'released_by' => $user->id,
-                            'released_at' => $releasedAt->toISOString(),
-                            'amount' => $dvRequest->amount,
-                            'dv_number' => $dvRequest->dv_number,
-                            'processing_type' => 'bulk_release'
-                        ]
-                    );
-
-                    $this->logQrAction(
-                        $dvRequest->id,
-                        $user->id,
-                        'Cashier',
-                        $newStatus,
-                        $action . ' at: ' . $releasedAt->format('Y-m-d H:i:s')
-                    );
-
-                    $this->broadcastStatusUpdate($dvRequest, $previousStatus, $newStatus, 'Cashier');
-
-                    if ($dvRequest->focalperson_id) {
-                        Notification::create([
-                            'focalperson_id' => $dvRequest->focalperson_id,
-                            'dv_request_id'  => $dvRequest->id,
-                            'status'         => $newStatus,
-                            'action'         => 'Status Updated via Bulk Release',
-                            'remarks'        => "DV status updated to {$newStatus} by Cashier via bulk release",
-                        ]);
-
-                        $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
-                            'dv_request_id' => $dvRequest->id,
-                            'status'        => $newStatus,
-                            'remarks'       => "Status updated by Cashier via bulk release",
-                            'timestamp'     => $releasedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                        ]);
-                    }
-
-                    $results['successful'][] = [
-                        'dv_id' => $dvRequest->id,
-                        'dv_number' => $dvRequest->dv_number,
-                        'previous_status' => $previousStatus,
-                        'new_status' => $newStatus
-                    ];
-
-                    \Log::info('DV bulk released by Cashier', [
-                        'dv_id' => $dvRequest->id,
-                        'dv_number' => $dvRequest->dv_number,
-                        'previous_status' => $previousStatus,
-                        'new_status' => $newStatus,
-                        'updated_by' => $user->id
-                    ]);
-
-                } catch (\Exception $e) {
-                    \Log::error('Error processing DV in cashier bulk release: ' . $e->getMessage(), [
-                        'dv_id' => $dvId,
-                        'error' => $e->getMessage()
-                    ]);
-
-                    $results['failed'][] = [
-                        'dv_id' => $dvId,
-                        'reason' => 'Processing error: ' . $e->getMessage()
+                        'action' => 'Status Updated via Bulk Release',
+                        'remarks' => "DV status updated to {$newStatus} by Cashier via bulk release",
+                        'created_at' => $releasedAt,
+                        'updated_at' => $releasedAt
                     ];
                 }
+
+                $successfulDVs[] = [
+                    'dv_id' => $dv->id,
+                    'dv_number' => $dv->dv_number,
+                    'new_status' => $newStatus
+                ];
+
+                // Send email notification for each released DV
+                $this->sendReleaseEmailNotification($dv, $user);
+                
+                // Broadcast individual status updates
+                $this->broadcastStatusUpdate($dv, 'Cashier_received', $newStatus, 'Cashier');
+            }
+
+            // Bulk insert operations
+            if (!empty($historyData)) {
+                DB::table('cashier_histories')->insert($historyData);
+            }
+
+            if (!empty($qrActionData)) {
+                DB::table('qr_code_actions')->insert($qrActionData);
+            }
+
+            if (!empty($notificationData)) {
+                Notification::insert($notificationData);
             }
 
             DB::commit();
 
+            // Single Pusher event for bulk completion
             $this->pusher->trigger('cashier-dashboard', 'bulk-release-completed', [
-                'successful_dvs' => $results['successful'],
-                'successful_count' => count($results['successful']),
-                'failed_count' => count($results['failed']),
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'successful_dvs' => $successfulDVs,
+                'successful_count' => count($successfulDVs),
+                'failed_count' => count($dvIds) - count($successfulDVs),
+                'timestamp' => $releasedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
+            // Update statistics
             $this->updateDashboardStatistics();
+
+            \Log::info('Cashier bulk release completed', [
+                'total_selected' => count($dvIds),
+                'successful_count' => count($successfulDVs),
+                'failed_count' => count($dvIds) - count($successfulDVs),
+                'user_id' => $user->id
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Bulk release completed',
-                'results' => $results,
+                'message' => 'Bulk release completed successfully',
+                'results' => [
+                    'successful' => $successfulDVs,
+                    'failed' => array_values(array_diff($dvIds, $eligibleDvIds))
+                ],
                 'summary' => [
                     'total_processed' => count($dvIds),
-                    'successful' => count($results['successful']),
-                    'failed' => count($results['failed'])
+                    'successful' => count($successfulDVs),
+                    'failed' => count($dvIds) - count($successfulDVs)
                 ]
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            
-            \Log::error('Cashier bulk release error: ' . $e->getMessage(), [
-                'dv_ids' => $dvIds,
-                'user_id' => auth()->id(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Error during bulk release: ' . $e->getMessage()
-            ], 500);
+            throw $e;
         }
+
+    } catch (\Exception $e) {
+        \Log::error('Cashier bulk release error: ' . $e->getMessage(), [
+            'dv_ids' => $dvIds,
+            'user_id' => auth()->id(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error during bulk release: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * Update dashboard statistics after bulk operations
@@ -965,26 +958,29 @@ private function updateDashboardStatistics()
             'new_status' => $newStatus,
         ]);
     }
+public function regionalDirectorDashboard()
+{
+    $pendingDvs = DvRequest::whereIn('status', ['RANCA_validated', 'Regional_Director_received'])
+        ->where('qr_status', 'active')
+        ->with(['program', 'focalPerson'])
+        ->orderBy('created_at', 'desc')
+        ->paginate(10);
 
-    public function regionalDirectorDashboard()
-    {
-        $pendingDvs = DvRequest::whereIn('status', ['RANCA_validated', 'Regional_Director_received'])
-            ->where('qr_status', 'active')
-            ->with(['program', 'focalPerson'])
-            ->orderBy('created_at', 'desc')
-            ->get();
-     
-        $stats = [
-            'total_pending' => $pendingDvs->count(),
-            'awaiting_receipt' => DvRequest::where('status', 'RANCA_validated')->where('qr_status', 'active')->count(),
-            'awaiting_approval' => DvRequest::where('status', 'Regional_Director_received')->where('qr_status', 'active')->count(),
-        ];
+    // More efficient stats calculation using the same base query
+    $baseQuery = DvRequest::whereIn('status', ['RANCA_validated', 'Regional_Director_received'])
+        ->where('qr_status', 'active');
 
-        return view('DOLEQR.regional-director-dashboard', [
-            'pendingDvs' => $pendingDvs,
-            'stats' => $stats
-        ]);
-    }
+    $stats = [
+        'total_pending' => $baseQuery->count(),
+        'awaiting_receipt' => (clone $baseQuery)->where('status', 'RANCA_validated')->count(),
+        'awaiting_approval' => (clone $baseQuery)->where('status', 'Regional_Director_received')->count(),
+    ];
+
+    return view('DOLEQR.regional-director-dashboard', [
+        'pendingDvs' => $pendingDvs,
+        'stats' => $stats
+    ]);
+}
 
     public function cashierDashboard()
     {
@@ -992,12 +988,15 @@ private function updateDashboardStatistics()
             ->where('qr_status', 'active')
             ->with(['program', 'focalPerson'])
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->paginate(10); // Changed from get() to paginate(10)
 
+        $baseQuery = DvRequest::whereIn('status', ['Regional_Director_signed_approved', 'Cashier_received'])
+            ->where('qr_status', 'active');
+        
         $stats = [
-            'total_pending' => $pendingDvs->count(),
-            'awaiting_processing' => DvRequest::where('status', 'Regional_Director_signed_approved')->where('qr_status', 'active')->count(),
-            'in_processing' => DvRequest::where('status', 'Cashier_received')->where('qr_status', 'active')->count(),
+            'total_pending' => $baseQuery->count(),
+            'awaiting_processing' => (clone $baseQuery)->where('status', 'Regional_Director_signed_approved')->count(),
+            'in_processing' => (clone $baseQuery)->where('status', 'Cashier_received')->count(),
         ];
 
         return view('DOLEQR.cashier-dashboard', [

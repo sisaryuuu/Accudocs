@@ -57,7 +57,6 @@ class ObligateDVORSController extends Controller
                     'Incoming-GIP_verified',
                     'Incoming-TEV_verified',
                     'ORS_received',
-                    'ORS_in_process',
                     'ORS_onhold',
                 ])
                 ->where(function ($q) use ($currentUserId, $lockDuration) {
@@ -415,122 +414,6 @@ class ObligateDVORSController extends Controller
         }
     }
 
-    public function startProcessing(Request $request, $id)
-    {
-        try {
-            $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
-            $statusBefore = $dvRequest->status;
-            $startedAt = now();
-            $currentUserId = auth()->id();
-
-            
-            if ($dvRequest->status !== 'ORS_received') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Request must be received before processing.'
-                ], 422);
-            }
-
-            $dvRequest->update([
-                'status'    => 'ORS_in_process',
-                'gross'     => $request->input('amount', $dvRequest->amount),
-                'locked_by' => $currentUserId,
-                'locked_at' => $startedAt,
-            ]);
-
-            if ($dvRequest->orsRequest) {
-                $dvRequest->orsRequest->update([
-                    'gross' => $dvRequest->amount,
-                ]);
-            }
-
-            // ✅ SEND EMAIL NOTIFICATION USING SENDPULSE
-
-            // ✅ SAVE VERIFICATION HISTORY
-            $this->saveBudgetObligationHistory(
-                $dvRequest,
-                'process',
-                'Processing started by Budget Officer',
-                [
-                    'status_before' => $statusBefore,
-                    'status_after'  => 'ORS_in_process',
-                    'processed_by' =>  $currentUserId,
-                    'processed_at' => $startedAt->toISOString(),
-                    'amount' => $dvRequest->amount,
-                    'ors_request_id' => $dvRequest->orsRequest->id ?? null
-                ]
-            );
-
-            $this->logAction(
-                $dvRequest->id,
-                'Budget_Officer',
-                $dvRequest->status,
-                'Processing started by Budget Officer'
-            );
-
-            $focalId = $dvRequest->focalperson_id;
-            $status  = $dvRequest->status;
-            $action  = 'Processing Started';
-            $remarks = $request->remarks ?? 'Request is now being processed by Budget Officer';
-
-            Notification::create([
-                'focalperson_id' => $focalId,
-                'dv_request_id'  => $dvRequest->id,
-                'status'         => $status,
-                'action'         => $action,
-                'remarks'        => $remarks,
-            ]);
-
-            // Trigger Pusher events
-            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => $status,
-                'remarks'       => $remarks,
-                'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-
-            try {
-                $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-processing', [
-                    'dv_request_id' => $dvRequest->id,
-                    'status'        => $status,
-                    'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                    'action_performer_id' => $currentUserId, // ✅ ADD THIS
-                ]);
-            } catch (\Throwable $e) {
-                \Log::warning("Pusher failed during startProcessing: " . $e->getMessage());
-            }
-
-            $this->triggerDashboardUpdate(); // TRIGGER DASHBOARD UPDATE
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Processing started.',
-                    'data' => [
-                        'id'         => $dvRequest->id,
-                        'status'     => $status,
-                        'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                    ]
-                ]);
-            }
-
-            return redirect()->route('BudgetOfficer.dvrequests.index')
-                ->with('success', 'Processing started.');
-
-        } catch (\Exception $e) {
-            \Log::error('Error starting processing: ' . $e->getMessage());
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An error occurred while starting processing.'
-                ], 500);
-            }
-
-            return redirect()->back()->with('error', 'An error occurred while starting processing.');
-        }
-    }
-
     public function fetchRecent()
     {
         $currentUserId = auth()->id();
@@ -559,10 +442,10 @@ class ObligateDVORSController extends Controller
 
         $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
 
-        if (!in_array($dvRequest->status, ['ORS_received', 'ORS_in_process', 'ORS_onhold'])) {
+        if (!in_array($dvRequest->status, ['ORS_received', 'ORS_onhold'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Amount can only be edited while request is received, in process, or on hold.'
+                'message' => 'Amount can only be edited while request is received or on hold.'
             ], 422);
         }
 
@@ -1011,7 +894,7 @@ public function previewOrs($id)
             'payee' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
             'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
             'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('F d, Y') : now()->format('F d, Y'),
-            'address' => 'Davao City',
+            'address' => 'Davao City',      
             'particular_desc' => $dvRequest->program->prcode ?? 'Program',
             'mfo' => $mfoDisplay,
             'uacs' => $uacsDisplay,
@@ -1143,7 +1026,6 @@ private function numberToWords($number)
                 'Incoming-GIP_verified',
                 'Incoming-TEV_verified',
                 'ORS_received',
-                'ORS_in_process',
                 'ORS_onhold'
             ])) {
                 return response()->json([

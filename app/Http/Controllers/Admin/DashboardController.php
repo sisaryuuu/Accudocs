@@ -21,7 +21,7 @@ class DashboardController extends Controller
         $data['pusher_key'] = env('PUSHER_APP_KEY');
         $data['pusher_cluster'] = env('PUSHER_APP_CLUSTER');
         
-        return view('admin.dashboard', $data);
+        return view('Admin.dashboard', $data);
     }
 
     /**
@@ -69,7 +69,7 @@ class DashboardController extends Controller
                 ]);
             }
             
-            return view('admin.dashboard', $data);
+            return view('Admin.dashboard', $data);
             
         } catch (\Exception $e) {
             if ($request->wantsJson()) {
@@ -79,8 +79,8 @@ class DashboardController extends Controller
                     'error' => $e->getMessage()
                 ], 500);
             }
-            
-            return redirect()->route('admin.dashboard')
+
+            return redirect()->route('Admin.dashboard')
                 ->with('error', 'Failed to apply filters');
         }
     }

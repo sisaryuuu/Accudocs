@@ -142,8 +142,13 @@
                     <table class="w-full table-auto divide-y divide-gray-200 min-w-full" id="dvTable">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200 w-12">
-                                    <!-- Checkbox column -->
+                                                            <th class="px-6 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200 w-12">
+                                    <!-- Check All checkbox in table header -->
+                                    <input 
+                                        type="checkbox" 
+                                        id="checkAllHeader" 
+                                        class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                                    >
                                 </th>
                                 <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">DV Number</th>
                                 <th class="px-8 py-5 text-left text-sm font-semibold text-gray-900 uppercase tracking-wider bg-gray-100 border-r border-gray-200">Payee Details</th>
@@ -312,18 +317,67 @@
             </div>
 
             @if($pendingDvs->count() > 0)
-            <div class="px-8 py-4 border-t border-gray-200 bg-gray-50">
-                <div class="flex items-center justify-between">
-                    <div class="text-sm text-gray-600">
-                        Showing <span class="font-semibold" id="dvCount">{{ $pendingDvs->count() }}</span> DVs pending for review
-                    </div>
-                    <div class="text-sm text-gray-600">
-                        Last updated: <span id="lastUpdatedFooter">{{ now()->format('M d, Y h:i A') }}</span>
-                    </div>
-                </div>
-            </div>
-            @endif
+<!-- Pagination Section -->
+<div class="px-8 py-4 border-t border-gray-200 bg-gray-50">
+    <div class="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
+        <div class="text-sm text-gray-600">
+            Showing <span class="font-semibold">{{ $pendingDvs->firstItem() }}</span> to 
+            <span class="font-semibold">{{ $pendingDvs->lastItem() }}</span> of 
+            <span class="font-semibold">{{ $pendingDvs->total() }}</span> DVs pending for review
         </div>
+        
+        <!-- Pagination Links -->
+        <nav class="flex items-center space-x-2">
+            <!-- Previous Page Link -->
+            @if ($pendingDvs->onFirstPage())
+                <span class="px-3 py-2 text-sm font-medium text-gray-400 bg-white border border-gray-200 rounded-lg cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </span>
+            @else
+                <a href="{{ $pendingDvs->previousPageUrl() }}" class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+            @endif
+
+            <!-- Page Numbers -->
+            @foreach ($pendingDvs->getUrlRange(1, $pendingDvs->lastPage()) as $page => $url)
+                @if ($page == $pendingDvs->currentPage())
+                    <span class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg shadow-sm">
+                        {{ $page }}
+                    </span>
+                @else
+                    <a href="{{ $url }}" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200">
+                        {{ $page }}
+                    </a>
+                @endif
+            @endforeach
+
+            <!-- Next Page Link -->
+            @if ($pendingDvs->hasMorePages())
+                <a href="{{ $pendingDvs->nextPageUrl() }}" class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-colors duration-200">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            @else
+                <span class="px-3 py-2 text-sm font-medium text-gray-400 bg-white border border-gray-200 rounded-lg cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </span>
+            @endif
+        </nav>
+
+        <div class="text-sm text-gray-600">
+            Last updated: <span id="lastUpdatedFooter">{{ now()->format('M d, Y h:i A') }}</span>
+        </div>
+    </div>
+</div>
+@endif
     </div>
 </div>
 
@@ -387,7 +441,7 @@
         <p class="text-gray-600" id="loadingMessage">Please wait while we process your request...</p>
     </div>
 </div>
-
+@endsection
 <!-- Add Pusher Script -->
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 
@@ -568,7 +622,6 @@ function handleDvRemoved(data) {
     
     updateLastUpdatedTime();
 }
-
 function handleBulkReceiveCompleted(data) {
     console.log('[Handler] Bulk receive completed:', data);
     
@@ -585,7 +638,9 @@ function handleBulkReceiveCompleted(data) {
     }
     showToast(message, data.failed_count > 0 ? 'warning' : 'success');
     
+    // Clear the selection and update UI
     clearBulkSelection();
+    
     const loadingOverlay = document.getElementById('loadingOverlay');
     if (loadingOverlay) {
         loadingOverlay.classList.add('hidden');
@@ -624,7 +679,9 @@ function handleBulkSignApproveCompleted(data) {
     }
     showToast(message, data.failed_count > 0 ? 'warning' : 'success');
     
+    // Clear the selection and update UI
     clearBulkSelection();
+    
     const loadingOverlay = document.getElementById('loadingOverlay');
     if (loadingOverlay) {
         loadingOverlay.classList.add('hidden');
@@ -867,9 +924,13 @@ function closeBulkActionModal() {
         modal.classList.add('hidden');
     }
 }
-
 async function processBulkReceive() {
     if (selectedDVs.size === 0) return;
+    
+    // Mark that we're doing a bulk operation
+    sessionStorage.setItem('bulkOperationInProgress', 'true');
+    sessionStorage.setItem('bulkOperationType', 'receive');
+    sessionStorage.setItem('bulkOperationTime', Date.now().toString());
     
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadingMessage = document.getElementById('loadingMessage');
@@ -900,8 +961,14 @@ async function processBulkReceive() {
         const result = await response.json();
         
         if (result.success) {
-            loadingMessage.textContent = 'Waiting for real-time updates...';
-            console.log('Bulk receive initiated, waiting for Pusher updates');
+            // Clear the session storage flag
+            sessionStorage.removeItem('bulkOperationInProgress');
+            sessionStorage.removeItem('bulkOperationType');
+            sessionStorage.removeItem('bulkOperationTime');
+            
+            // Reload the page
+            window.location.reload();
+            
         } else {
             throw new Error(result.message || 'Bulk receive failed');
         }
@@ -909,6 +976,11 @@ async function processBulkReceive() {
     } catch (error) {
         console.error('Error in bulk receive:', error);
         showToast('Error processing bulk receive: ' + error.message, 'error');
+        
+        // Clear session storage on error too
+        sessionStorage.removeItem('bulkOperationInProgress');
+        sessionStorage.removeItem('bulkOperationType');
+        sessionStorage.removeItem('bulkOperationTime');
         
         if (loadingOverlay) {
             loadingOverlay.classList.add('hidden');
@@ -949,8 +1021,15 @@ async function processBulkSignApprove() {
         const result = await response.json();
         
         if (result.success) {
-            loadingMessage.textContent = 'Waiting for real-time updates...';
-            console.log('Bulk sign & approve initiated, waiting for Pusher updates');
+            // Clear checkboxes immediately before reload
+            clearAllCheckboxes();
+            
+            // Close modal
+            closeBulkActionModal();
+            
+            // Reload immediately without waiting
+            window.location.reload();
+            
         } else {
             throw new Error(result.message || 'Bulk sign & approve failed');
         }
@@ -965,7 +1044,51 @@ async function processBulkSignApprove() {
         closeBulkActionModal();
     }
 }
-
+function clearAllCheckboxes() {
+    console.log('Clearing all checkboxes...');
+    
+    // Method 1: Clear the Set
+    selectedDVs.clear();
+    
+    // Method 2: Uncheck all checkboxes with multiple selectors
+    const selectors = [
+        'input[type="checkbox"][name="selected_dvs"]',
+        '.dv-checkbox',
+        'input.dv-checkbox',
+        'table input[type="checkbox"]'
+    ];
+    
+    selectors.forEach(selector => {
+        const checkboxes = document.querySelectorAll(selector);
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+            // Remove any stored state
+            checkbox.removeAttribute('checked');
+            checkbox.setAttribute('data-cleared', 'true');
+        });
+    });
+    
+    // Method 3: Reset select all checkboxes
+    const selectAllCheckboxes = document.querySelectorAll('#selectAllDVs, #checkAllHeader');
+    selectAllCheckboxes.forEach(checkbox => {
+        checkbox.checked = false;
+        checkbox.indeterminate = false;
+    });
+    
+    // Method 4: Hide bulk actions
+    const bulkSection = document.getElementById('bulkActionsSection');
+    if (bulkSection) {
+        bulkSection.classList.add('hidden');
+    }
+    
+    // Method 5: Reset selected count
+    const selectedCountElement = document.getElementById('selectedCount');
+    if (selectedCountElement) {
+        selectedCountElement.textContent = '0';
+    }
+    
+    console.log('All checkboxes cleared');
+}
 function removeCheckboxForReceivedDV(dvId) {
     const dvRow = document.querySelector(`tr[data-dv-id="${dvId}"]`);
     if (!dvRow) return;
@@ -1035,17 +1158,30 @@ function updateDvRowInTable(dvId, newStatus) {
         dvRow.style.backgroundColor = '';
     }, 1000);
 }
-
 function clearBulkSelection() {
     selectedDVs.clear();
+    
+    // Uncheck all individual checkboxes
     document.querySelectorAll('.dv-checkbox').forEach(cb => {
         cb.checked = false;
     });
+    
+    // Uncheck the select all checkbox
     const selectAll = document.getElementById('selectAllDVs');
     if (selectAll) selectAll.checked = false;
-    document.getElementById('bulkActionsSection').classList.add('hidden');
+    
+    // Hide the bulk actions section
+    const bulkSection = document.getElementById('bulkActionsSection');
+    if (bulkSection) bulkSection.classList.add('hidden');
+    
+    // Update the selected count
+    const selectedCountElement = document.getElementById('selectedCount');
+    if (selectedCountElement) {
+        selectedCountElement.textContent = '0';
+    }
+    
+    console.log('Bulk selection cleared');
 }
-
 function updateTableHeader() {
     const selectAllHeader = document.querySelector('thead th:nth-child(1)');
     if (!selectAllHeader) return;
@@ -1384,6 +1520,18 @@ document.addEventListener('keydown', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing dashboard...');
     
+    const bulkOp = sessionStorage.getItem('bulkOperationInProgress');
+    if (bulkOp) {
+        // Clear any residual state
+        sessionStorage.removeItem('bulkOperationInProgress');
+        sessionStorage.removeItem('bulkOperationType');
+        sessionStorage.removeItem('bulkOperationTime');
+        
+        // Force clear checkboxes on page load
+        setTimeout(clearAllCheckboxes, 100);
+    }
+
+
     updateTableHeader();
     
     if (typeof Pusher !== 'undefined') {
@@ -1416,4 +1564,3 @@ window.addEventListener('beforeunload', function() {
     }
 });
 </script>
-@endsection

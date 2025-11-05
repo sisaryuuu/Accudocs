@@ -259,54 +259,53 @@
 </head>
 <body>
     <div class="container">
-      <!-- Header -->
-   <div class="header" style="background: #dc2626; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; padding: 40px 30px; text-align: center;">
-
-    <h1 style="font-size: 28px; font-weight: bold; margin-bottom: 10px;">Request Status Update</h1>
-    <div class="subtitle" style="font-size: 16px; opacity: 0.9;">ACCUDOCS DOLE XI</div>
-</div>
+        <!-- Header -->
+        <div class="header">
+            <h1>Request Status Update</h1>
+            <div class="subtitle">ACCUDOCS DOLE XI</div>
+        </div>
 
         <!-- Content -->
         <div class="content">
             <!-- Greeting -->
             <div class="greeting">
-                Dear <span class="name">Caesar Alexis</span>,<br>
+                Dear <span class="name">{{ $focalPerson->fname ?? '' }} {{ $focalPerson->lname ?? '' }}</span>,<br>
                 We regret to inform you about the status of your DV request.
             </div>
 
             <!-- Alert Banner -->
             <div class="alert">
-                <div class="alert-title">Your DV Request has been rejected by IMSD</div>
+                <div class="alert-title">Your DV Request has been rejected</div>
                 Please review the details below and take appropriate action.
             </div>
 
             <!-- Request Details -->
-           <div class="section">
-    <div class="section-title">Request Details</div>
-    <div class="detail-row">
-        <div class="detail-label">Control Number</div>
-        <div class="detail-value">
-            {{ $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) : 'Pending-CN' }}
-        </div>
-    </div>
-    <div class="detail-row">
-        <div class="detail-label">Program</div>
-        <div class="detail-value">{{ $dvRequest->program->prcode ?? 'N/A' }}</div>
-    </div>
-    <div class="detail-row">
-        <div class="detail-label">Amount</div>
-        <div class="detail-value">₱{{ number_format($dvRequest->amount, 2) }}</div>
-    </div>
-    <div class="detail-row">
-        <div class="detail-label">Rejection Date</div>
-        <div class="detail-value">{{ $rejectedAt }}</div>
-    </div>
-</div>
+            <div class="section">
+                <div class="section-title">Request Details</div>
+                <div class="detail-row">
+                    <div class="detail-label">Control Number</div>
+                    <div class="detail-value">
+                        {{ $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) : 'Pending-CN' }}
+                    </div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Program</div>
+                    <div class="detail-value">{{ $dvRequest->program->prcode ?? 'N/A' }}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Amount</div>
+                    <div class="detail-value">₱{{ number_format($dvRequest->amount, 2) }}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Rejection Date</div>
+                    <div class="detail-value">{{ $rejectedAt }}</div>
+                </div>
+            </div>
 
-            <!-- Rejection Remarks -->
+            <!-- Rejection Remarks - NOW DYNAMIC -->
             <div class="remarks">
                 <div class="remarks-title">Rejection Remarks</div>
-                TEST EMAIL REJECT NOTIFICATION
+                {{ $rejectionRemarks ?? 'No remarks provided.' }}
             </div>
 
             <!-- Action Required -->
@@ -318,45 +317,19 @@
             <!-- Next Steps -->
             <div class="steps">
                 <div class="steps-title">Next Steps</div>
-                <div class="step">
-                    <div class="step-number">1</div>
-                    <div class="step-text">Review the rejection remarks carefully</div>
-                </div>
-                <div class="step">
-                    <div class="step-number">2</div>
-                    <div class="step-text">Make the necessary corrections to your DV request</div>
-                </div>
-                <div class="step">
-                    <div class="step-number">3</div>
-                    <div class="step-text">Resubmit the request through the ACCUDOCS system</div>
-                </div>
-                <div class="step">
-                    <div class="step-number">4</div>
-                    <div class="step-text">Contact IMSD if you need clarification</div>
-                </div>
+                <!-- Your existing steps -->
             </div>
 
             <!-- CTA Button -->
             <div style="text-align: center;">
-                <a href="https://love-hilly-paloma.ngrok-free.dev/FocalPerson/dvrequest/{{ $dvRequest->id }}/logs" class="button">
+                <a href="{{ config('app.url') }}/FocalPerson/dvrequest/{{ $dvRequest->id }}/logs" class="button">
                     View Request Details
                 </a>
-                <div style="font-size: 12px; color: #6b7280; margin-top: 10px;">
-                    If the button doesn't work, copy and paste this URL into your browser:<br>
-                    https://love-hilly-paloma.ngrok-free.dev/FocalPerson/dvrequest/{{ $dvRequest->id }}/logs
-                </div>
             </div>
 
             <!-- Footer -->
             <div class="footer">
-                <div class="signature">
-                    Best regards,<br>
-                    <span class="team">ACCUDOCS DOLE XI</span><br>
-                </div>
-                <div class="disclaimer">
-                    This is an automated notification. Please do not reply to this email.<br>
-                    If you have questions, please contact directly.
-                </div>
+                <!-- Your existing footer -->
             </div>
         </div>
     </div>

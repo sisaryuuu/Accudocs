@@ -328,25 +328,8 @@
                             Back
                         </a>
                     @elseif($dvRequest->status === 'RANCA_received')
-
-                        <button type="button"
-                                onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
-                                class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                                id="start-btn">
-                                <span class="button-text">Start Processing</span>
-                                <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                        </button>
-                        <a href="{{ route('Accounting.dvrequests.index') }}"
-                           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
-                           onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
-                @elseif($dvRequest->status === 'RANCA_in_process')
-                  <td>
-                    <div class="flex justify-end space-x-3">
+                        <!-- REMOVED: Start Processing button -->
+                        <!-- Directly show Validate & Finalize buttons when received -->
                         <button type="submit" 
                                 class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                             Validate & Finalize
@@ -360,12 +343,10 @@
                             Reject
                         </button>
                         <a href="{{ route('Accounting.dvrequests.index') }}"
-                        onclick="releaseLock(event, {{ $dvRequest->id }})"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                            Cancel
+                           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
+                           onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            Back
                         </a>
-                    </div>
-                </td>
                     @else
                         <a href="{{ route('Accounting.dvrequests.index') }}"
                            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
@@ -747,8 +728,8 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
 
         if (response.ok && data.success) {
             showMessage(data.message, 'success');
-            updateButtonsToStartProcessingMode(dvRequestId);
-            loadRecentRequests();
+            // After receiving, directly show Validate & Finalize buttons
+            updateButtonsToValidateMode(dvRequestId);
         } else {
             throw new Error(data.message || 'Error receiving request');
         }
@@ -762,88 +743,30 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
     }
 }
 
-async function handleStartProcessing(dvRequestId, buttonElement) {
-    const spinner = document.getElementById('start-loading-spinner');
-    const buttonText = buttonElement.querySelector('.button-text');
-    
-    buttonElement.disabled = true;
-    buttonText.textContent = 'Starting...';
-    spinner.classList.remove('hidden');
-    
-    try {
-        const response = await fetch(`/Accounting/dvrequests/${dvRequestId}/start-processing`, {
-            method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            }
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-            showMessage(data.message, 'success');
-            updateButtonsToValidateMode(dvRequestId);
-            loadRecentRequests();
-        } else {
-            throw new Error(data.message || 'Error starting processing');
-        }
-    } catch (error) {
-        console.error('Start Processing Error:', error);
-        showMessage(error.message || 'Failed to start processing', 'error');
-    } finally {
-        buttonElement.disabled = false;
-        buttonText.textContent = 'Start Processing';
-        spinner.classList.add('hidden');
-    }
-}
-
-function updateButtonsToStartProcessingMode(dvRequestId) {
-    const buttonContainer = document.getElementById('button-container');
-    buttonContainer.innerHTML = `
-        <button type="button"
-            onclick="handleStartProcessing(${dvRequestId}, this)"
-            class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-            id="start-btn">
-            <span class="button-text">Start Processing</span>
-            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-        </button>
-        <a href="{{ route('Accounting.dvrequests.index') }}"
-           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
-           onclick="releaseLock(event, {{ $dvRequest->id }})">
-            Back
-        </a>
-    `;
-}
+// REMOVED: handleStartProcessing function since we removed the startProcessing method
 
 function updateButtonsToValidateMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
     buttonContainer.innerHTML = `
-    <td>
         <div class="flex justify-end space-x-3">
             <button type="submit" 
                     class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                 Validate & Finalize
             </button>
-             <button type="button"
-                                onclick="openRejectModal({{ $dvRequest->id }})"
-                                class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                            Reject
-                        </button>
+            <button type="button"
+                    onclick="openRejectModal({{ $dvRequest->id }})"
+                    class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                Reject
+            </button>
             <a href="{{ route('Accounting.dvrequests.index') }}"
                onclick="releaseLock(event, {{ $dvRequest->id }})"
                class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                 Cancel
             </a>
         </div>
-    </td>
     `;
 }
 
@@ -863,38 +786,6 @@ function releaseLock(event, id) {
         console.error("Release lock failed:", err);
         window.location.href = "{{ route('Accounting.dvrequests.index') }}";
     });
-}
-
-async function loadRecentRequests() {
-    try {
-        const res = await fetch("{{ route('Accounting.dvrequests.recent') }}");
-        const data = await res.json();
-
-        let html = '';
-        if (data.length === 0) {
-            html = `<li class="text-sm text-gray-500">No recent requests.</li>`;
-        } else {
-            data.forEach(r => {
-                html += `
-                    <li>
-                        <a href="/Accounting/dvrequests/${r.id}" 
-                           class="block p-3 bg-gray-50 hover:bg-blue-50 rounded-lg border border-gray-200 transition">
-                            <p class="text-sm font-medium text-gray-900">
-                                Control #${r.id} • DV: ${r.dv_number || 'Pending'}
-                            </p>
-                            <p class="text-sm text-gray-600">
-                                ${(r.focal_person?.fname || 'Unknown')} ${(r.focal_person?.lname || '')} • 
-                                ${new Date(r.created_at).toLocaleDateString()}
-                            </p>
-                        </a>
-                    </li>`;
-            });
-        }
-        document.getElementById('recent-requests').innerHTML = html;
-    } catch (e) {
-        console.error("Failed to load recent requests", e);
-        document.getElementById('recent-requests').innerHTML = `<li class="text-sm text-red-500">Failed to load requests</li>`;
-    }
 }
 
 // ====================================
@@ -994,8 +885,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Load recent requests
-    loadRecentRequests();
 
     // Auto-refresh lock every 2 minutes
     setInterval(() => {
@@ -1022,9 +911,6 @@ document.addEventListener("DOMContentLoaded", () => {
         navigator.sendBeacon(`/Accounting/dvrequests/${dvRequestId}/release-lock`, 
             JSON.stringify({ _token: document.querySelector('meta[name="csrf-token"]').getAttribute('content') }));
     });
-
-    // Auto-refresh recent requests every 30 seconds
-    setInterval(loadRecentRequests, 30000);
 });
 </script>   
 <style>

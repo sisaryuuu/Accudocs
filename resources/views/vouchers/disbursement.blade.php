@@ -117,9 +117,9 @@
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <table class="header-table">
-         <tr>
+
+    <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px;">
+        <tr>
             <!-- Left: Logo -->
             <td rowspan="3" style="width: 15%; text-align: center; border: 1px solid #000; border-right: none;">
                 <img src="{{ asset('storage/logo/DOLE.png') }}" 
@@ -131,7 +131,7 @@
             <!-- Middle: Header -->
             <td rowspan="3" style="width: 65%; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; border-left: none; border-right: none; padding: 4px 0;">
                 <br>
-                <strong style="font-size: 16px;">DEPARTMENT OF LABOR AND EMPLOYMENT XI</strong><br><br><br><br><br><br><br><br>
+                <strong style="font-size: 16px;">DEPARTMENT OF LABOR AND EMPLOYMENT XI</strong><br><br><br><br>
                 <strong style="font-size: 20px;">DISBURSEMENT VOUCHER</strong>
             </td>
 
@@ -142,10 +142,11 @@
             </td>
         </tr>
         <tr>
-            <td class="no-border"></td>
-            <td>
-                Date: <strong>{{ $date ?? '_____________' }}</strong><br><br>
-                DV No.: <strong>{{ $dv_no ?? '_____________' }}</strong>
+            <!-- Right: DV No. -->
+            <td style="border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 6px;">
+                Date: <strong>{{ $data['date'] ?? '_____________' }}</strong><br><br>
+                DV No.: <strong>{{ $data['dv_no'] ?? '_____________' }}</strong>
+                <br>
             </td>
         </tr>
     </table>

@@ -524,74 +524,101 @@ document.addEventListener('DOMContentLoaded', function() {
         return allRequests.slice(startIndex, endIndex);
     }
 
-    // ============ TABLE RENDERING ============
-    function renderTable(dvRequests) {
-        if (dvRequests.length === 0) {
-            tableContainer.innerHTML = `
-                <div class="text-center py-16">
-                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
-                    <p class="text-gray-500">Try adjusting your search filter.</p>
+  // ============ TABLE RENDERING ============
+function renderTable(dvRequests) {
+    if (dvRequests.length === 0) {
+        tableContainer.innerHTML = `
+            <div class="text-center py-16">
+                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
                 </div>
-            `;
-            return;
-        }
-
-        let html = `
-            <div class="overflow-x-auto">
-                <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
-                    <thead class="bg-gray-50 text-[13px]">
-                        <tr>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
-                            <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                <p class="text-gray-500">Try adjusting your search filter.</p>
+            </div>
         `;
-
-        dvRequests.forEach(request => {
-            const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
-            html += `
-                <tr class="hover:bg-gray-50 transition-colors duration-150">
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                        ${request.accounting_control_number}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
-                    <td class="px-6 py-4 text-sm text-gray-600"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span></td>
-                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
-                    <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
-                        <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}</span></td>
-                    <td class="px-6 py-4 text-sm text-gray-600">${request.date}</td>
-                    <td class="px-5 py-4 text-center text-sm font-medium">
-                        ${
-                            request.status === 'submitted'
-                            ? `<button type="button" 
-                                    onclick="handleReceiveAction(${request.id}, this)"
-                                    class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">
-                                    Receive
-                            </button>`    
-                            : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" 
-                                    class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
-                                    View / Process
-                            </a>`
-                        }
-                    </td>
-                </tr>`;
-        });
-
-        html += `</tbody></table></div>`;
-        tableContainer.innerHTML = html;
+        return;
     }
+
+    // CORRECTED function to convert date to PHT
+    function formatToPHT(dateString) {
+        if (!dateString) return 'N/A';
+        
+        try {
+            const date = new Date(dateString);
+            
+            // Proper timezone conversion to Asia/Manila
+            return date.toLocaleString('en-US', {
+                timeZone: 'Asia/Manila',
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return dateString; // Return original if parsing fails
+        }
+    }
+
+    let html = `
+        <div class="overflow-x-auto">
+            <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
+                <thead class="bg-gray-50 text-[13px]">
+                    <tr>
+                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                        <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted (PHT)</th>
+                        <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
+    `;
+
+    dvRequests.forEach(request => {
+        const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
+        
+        // Use the corrected date formatting function
+        const formattedDate = formatToPHT(request.date);
+        
+        html += `
+            <tr class="hover:bg-gray-50 transition-colors duration-150">
+                <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                    ${request.accounting_control_number}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
+                <td class="px-6 py-4 text-sm text-gray-600"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span></td>
+                <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
+                <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
+                    <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}</span></td>
+                <td class="px-6 py-4 text-sm text-gray-600" title="Philippine Time">${formattedDate}</td>
+                <td class="px-5 py-4 text-center text-sm font-medium">
+                    ${
+                        request.status === 'submitted'
+                        ? `<button type="button" 
+                                onclick="handleReceiveAction(${request.id}, this)"
+                                class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">
+                                Receive
+                        </button>`    
+                        : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" 
+                                class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
+                                View / Process
+                        </a>`
+                    }
+                </td>
+            </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    tableContainer.innerHTML = html;
+}
 
     async function fetchDvRequests() {
         try {

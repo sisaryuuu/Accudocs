@@ -383,6 +383,7 @@ public function history()
             'imsd_head' => \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD'),
             'accountant_name' => \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT'),
             'regional_director' => \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR'),
+            'budget_officer' => \App\Models\Setting::get('budget_officer', 'NAME OF BUDGET OFFICER'),
         ];
 
         return view('FocalPerson.dvrequest.preview', compact('data', 'dvRequest'));

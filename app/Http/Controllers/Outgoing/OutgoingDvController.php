@@ -43,7 +43,7 @@ class OutgoingDvController extends Controller
         $currentUserId = auth()->id();
         $lockDuration  = now()->subMinutes(10);
         $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'orsRequest'])
-            ->whereIn('status', ['ORS_obligated','Outgoing_received','Outgoing_in_process'])
+            ->whereIn('status', ['ORS_obligated','Outgoing_received']) // REMOVED: Outgoing_in_process
             ->where(function ($q) use ($currentUserId, $lockDuration) {
             $q->whereNull('locked_by')              
               ->orWhere('locked_by', $currentUserId)  
@@ -74,7 +74,7 @@ class OutgoingDvController extends Controller
         $lockDuration  = now()->subMinutes(10);
 
         $recentDvRequests = DvRequest::with(['focalPerson', 'program', 'respocenter'])
-            ->whereIn('status', ['ORS_obligated','Outgoing_received'])
+            ->whereIn('status', ['ORS_obligated','Outgoing_received']) // REMOVED: Outgoing_in_process
             ->whereNotNull('focalperson_id')
             ->where(function ($q) use ($currentUserId, $lockDuration) {
             $q->whereNull('locked_by')                // not locked
@@ -241,111 +241,7 @@ class OutgoingDvController extends Controller
         }
     }
 
-    public function startProcessing(Request $request, $id)
-    {
-        try {
-            $dvRequest = DvRequest::findOrFail($id);
-            $statusBefore = $dvRequest->status;
-            $startedAt = now();
-
-            if ($dvRequest->status !== 'Outgoing_received') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Request must be received first before processing.'
-                ], 422);
-            }
-
-            $dvRequest->update([
-                'status'    => 'Outgoing_in_process',
-                'locked_by' => auth()->id(),
-                'locked_at' => $startedAt,
-            ]);
-
-
-
-            // ✅ SAVE FINALIZATION HISTORY
-            $this->saveOutgoingFinalizationHistory(
-                $dvRequest,
-                'process',
-                'Processing started by Outgoing',
-                [
-                    'status_before' => $statusBefore,
-                    'status_after' => 'Outgoing_in_process',
-                    'processed_by' => auth()->id(),
-                    'processed_at' => $startedAt->toISOString(),
-                    'amount' => $dvRequest->amount
-                ]
-            );
-
-            // Log
-            $this->logAction(
-                $dvRequest->id,
-                'Outgoing',
-                'Outgoing_in_process',
-                'Processing started by Outgoing',
-            );
-
-            // Notify focal person
-            $focalId = $dvRequest->focalperson_id;
-            $status  = 'Outgoing_in_process';
-            $action  = 'Processing Started';
-            $remarks = 'Request is now being processed by Outgoing';
-
-            Notification::create([
-                'focalperson_id' => $focalId,
-                'dv_request_id'  => $dvRequest->id,
-                'status'         => $status,
-                'action'         => $action,
-                'remarks'        => $remarks,
-            ]);
-
-            // Trigger real-time event
-            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => $status,
-                'remarks'       => $remarks,
-                'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-
-            $this->pusher->trigger('dv-requests-outgoing', 'dv-request-processing', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => $status,
-                'action_performer_id' => auth()->id(), // ✅ ADD THIS
-                'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-
-            $this->triggerDashboardUpdate(); // TRIGGER DASHBOARD UPDATE
-
-            // JSON response for AJAX
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Processing started.',
-                    'data' => [
-                        'id'         => $dvRequest->id,
-                        'status'     => $status,
-                        'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                    ]
-                ]);
-            }
-
-            // Fallback redirect
-            return redirect()->route('Outgoing.dvrequests.index')
-                ->with('success', 'Processing started.');
-
-        } catch (\Exception $e) {
-            \Log::error('Error starting processing: ' . $e->getMessage());
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An error occurred while starting processing.'
-                ], 500);
-            }
-
-            return redirect()->back()->with('error', 'An error occurred while starting processing.');
-        }
-    }
+    // REMOVED: startProcessing method
 
     public function redirectToFirstPending()
     {
@@ -393,7 +289,8 @@ class OutgoingDvController extends Controller
         $dvRequest = DvRequest::with(['gipAttachments', 'tupadAttachments', 'tevAttachments'])->findOrFail($id);
         $statusBefore = $dvRequest->status;
 
-        if ($dvRequest->status !== 'Outgoing_in_process') {
+        // UPDATED: Allow finalization from Outgoing_received status (removed Outgoing_in_process)
+        if ($dvRequest->status !== 'Outgoing_received') {
             return redirect()->back()->with('error', 'This DV request cannot be finalized yet.');
         }
 
@@ -768,7 +665,8 @@ class OutgoingDvController extends Controller
             $statusBefore = $dvRequest->status;
 
             // ✅ Only allow rejection if status is currently in Outgoing stage
-            if (!in_array($dvRequest->status, ['Outgoing_in_process'])) {
+            // UPDATED: Removed Outgoing_in_process from allowed statuses
+            if (!in_array($dvRequest->status, ['Outgoing_received'])) {
                 return response()->json([
                     'success' => false,
                     'message' => 'This DV request cannot be rejected at its current stage.'

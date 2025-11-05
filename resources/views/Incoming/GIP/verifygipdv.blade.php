@@ -13,8 +13,7 @@
             <form action="{{ route('Incoming.GIP.dvrequests.verify', $dvRequest->id) }}" method="POST" class="space-y-6">
                 @csrf
 
-
-                  <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Mode of Payment</label>
 
                     @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
@@ -37,7 +36,7 @@
                     @else
                     <p class="text-gray-400">N/A</p>
                     @endif
-                    </div>
+                </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -65,36 +64,37 @@
                     <label class="block text-sm font-medium text-gray-700">Particulars</label>
                     <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
-   <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-    <h3 class="text-lg font-semibold text-gray-900 mb-4">Attachments Verified by IMSD</h3>
+   
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Attachments Verified by IMSD</h3>
 
-    @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0)
-        <!-- Scrollable container with max height -->
-        <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg bg-white mb-4">
-            <ul class="space-y-2 p-2">
-                @foreach($dvRequest->gipAttachments as $attachment)
-                    <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition border-b border-gray-100 last:border-b-0">
-                        <input type="checkbox"
-                            name="gip_attachments[{{ $attachment->id }}]"
-                            id="gip_attachment_{{ $attachment->id }}"
-                            class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mr-3 flex-shrink-0"
-                            {{ $attachment->is_present ? 'checked' : '' }}>
-                        <label for="gip_attachment_{{ $attachment->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
-                            {{ $attachment->name }}
-                        </label>
-                        @if($attachment->is_present)
-                            <span class="text-xs text-green-600 font-medium flex-shrink-0">✓ Present</span>
-                        @else
-                            <span class="text-xs text-gray-400 flex-shrink-0">Missing</span>
-                        @endif
-                    </li>
-                @endforeach
-            </ul>
-        </div>
-    @else
-        <p class="text-sm text-gray-500">No attachments available.</p>
-    @endif
-</div>
+                    @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0)
+                        <!-- Scrollable container with max height -->
+                        <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg bg-white mb-4">
+                            <ul class="space-y-2 p-2">
+                                @foreach($dvRequest->gipAttachments as $attachment)
+                                    <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition border-b border-gray-100 last:border-b-0">
+                                        <input type="checkbox"
+                                            name="gip_attachments[{{ $attachment->id }}]"
+                                            id="gip_attachment_{{ $attachment->id }}"
+                                            class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mr-3 flex-shrink-0"
+                                            {{ $attachment->is_present ? 'checked' : '' }}>
+                                        <label for="gip_attachment_{{ $attachment->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
+                                            {{ $attachment->name }}
+                                        </label>
+                                        @if($attachment->is_present)
+                                            <span class="text-xs text-green-600 font-medium flex-shrink-0">✓ Present</span>
+                                        @else
+                                            <span class="text-xs text-gray-400 flex-shrink-0">Missing</span>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @else
+                        <p class="text-sm text-gray-500">No attachments available.</p>
+                    @endif
+                </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -102,23 +102,24 @@
                         <input type="text" value="₱{{ number_format($dvRequest->amount, 2) }}" 
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
-                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                     @if($mop->pivot->paymentDetail)
-                        <div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        @if($mop->pivot->paymentDetail)
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700">Bank Name</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
+                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                            </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
+                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                            </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Bank Address</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
-                @else
-                        <p class="text-xs text-gray-400">No payment details available</p>
-                @endif
+                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                            </div>
+                        @else
+                            <p class="text-xs text-gray-400">No payment details available</p>
+                        @endif
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -132,33 +133,20 @@
                     </div>
                 </div>
 
-               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Date Received</label>
-                    <input type="date" 
-                        value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d') : '' }}"
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Time</label>
-                    <input type="time"   
-                        value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('H:i') : '' }}"
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
-                </div>
-            </div>
-                         </div> 
-                
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Received By</label>
-                        <input type="text" value="{{ $dvRequest->accountingUnit->fname ?? '' }} {{ $dvRequest->accountingUnit->lname ?? '' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                        <label class="block text-sm font-medium text-gray-700">Date Received</label>
+                        <input type="date" 
+                            value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d') : '' }}"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Received From</label>
-                        <input type="text"  value="{{ $dvRequest->focalPerson->fname ?? 'DILI MAKIT.AN' }} {{ $dvRequest->focalPerson->lname ?? 'WALA' }}"  class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                        <label class="block text-sm font-medium text-gray-700">Time</label>
+                        <input type="time"   
+                            value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('H:i') : '' }}"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
                     </div>
                 </div>
-             
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Remarks / Lacking</label>
@@ -167,33 +155,13 @@
                               placeholder="Enter remarks or notes..."></textarea>
                 </div>
 
-                   
-                    @if($dvRequest->status === 'Incoming-GIP_received')
-                     <div class="flex justify-end space-x-3" id="button-container">
-                    <button type="button"
-                        onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
-                        class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                        id="start-btn">
-                        <span class="button-text">Start Processing</span>
-                        <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    </button>
-                        <a href="{{ route('Incoming.GIP.index') }} "
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
-                        </div>
-                        </form> <!-- Close form here -->
-                     @elseif($dvRequest->status === 'Incoming-GIP_in_process')
-                     <td>
-                      <div id="button-container" class="flex justify-end space-x-3">
+                <!-- Action Buttons -->
+                @if($dvRequest->status === 'Incoming-GIP_received')
+                    <div class="flex justify-end space-x-3" id="button-container">
                         <button type="submit"
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                             Verify
                         </button>
-                    </form>
                         <button 
                             type="button"
                             onclick="openRejectModal()"
@@ -201,13 +169,13 @@
                             Reject
                         </button>
                         <a href="{{ route('Incoming.GIP.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
+                            onclick="releaseLock(event, {{ $dvRequest->id }})">
                             Back
                         </a>
                     </div>
-                    </td>
-                    @elseif($dvRequest->status === 'IMSD_verified')
-                       <div id="button-container" class="flex justify-end space-x-3">
+                @elseif($dvRequest->status === 'IMSD_verified')
+                    <div id="button-container" class="flex justify-end space-x-3">
                         <button type="button"
                             onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
                             class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
@@ -218,31 +186,24 @@
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                         </button>
-                          <a href="{{ route('Incoming.GIP.index') }} "
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
-                         </div>
-                        </form> <!-- Close form here -->
-                    @else
                         <a href="{{ route('Incoming.GIP.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
+                            onclick="releaseLock(event, {{ $dvRequest->id }})">
                             Back
                         </a>
-                    @endif
-                </div>
-
-              
-          
+                    </div>
+                @else
+                    <a href="{{ route('Incoming.GIP.index') }}"
+                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
+                        onclick="releaseLock(event, {{ $dvRequest->id }})">
+                        Back
+                    </a>
+                @endif
+            </form>
         </div> <!-- end left column (lg:col-span-2) -->
 
         <!-- Sidebar (right column) -->
         <div class="lg:col-span-1">
-            <div class="bg-white shadow-md rounded-xl p-6">
-                <ul id="recent-requests" class="space-y-3">
-                    <li class="text-sm text-gray-500">Loading...</li>
-                </ul>
-            </div>
         </div>
     </div> <!-- end grid -->
 </div> <!-- end container -->
@@ -343,8 +304,10 @@
     }
 }
 </style>
+
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
 @endsection
+
 <script>
 let currentRejectId = null;
 
@@ -485,11 +448,9 @@ document.addEventListener('DOMContentLoaded', () => {
             closeRejectModal();
         }
     });
-});
 
-document.addEventListener('DOMContentLoaded', () => {
+    // Attachment checkbox event listeners
     const checkboxes = document.querySelectorAll('input[name^="gip_attachments["]');
-
     checkboxes.forEach(cb => {
         cb.addEventListener('change', (e) => {
             const listItem = e.target.closest('li');
@@ -509,6 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
 // Function to show toast messages
 function showMessage(message, type = 'success') {
     const container = document.getElementById('message-container');
@@ -565,10 +527,9 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
         const responseText = await response.text();
         let data = JSON.parse(responseText);
 
-      if (response.ok && data.success) {
+        if (response.ok && data.success) {
             showMessage(data.message, 'success');
-            updateButtonsToStartProcessingMode(dvRequestId);
-            loadRecentRequests();
+            updateButtonsToVerifyMode(dvRequestId);
         } else {
             throw new Error(data.message || 'Error receiving request');
         }
@@ -579,97 +540,28 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
         buttonText.textContent = 'Receive';
         spinner.classList.add('hidden');
     }
-    // Reset button state on error
-        buttonElement.disabled = false;
-        buttonText.textContent = 'Receive';
-        spinner.classList.add('hidden');
-   
-       
 }   
-async function handleStartProcessing(dvRequestId, buttonElement) {
-    const spinner = document.getElementById('start-loading-spinner');
-    const buttonText = buttonElement.querySelector('.button-text');
-    
-    buttonElement.disabled = true;
-    buttonText.textContent = 'Starting...';
-    spinner.classList.remove('hidden');
-    
-    try {
-        const formData = new FormData();
-        formData.append('_token', document.querySelector('input[name="_token"]').value);
-        
-        const response = await fetch(`/Incoming/GIP/dvrequests/${dvRequestId}/start-processing`, {
-            method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
-            },
-            body: formData
-        });
 
-        const responseText = await response.text();
-        let data = JSON.parse(responseText);
-
-        if (response.ok && data.success) {
-            showMessage(data.message, 'success');
-            updateButtonsToVerifyMode(dvRequestId);
-            loadRecentRequests();
-        } else {
-            throw new Error(data.message || 'Error starting processing');
-        }
-    } catch (error) {
-        console.error('Start Processing Error:', error);
-        showMessage(error.message || 'Failed to start processing', 'error');
-        buttonElement.disabled = false;
-        buttonText.textContent = 'Start Processing';
-        spinner.classList.add('hidden');
-    }
-}
-function updateButtonsToStartProcessingMode(dvRequestId) {
-    const buttonContainer = document.getElementById('button-container');
-    buttonContainer.innerHTML = `
-        <button type="button"
-            onclick="handleStartProcessing(${dvRequestId}, this)"
-            class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-            id="start-btn">
-            <span class="button-text">Start Processing</span>
-            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-        </button>
-          <a href="{{ route('Incoming.GIP.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
-    `;
-}
 function updateButtonsToVerifyMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
     buttonContainer.innerHTML = `
-    <td>
         <div class="flex justify-end space-x-3">
             <button type="submit" 
                     class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                 Verify
             </button>
             <button type="button"
-                    onclick="openRejectModal(${dvRequestId})"
+                    onclick="openRejectModal()"
                     class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
                 Reject
             </button>
-            <a href="/Incoming/GIP"
-               onclick="releaseLock(event, ${dvRequestId})"
-               class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                Cancel
+            <a href="{{ route('Incoming.GIP.index') }}"
+               class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
+               onclick="releaseLock(event, ${dvRequestId})">
+                Back
             </a>
         </div>
-    </td>
-        `;
+    `;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -722,37 +614,4 @@ function releaseLock(event, id) {
         window.location.href = "{{ route('Incoming.GIP.index') }}";
     });
 }
-async function loadRecentRequests() {
-    try {
-        const res = await fetch("{{ route('Incoming.GIP.dvrequests.fetchgipRecent') }}");
-        const data = await res.json();
-        console.log(data); // 👀 debug output
-
-        let html = '';
-        if (data.length === 0) {
-            html = `<li class="text-sm text-gray-500">No recent requests.</li>`;
-        } else {
-            data.forEach(r => {
-                html += `
-                    <li>
-                        <a href="/Incoming/GIP/dvrequests/${r.id}" 
-                           class="block p-3 bg-gray-50 hover:bg-blue-50 rounded-lg border border-gray-200 transition">
-                            <p class="text-sm font-medium text-gray-900">
-                                Control #${r.id} • ${r.particulars ?? ''}
-                            </p>
-                            <p class="text-sm text-gray-600">
-                                ${(r.focal_person?.fname ?? 'Unknown')} ${(r.focal_person?.lname ?? '')} • 
-                                ${new Date(r.created_at).toLocaleDateString()}
-                            </p>
-                        </a>
-                    </li>`;
-            });
-        }
-        document.getElementById('recent-requests').innerHTML = html;
-    } catch (e) {
-        console.error("Failed to load recent requests", e);
-    }
-}
-setInterval(loadRecentRequests, 5000);
-loadRecentRequests();
 </script>

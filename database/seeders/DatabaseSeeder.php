@@ -27,7 +27,7 @@ class DatabaseSeeder extends Seeder
             TUPADAttachmentSeeder::class,
             TEVAttachmentSeeder::class,
             UACSCodeSeeder::class,
-        
+
         ]);
     }
 }

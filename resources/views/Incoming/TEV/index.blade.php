@@ -86,11 +86,16 @@
             </div>
         </div>
 
-        <!-- Search Input -->
-        <div class="mb-4">
-            <input type="text" id="searchInput" 
-                   placeholder="🔍 Search DV Requests (Control No, Program, Respocenter, Submitted By)..."
-                   class="w-full md:w-1/2 px-4 py-2 border rounded-lg shadow-sm focus:ring focus:ring-blue-200 focus:outline-none">
+        <!-- Search and Pagination Info -->
+        <div class="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div class="flex-1">
+                <input type="text" id="searchInput" 
+                       placeholder="🔍 Search DV Requests (Control No, Program, Respocenter, Submitted By)..."
+                       class="w-full md:w-2/3 px-4 py-2 border rounded-lg shadow-sm focus:ring focus:ring-blue-200 focus:outline-none">
+            </div>
+            <div id="pagination-info" class="text-sm text-gray-600">
+                Showing <span id="current-range">0</span> of <span id="total-records">0</span> records
+            </div>
         </div>
 
         <!-- Main Content Card -->
@@ -105,6 +110,47 @@
                     <p class="text-gray-500">Loading requests...</p>
                 </div>
             </div>
+
+            <!-- Pagination Controls -->
+            <div id="pagination-controls" class="flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-gray-50">
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm text-gray-700">Rows per page:</span>
+                    <select id="per-page-select" class="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="10">10</option>
+                        <option value="25" selected>25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    <button id="first-page" class="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                    <button id="prev-page" class="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                    
+                    <div id="page-numbers" class="flex items-center space-x-1">
+                        <!-- Page numbers will be generated here -->
+                    </div>
+                    
+                    <button id="next-page" class="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                    <button id="last-page" class="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -115,15 +161,33 @@
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const currentUserId = {{ auth()->id() }}; // Add this line
+    const currentUserId = {{ auth()->id() }};
     const tableContainer = document.getElementById('dv-table-container');
     const searchInput = document.getElementById('searchInput');
     const connectionStatus = document.getElementById('connection-status');
     const toastContainer = document.getElementById('toast-container');
     const agingAlertsContainer = document.getElementById('aging-alerts-container');
+    
+    // Pagination elements
+    const perPageSelect = document.getElementById('per-page-select');
+    const firstPageBtn = document.getElementById('first-page');
+    const prevPageBtn = document.getElementById('prev-page');
+    const nextPageBtn = document.getElementById('next-page');
+    const lastPageBtn = document.getElementById('last-page');
+    const pageNumbersContainer = document.getElementById('page-numbers');
+    const paginationInfo = document.getElementById('pagination-info');
+    const currentRangeSpan = document.getElementById('current-range');
+    const totalRecordsSpan = document.getElementById('total-records');
+
     let allRequests = [];
     let searchTerm = "";
     let cachedAgingData = [];
+    
+    // Pagination state
+    let currentPage = 1;
+    let perPage = 25;
+    let totalPages = 1;
+    let totalRecords = 0;
 
     const statusColors = {
         'IMSD_verified': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
@@ -157,14 +221,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Monitor Pusher connection
-   pusher.connection.bind('state_change', function(states) {
-    updateConnectionStatus(states.current);
-});
+    pusher.connection.bind('state_change', function(states) {
+        updateConnectionStatus(states.current);
+    });
 
-// Subscribe to Incoming-TEV channel
-const tevChannel = pusher.subscribe('dv-requests-incoming-tev');
+    // Subscribe to Incoming-TEV channel
+    const tevChannel = pusher.subscribe('dv-requests-incoming-tev');
 
-// ============ PUSHER EVENT LISTENERS ============
+    // ============ PUSHER EVENT LISTENERS ============
 
     // Listen for new DV request submissions from IMSD - NO FILTERING (global event)
     tevChannel.bind('dv-request-submitted', function(data) {
@@ -182,7 +246,7 @@ const tevChannel = pusher.subscribe('dv-requests-incoming-tev');
     tevChannel.bind('dv-request-received', function(data) {
         console.log('DV request received:', data);
         
-            // Only show toast if current user performed the action
+        // Only show toast if current user performed the action
         if (data.action_performer_id === currentUserId) {
             let message = `Document ${data.control_number || data.dv_request?.control_number} received successfully`;
             showToast(message, 'success');
@@ -199,103 +263,103 @@ const tevChannel = pusher.subscribe('dv-requests-incoming-tev');
         }, 500);
     });
 
-// Listen for processing started events - WITH USER FILTERING
-tevChannel.bind('dv-request-processing', function(data) {
-    console.log('DV request processing started:', data);
-    
-    // Only show toast if current user performed the action
-    if (data.action_performer_id === currentUserId) {
-        showToast(`Document processing started successfully`, 'success');
-    } else {
-        // Silent refresh for other users' actions
-        console.log(`Document processing started by another user`);
-    }
-    
-    fetchDvRequests();
-    // Update aging data since status changed
-    setTimeout(() => {
+    // Listen for processing started events - WITH USER FILTERING
+    tevChannel.bind('dv-request-processing', function(data) {
+        console.log('DV request processing started:', data);
+        
+        // Only show toast if current user performed the action
+        if (data.action_performer_id === currentUserId) {
+            showToast(`Document processing started successfully`, 'success');
+        } else {
+            // Silent refresh for other users' actions
+            console.log(`Document processing started by another user`);
+        }
+        
+        fetchDvRequests();
+        // Update aging data since status changed
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 500);
+    });
+
+    // Listen for verified events - WITH USER FILTERING
+    tevChannel.bind('dv-request-verified', function(data) {
+        console.log('DV request verified:', data);
+        
+        // Only show toast if current user performed the action
+        if (data.action_performer_id === currentUserId) {
+            showToast(`Document verified successfully`, 'success');
+        } else {
+            // Silent refresh for other users' actions
+            console.log(`Document verified by another user`);
+        }
+        
+        fetchDvRequests();
+        // Update aging data since document is completed
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
+    });
+
+    // Listen for rejected events - WITH USER FILTERING
+    tevChannel.bind('dv-request-rejected', function(data) {
+        console.log('DV request rejected:', data);
+        
+        // Only show toast if current user performed the action
+        if (data.action_performer_id === currentUserId) {
+            showToast(`Document rejected`, 'error');
+        } else {
+            // Silent refresh for other users' actions
+            console.log(`Document rejected by another user`);
+        }
+        
+        fetchDvRequests();
+        // Update aging data since document status changed
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
+    });
+
+    // Listen for status updates - WITH USER FILTERING
+    tevChannel.bind('status-updated', function(data) {
+        console.log('DV request status updated:', data);
+        
+        // Only show toast if current user performed the action
+        if (data.action_performer_id === currentUserId) {
+            showToast(`Document status updated`, 'info');
+        } else {
+            // Silent refresh for other users' actions
+            console.log(`Document status updated by another user`);
+        }
+        
+        fetchDvRequests();
+        // Update aging data since status changed
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
+    });
+
+    // ============ AGING ALERTS ============
+    // Listen for aging document alerts - NO FILTERING (global alerts)
+    tevChannel.bind('document-aging-alert', function(data) {
+        console.log('TEV Aging alert received:', data);
+        showToast(`Aging document: ${data.control_number} is ${data.days_old} days old`, 'warning');
+        // Refresh aging data immediately
         fetchAgingDocuments();
         updateStatistics();
-    }, 500);
-});
+    });
 
-// Listen for verified events - WITH USER FILTERING
-tevChannel.bind('dv-request-verified', function(data) {
-    console.log('DV request verified:', data);
-    
-    // Only show toast if current user performed the action
-    if (data.action_performer_id === currentUserId) {
-        showToast(`Document verified successfully`, 'success');
-    } else {
-        // Silent refresh for other users' actions
-        console.log(`Document verified by another user`);
-    }
-    
-    fetchDvRequests();
-    // Update aging data since document is completed
-    setTimeout(() => {
+    // Listen for time-based aging updates (sent by scheduled task) - NO FILTERING (global updates)
+    tevChannel.bind('TEV-aging-update', function(data) {
+        console.log('TEV aging update received:', data);
+        showToast('Aging data updated', 'info');
         fetchAgingDocuments();
         updateStatistics();
-    }, 1000);
-});
-
-// Listen for rejected events - WITH USER FILTERING
-tevChannel.bind('dv-request-rejected', function(data) {
-    console.log('DV request rejected:', data);
-    
-    // Only show toast if current user performed the action
-    if (data.action_performer_id === currentUserId) {
-        showToast(`Document rejected`, 'error');
-    } else {
-        // Silent refresh for other users' actions
-        console.log(`Document rejected by another user`);
-    }
-    
-    fetchDvRequests();
-    // Update aging data since document status changed
-    setTimeout(() => {
-        fetchAgingDocuments();
-        updateStatistics();
-    }, 1000);
-});
-
-// Listen for status updates - WITH USER FILTERING
-tevChannel.bind('status-updated', function(data) {
-    console.log('DV request status updated:', data);
-    
-    // Only show toast if current user performed the action
-    if (data.action_performer_id === currentUserId) {
-        showToast(`Document status updated`, 'info');
-    } else {
-        // Silent refresh for other users' actions
-        console.log(`Document status updated by another user`);
-    }
-    
-    fetchDvRequests();
-    // Update aging data since status changed
-    setTimeout(() => {
-        fetchAgingDocuments();
-        updateStatistics();
-    }, 1000);
-});
-
-// ============ AGING ALERTS ============
-// Listen for aging document alerts - NO FILTERING (global alerts)
-tevChannel.bind('document-aging-alert', function(data) {
-    console.log('TEV Aging alert received:', data);
-    showToast(`Aging document: ${data.control_number} is ${data.days_old} days old`, 'warning');
-    // Refresh aging data immediately
-    fetchAgingDocuments();
-    updateStatistics();
-});
-
-// Listen for time-based aging updates (sent by scheduled task) - NO FILTERING (global updates)
-tevChannel.bind('TEV-aging-update', function(data) {
-    console.log('TEV aging update received:', data);
-    showToast('Aging data updated', 'info');
-    fetchAgingDocuments();
-    updateStatistics();
-});
+    });
 
     // ============ TOAST FUNCTIONS ============
     function showToast(message, type = 'success') {
@@ -389,41 +453,130 @@ tevChannel.bind('TEV-aging-update', function(data) {
     }
 
     // Manual refresh function
-   window.refreshAllData = function() {
- 
-    // Show loading state
-    const tableContainer = document.getElementById('dv-table-container');
-    if (tableContainer) {
-        tableContainer.innerHTML = `
-            <div class="text-center py-16">
-                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                    <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                    </svg>
+    window.refreshAllData = function() {
+        // Show loading state
+        const tableContainer = document.getElementById('dv-table-container');
+        if (tableContainer) {
+            tableContainer.innerHTML = `
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </div>
+                    <p class="text-gray-500">Refreshing requests...</p>
                 </div>
-                <p class="text-gray-500">Refreshing requests...</p>
-            </div>
-        `;
+            `;
+        }
+        
+        // Clear search and cached data
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = '';
+        
+        if (typeof allRequests !== 'undefined') allRequests = [];
+        if (typeof cachedAgingData !== 'undefined') cachedAgingData = [];
+        if (typeof searchTerm !== 'undefined') searchTerm = "";
+        
+        // Refresh all data
+        fetchDvRequests();
+        fetchAgingDocuments();
+        updateStatistics();
+        
+        // Refresh recent requests if available
+        if (typeof loadRecentRequests === 'function') {
+            setTimeout(loadRecentRequests, 500);
+        }
     }
-    
-    // Clear search and cached data
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) searchInput.value = '';
-    
-    if (typeof allRequests !== 'undefined') allRequests = [];
-    if (typeof cachedAgingData !== 'undefined') cachedAgingData = [];
-    if (typeof searchTerm !== 'undefined') searchTerm = "";
-    
-    // Refresh all data
-    fetchDvRequests();
-    fetchAgingDocuments();
-    updateStatistics();
-    
-    // Refresh recent requests if available
-    if (typeof loadRecentRequests === 'function') {
-        setTimeout(loadRecentRequests, 500);
+
+    // ============ PAGINATION FUNCTIONS ============
+    function updatePaginationInfo() {
+        const start = ((currentPage - 1) * perPage) + 1;
+        const end = Math.min(currentPage * perPage, totalRecords);
+        
+        currentRangeSpan.textContent = `${start}-${end}`;
+        totalRecordsSpan.textContent = totalRecords;
+        
+        // Update pagination controls state
+        firstPageBtn.disabled = currentPage === 1;
+        prevPageBtn.disabled = currentPage === 1;
+        nextPageBtn.disabled = currentPage === totalPages;
+        lastPageBtn.disabled = currentPage === totalPages;
+        
+        // Generate page numbers
+        generatePageNumbers();
     }
-}
+
+    function generatePageNumbers() {
+        const pages = [];
+        const maxVisiblePages = 5;
+        
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        
+        // Adjust if we're near the end
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+        
+        // First page
+        if (startPage > 1) {
+            pages.push(1);
+            if (startPage > 2) {
+                pages.push('...');
+            }
+        }
+        
+        // Middle pages
+        for (let i = startPage; i <= endPage; i++) {
+            pages.push(i);
+        }
+        
+        // Last page
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                pages.push('...');
+            }
+            pages.push(totalPages);
+        }
+        
+        // Render page numbers
+        pageNumbersContainer.innerHTML = '';
+        pages.forEach(page => {
+            if (page === '...') {
+                const span = document.createElement('span');
+                span.className = 'px-3 py-1 text-gray-500';
+                span.textContent = '...';
+                pageNumbersContainer.appendChild(span);
+            } else {
+                const button = document.createElement('button');
+                button.className = `px-3 py-1 rounded text-sm font-medium transition ${
+                    page === currentPage 
+                        ? 'bg-blue-500 text-white' 
+                        : 'text-gray-700 hover:bg-gray-200'
+                }`;
+                button.textContent = page;
+                button.onclick = () => goToPage(page);
+                pageNumbersContainer.appendChild(button);
+            }
+        });
+    }
+
+    function goToPage(page) {
+        if (page < 1 || page > totalPages || page === currentPage) return;
+        
+        currentPage = page;
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+        
+        // Scroll to top of table
+        tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function getPaginatedData() {
+        const startIndex = (currentPage - 1) * perPage;
+        const endIndex = startIndex + perPage;
+        return allRequests.slice(startIndex, endIndex);
+    }
 
     // ============ TABLE RENDERING ============
     function renderTable(dvRequests) {
@@ -442,6 +595,29 @@ tevChannel.bind('TEV-aging-update', function(data) {
             `;
             return;
         }
+
+            // CORRECTED function to convert date to PHT
+    function formatToPHT(dateString) {
+        if (!dateString) return 'N/A';
+        
+        try {
+            const date = new Date(dateString);
+            
+            // Proper timezone conversion to Asia/Manila
+            return date.toLocaleString('en-US', {
+                timeZone: 'Asia/Manila',
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return dateString; // Return original if parsing fails
+        }
+    }
 
         let html = `
             <div class="overflow-x-auto">
@@ -462,6 +638,8 @@ tevChannel.bind('TEV-aging-update', function(data) {
 
         dvRequests.forEach(request => {
             const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
+
+            const formattedDate = formatToPHT(request.date);
             html += `
                 <tr class="hover:bg-gray-50 transition-colors duration-150">
                     <td class="px-6 py-4 text-sm font-medium text-gray-900">
@@ -472,7 +650,7 @@ tevChannel.bind('TEV-aging-update', function(data) {
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
                     <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
                         <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}</span></td>
-                    <td class="px-6 py-4 text-sm text-gray-600">${request.date}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600" title="Philippine Time">${formattedDate}</td>
                     <td class="px-5 py-4 text-center text-sm font-medium">
                         ${
                             request.status === 'IMSD_verified'
@@ -498,8 +676,17 @@ tevChannel.bind('TEV-aging-update', function(data) {
         try {
             const res = await fetch("{{ route('Incoming.TEV.fetchAll') }}?search=" + encodeURIComponent(searchTerm));
             const data = await res.json();
+            
             allRequests = data;
-            renderTable(data);
+            totalRecords = data.length;
+            totalPages = Math.ceil(totalRecords / perPage);
+            
+            // Reset to first page when data changes
+            currentPage = 1;
+            
+            renderTable(getPaginatedData());
+            updatePaginationInfo();
+            
         } catch (err) {
             console.error('Failed to fetch DV requests', err);
             tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
@@ -708,14 +895,27 @@ tevChannel.bind('TEV-aging-update', function(data) {
         }
     }
 
-    // ============ EVENT HANDLERS ============
-    
-    // Search with debounce
+    // ============ EVENT HANDLERS FOR PAGINATION ============
+    perPageSelect.addEventListener('change', function() {
+        perPage = parseInt(this.value);
+        currentPage = 1;
+        totalPages = Math.ceil(totalRecords / perPage);
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+    });
+
+    firstPageBtn.addEventListener('click', () => goToPage(1));
+    prevPageBtn.addEventListener('click', () => goToPage(currentPage - 1));
+    nextPageBtn.addEventListener('click', () => goToPage(currentPage + 1));
+    lastPageBtn.addEventListener('click', () => goToPage(totalPages));
+
+    // ============ SEARCH WITH DEBOUNCE ============
     let searchTimeout;
     searchInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
             searchTerm = this.value;
+            currentPage = 1; // Reset to first page when searching
             fetchDvRequests();
         }, 300);
     });
@@ -729,8 +929,11 @@ tevChannel.bind('TEV-aging-update', function(data) {
     // Refresh main table less frequently (every 5 minutes)
     setInterval(fetchDvRequests, 5 * 60 * 1000);
 
-    // ============ INITIAL LOAD ============
-    
+    // ============ INITIALIZATION ============
+
+    // Initialize pagination
+    updatePaginationInfo();
+
     // Initial load
     fetchDvRequests();
     fetchAgingDocuments();

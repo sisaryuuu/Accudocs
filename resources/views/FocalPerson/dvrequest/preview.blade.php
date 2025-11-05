@@ -32,7 +32,7 @@
     <!-- Action Buttons -->
     <div class="flex justify-between items-center mb-6">
         <a href="{{ route('FocalPerson.dvrequest.index') }}" 
-           class="inline-flex items-center px-4 py-2 bg-blue-200 text-gray-700 rounded-lg hover:bg-black-300 transition">
+           class="inline-flex items-center px-4 py-2 bg-blue-200 text-gray-700 rounded-lg hover:bg-blue-300 transition">
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
@@ -40,12 +40,12 @@
         </a>
 
         <div class="flex gap-3">
-            <button onclick="window.print()" 
+            <button onclick="printBothDocuments()" 
                     class="no-print inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-lg">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
                 </svg>
-                Print
+                Print Both Documents
             </button> 
 
             <a href="{{ route('FocalPerson.dvrequest.generatePDF', $dvRequest->id) }}" 
@@ -58,14 +58,45 @@
         </div>
     </div>
 
-    <!-- Voucher Preview Container -->
-    <div class="bg-white shadow-2xl rounded-lg p-8" id="voucher-container">
-        <!-- Include the voucher template -->
-        @include('vouchers.disbursement', $data)
+    <!-- Document Preview Container -->
+    <div class="bg-white shadow-2xl rounded-lg p-8" id="document-container">
+        <!-- Page 1: ORS Document -->
+        <div class="mb-8 page-break">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-700">ORS Document</h3>
+                <button onclick="printORS()" 
+                        class="no-print inline-flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition text-sm">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                    </svg>
+                    Print ORS Only
+                </button>
+            </div>
+            <div id="ors-container">
+                @include('vouchers.focalors', $data)
+            </div>
+        </div>
+
+        <!-- Page 2: DV Document -->
+        <div class="page-break">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-700">DV Document</h3>
+                <button onclick="printDV()" 
+                        class="no-print inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition text-sm">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                    </svg>
+                    Print DV Only
+                </button>
+            </div>
+            <div id="dv-container">
+                @include('vouchers.disbursement', $data)
+            </div>
+        </div>
     </div>
 
     <!-- Information Notice -->
-    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mt-6 rounded-r-lg">
+    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mt-6 rounded-r-lg no-print">
         <div class="flex">
             <div class="flex-shrink-0">
                 <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
@@ -74,7 +105,7 @@
             </div>
             <div class="ml-3">
                 <p class="text-sm text-blue-700">
-                    <strong>Note:</strong> This is a preview of your DV request. You can print or download this document for your records. 
+                    <strong>Note:</strong> This preview shows both the ORS and DV documents. You can print them individually or together. 
                     The request has been submitted and is now pending review by the accounting department.
                 </p>
             </div>
@@ -87,18 +118,138 @@
         body * {
             visibility: hidden;
         }
-        #voucher-container, #voucher-container * {
+        #document-container, #document-container * {
             visibility: visible;
         }
-        #voucher-container {
+        #document-container {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
+            padding: 0;
+            margin: 0;
+            background: white;
         }
         .no-print {
             display: none !important;
         }
+        .page-break {
+            page-break-after: always;
+            margin-bottom: 0;
+        }
+        .page-break:last-child {
+            page-break-after: auto;
+        }
+    }
+
+    /* Screen-only styles */
+    @media screen {
+        .page-break {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            background: white;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        }
     }
 </style>
+
+<script>
+    function printBothDocuments() {
+        window.print();
+    }
+
+    function printORS() {
+        const orsContent = document.getElementById('ors-container').innerHTML;
+        const printWindow = window.open('', '_blank');
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>ORS Document </title>
+                <style>
+                    body { 
+                        margin: 0.3cm;
+                        padding: 0;
+                        font-family: "Times New Roman", Times, serif;
+                        background: white;
+                    }
+                    @media print {
+                        body { margin: 0.3cm; }
+                    }
+                </style>
+            </head>
+            <body>
+                ${orsContent}
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        printWindow.focus();
+        
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 250);
+    }
+
+    function printDV() {
+        const dvContent = document.getElementById('dv-container').innerHTML;
+        const printWindow = window.open('', '_blank');
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>DV Document - {{ $data['dv_no'] ?? 'N/A' }}</title>
+                <style>
+                    body { 
+                        margin: 0.3cm;
+                        padding: 0;
+                        font-family: "Times New Roman", Times, serif;
+                        background: white;
+                    }
+                    @media print {
+                        body { margin: 0.3cm; }
+                    }
+                </style>
+            </head>
+            <body>
+                ${dvContent}
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        printWindow.focus();
+        
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 250);
+    }
+
+    // Auto-adjust print layout
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add print styles for better printing
+        const style = document.createElement('style');
+        style.textContent = `
+            @media print {
+                @page {
+                    margin: 0.5cm;
+                    size: letter;
+                }
+                body {
+                    margin: 0;
+                    padding: 0;
+                    background: white !important;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    });
+</script>
 @endsection

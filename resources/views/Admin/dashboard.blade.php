@@ -32,18 +32,6 @@
     </div>
 </div>
 
-
-
-<!-- Welcome Card -->
-<div class="bg-white rounded-xl shadow p-6 mb-6">
-    <h2 class="text-2xl font-semibold text-gray-700 mb-2">
-        Welcome, {{ Auth::user()->full_name }}
-    </h2>
-    <p class="text-gray-600">Email: <span class="font-medium">{{ Auth::user()->email }}</span></p>
-    <p class="text-gray-600">Program: <span class="font-medium">{{ Auth::user()->program->name ?? 'N/A' }}</span></p>
-</div>
-
-<!-- KPI Cards -->
 <!-- KPI Cards - Inline -->
 <div class="flex flex-col md:flex-row gap-4 mb-8">
     <div class="flex-1 bg-white p-4 rounded-lg shadow text-center">
@@ -625,11 +613,14 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-// Manual refresh function
+// Manual refresh function - FIXED
 async function manualRefresh() {
     try {
         showNotification('Refreshing dashboard data...', 'info');
-        await fetchLatestData();
+        
+        // Option 1: Full page reload (simplest)
+        location.reload();
+        
     } catch (error) {
         console.error('❌ Manual refresh failed:', error);
         showNotification('Refresh failed. Please try again.', 'error');

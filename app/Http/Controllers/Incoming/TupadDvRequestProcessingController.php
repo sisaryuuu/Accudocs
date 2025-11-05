@@ -12,8 +12,11 @@ use App\Models\IncomingTUPADVerificationHistory;
 use App\Models\DocumentAgingAlert;
 use App\Models\TUPADAttachment;
 use App\Services\PusherService;
+use App\Services\SendPulseServices;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class TupadDvRequestProcessingController extends Controller
 {
@@ -33,7 +36,7 @@ class TupadDvRequestProcessingController extends Controller
         $lockDuration = now()->subMinutes(10);
 
         $query = DvRequest::whereHas('program', fn($q) =>$q->where('prcode', 'TUPAD'))
-                    ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
+                    ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received'])
                     ->where(function ($q) use ($currentUserId,$lockDuration){
                         $q->whereNull('locked_by')
                         ->orWhere('locked_by',$currentUserId)
@@ -221,115 +224,6 @@ public function receive(Request $request, $id)
     }
 }
 
-public function startProcessing(Request $request, $id)
-{
-    try {
-        $dvRequest = DvRequest::findOrFail($id);
-        $statusBefore = $dvRequest->status;
-        $startedAt = now();
-        $currentUserId = auth()->id();
-            
-        if ($dvRequest->status !== 'Incoming-TUPAD_received') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Request must be received first before processing.'
-            ], 422);
-        }
-
-        $startedAt = now();
-
-        $dvRequest->update([
-            'status'    => 'Incoming-TUPAD_in_process',
-            'locked_by' =>  $currentUserId,
-            'locked_at' => $startedAt,
-        ]);
-          $this->saveIncomingTUPADVerificationHistory(
-                $dvRequest,
-                'process',
-                'Processing started by Incoming-TUPAD',
-                [
-                    'status_before' => $statusBefore,
-                    'status_after' => 'Incoming-TUPAD_in_process',
-                    'processed_by' =>  $currentUserId,
-                    'processed_at' => $startedAt->toISOString()
-                ]
-            );
-
-        // Log
-        $this->logAction(
-            $dvRequest->id,
-            'Incoming',
-            'Incoming-TUPAD_in_process',
-            'Processing started by Incoming-TUPAD',
-        );
-
-        // Notify focal person
-        $focalId = $dvRequest->focalperson_id;
-        $status  = 'Incoming-TUPAD_in_process';
-        $action  = 'Processing Started';
-        $remarks = 'Request is now being processed by Incoming-TUPAD';
-
-        Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => $status,
-            'action'         => $action,
-            'remarks'        => $remarks,
-        ]);
-
-        // Trigger real-time event
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => $status,
-            'remarks'       => $remarks,
-            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-
-         $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-processing', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => $status,
-            'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            'action_performer_id' => $currentUserId, // ADD THIS
-            'processed_by_user_id' => $currentUserId, // ADD THIS
-        ]);
-
-
-        $this->triggerDashboardUpdate();
-        // JSON response for AJAX
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Processing started.',
-                'data' => [
-                    'id'         => $dvRequest->id,
-                    'status'     => $status,
-                    'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                ]
-            ]);
-        }
-
-        // Fallback redirect
-        return redirect()->route('Incoming.TUPAD.index')
-            ->with('success', 'Processing started.');
-
-    } catch (\Exception $e) {
-        \Log::error('Error starting processing: ' . $e->getMessage());
-
-
-
-
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'An error occurred while starting processing.'
-            ], 500);
-        }
-
-        return redirect()->back()->with('error', 'An error occurred while starting processing.');
-    }   
-}
-
-
  public function fetchtupadRecent()
  
     {
@@ -337,7 +231,7 @@ public function startProcessing(Request $request, $id)
         $lockDuration = now()->subMinutes(10);
         $recentDvRequests = DvRequest::with('focalPerson')
         ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
-        ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
+        ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received'])
         ->whereNotNull('focalperson_id')
          ->where(function ($q) use ($currentUserId,$lockDuration){
         $q->whereNull('locked_by')
@@ -358,7 +252,7 @@ public function startProcessing(Request $request, $id)
 
         $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
             ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
-            ->whereIn('status', ['IMSD_verified','Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
+            ->whereIn('status', ['IMSD_verified','Incoming-TUPAD_received'])
             ->where(function($q) use ($currentUserId,$lockDuration){
                 $q->whereNull('locked_by')
                 ->orWhere('locked_by',$currentUserId)
@@ -391,7 +285,7 @@ public function startProcessing(Request $request, $id)
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
             'amount'       => number_format($request->amount, 2),
             'status'       => $request->status,
-            'date'         => $request->created_at->format('M d, Y h:i A'),
+            'date'         => $request->created_at->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
         return response()->json($result);
@@ -399,6 +293,9 @@ public function startProcessing(Request $request, $id)
 
     public function fetch($id)
     {
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
+        
         $dvRequest = DvRequest::with(['focalPerson', 'program','respocenter','accountingUnit'])
             ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
              ->where(function($q) use ($currentUserId,$lockDuration){
@@ -450,7 +347,7 @@ public function startProcessing(Request $request, $id)
                     'name' => $attachment->name,
                     'is_present' => $isPresent,
                     'modality' => $attachment->modality,
-                    'type' => 'tupad' // Changed from 'tev' to 'tupad'
+                    'type' => 'tupad'
                 ];
             }
         }
@@ -464,7 +361,7 @@ public function startProcessing(Request $request, $id)
     }
 
     // Update status
-    $dvRequest->update([ // Use the model instance instead of query builder
+    $dvRequest->update([
         'status'     => 'Incoming-TUPAD_verified',
         'locked_by'  => null,
         'locked_at'  => null,
@@ -550,7 +447,7 @@ public function reject(Request $request, $id)
         $currentUserId = auth()->id();
     
         // ✅ Only allow rejection if status is currently in Incoming-TUPAD stage
-        if (!in_array($dvRequest->status, ['Incoming-TUPAD_received', 'Incoming-TUPAD_in_process'])) {
+        if ($dvRequest->status !== 'Incoming-TUPAD_received') {
             return response()->json([
                 'success' => false,
                 'message' => 'This DV request cannot be rejected at its current stage.'
@@ -763,7 +660,7 @@ public function reject(Request $request, $id)
     // Get all pending TUPAD requests
     $pendingRequests = DvRequest::whereHas('program', fn($q) => 
                                 $q->where('prcode', 'TUPAD')) 
-                            ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_in_process','Incoming-TUPAD_received'])
+                            ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received'])
                             ->orderBy('created_at', 'asc')
                             ->get();
 

@@ -310,69 +310,74 @@ Route::get('/dv/verify/{reference}', [DvRequestController::class, 'verifyQR'])->
 
 Route::post('/dv/verify/manual', [DvRequestController::class, 'verifyManual'])->name('dv.verify.manual');
 
+
 Route::middleware(['auth:web', 'verified', 'role:Admin|IMSD'])->prefix('RegionalOffices/IMSD')->group(function () {
 
     // Index page — list all DV requests for IMSD
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
-    ->name('RegionalOffices.IMSD.index');
+        ->name('RegionalOffices.IMSD.index');
     
     Route::get('/dvrequests/fetchimsdRecent', [DvRequestProcessingController::class, 'fetchimsdRecent'])
-    ->name('RegionalOffices.IMSD.dvrequests.fetchimsdRecent');
+        ->name('RegionalOffices.IMSD.dvrequests.fetchimsdRecent');
    
-    Route::get('/fetchAll', [DvRequestProcessingController::class, 'fetchAll']) // Remove duplicate prefix
-    ->name('RegionalOffices.IMSD.fetchAll');
+    Route::get('/fetchAll', [DvRequestProcessingController::class, 'fetchAll'])
+        ->name('RegionalOffices.IMSD.fetchAll');
     
     Route::get('/dvrequests/{id}', [DvRequestProcessingController::class, 'show'])
-    ->name('RegionalOffices.IMSD.verifydv');
+        ->name('RegionalOffices.IMSD.verifydv');
     
+    // Receive action - now directly sets status to IMSD_received (ready for verification)
     Route::post('/dvrequests/{id}/receive', [DvRequestProcessingController::class, 'receive'])
-    ->name('IMSD.dvrequests.receive');
+        ->name('IMSD.dvrequests.receive');
     
-    Route::post('/dvrequests/{id}/start-processing', [DvRequestProcessingController::class, 'startProcessing'])
-    ->name('IMSD.dvrequests.startProcessing');
-    
+    // Verify action
     Route::post('/dvrequests/{id}/verify', [DvRequestProcessingController::class, 'verify'])
-    ->name('IMSD.dvrequests.verify');
+        ->name('IMSD.dvrequests.verify');
     
+    // Reject action
     Route::post('/dvrequests/{id}/reject', [DvRequestProcessingController::class, 'reject'])
-    ->name('IMSD.dvrequests.reject');
+        ->name('IMSD.dvrequests.reject');
    
+    // Verification history
     Route::get('/history', [DvRequestProcessingController::class, 'verificationHistory'])
-    ->name('RegionalOffices.IMSD.history');
+        ->name('RegionalOffices.IMSD.history');
     
-    Route::get('/load-form/{id}', [DvRequestProcessingController::class, 'loadForm']) // Remove duplicate prefix
-    ->name('RegionalOffices.IMSD.loadForm');
+    // Load form
+    Route::get('/load-form/{id}', [DvRequestProcessingController::class, 'loadForm'])
+        ->name('RegionalOffices.IMSD.loadForm');
     
+    // Redirect to first pending
     Route::get('/redirect-to-first', [DvRequestProcessingController::class, 'redirectToFirstPending'])
-    ->name('RegionalOffices.IMSD.redirectFirst');
+        ->name('RegionalOffices.IMSD.redirectFirst');
     
+    // Edit attachments
     Route::get('/dvrequests/{id}/attachments/edit', [DvRequestProcessingController::class, 'editAttachments'])
-    ->name('dvRequest.editAttachments');
+        ->name('dvRequest.editAttachments');
     
+    // Update attachments
     Route::put('/dvrequests/{id}/attachments', [DvRequestProcessingController::class, 'updateAttachments'])
-    ->name('dvRequest.updateAttachments');
+        ->name('dvRequest.updateAttachments');
     
+    // Lock management
     Route::post('/dvrequests/{id}/refresh-lock', [DvRequestProcessingController::class, 'refreshLock'])
-    ->name('dvrequests.refreshLock');
+        ->name('dvrequests.refreshLock');
     
     Route::post('/dvrequests/{id}/release-lock', [DvRequestProcessingController::class, 'releaseLock'])
-    ->name('dvrequests.releaseLock');
+        ->name('dvrequests.releaseLock');
     
-    Route::get('/dvrequests/{id}/tupad-attachments/{modality}', [DvRequestProcessingController::class, 'getTupadAttachmentsByModality']) // Remove duplicate prefix
-    ->name('RegionalOffices.IMSD.dvrequests.tupadAttachments');
+    // TUPAD attachments by modality
+    Route::get('/dvrequests/{id}/tupad-attachments/{modality}', [DvRequestProcessingController::class, 'getTupadAttachmentsByModality'])
+        ->name('RegionalOffices.IMSD.dvrequests.tupadAttachments');
     
     // Aging routes
     Route::get('/aging-documents', [DvRequestAgingController::class, 'getAgingDocuments'])
-    ->name('IMSD.aging.documents');
+        ->name('IMSD.aging.documents');
     
     Route::get('/aging-statistics', [DvRequestAgingController::class, 'getAgingStatistics'])
-    ->name('IMSD.aging.statistics');
+        ->name('IMSD.aging.statistics');
     
     Route::post('/send-aging-alerts', [DvRequestAgingController::class, 'sendAgingAlerts'])
-    ->name('IMSD.aging.send');
-
-    Route::post('/aging-alerts/{id}/acknowledge', [DvRequestAgingController::class, 'acknowledgeAlert'])
-    ->name('IMSD.aging.acknowledge');
+        ->name('IMSD.aging.send');
 });
 
 
@@ -395,9 +400,6 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-GIP'])->prefix('
     Route::post('/dvrequests/{id}/receive', [GIPDvRequestProcessingController::class, 'receive'])
     ->middleware('permission:gip.approve')
     ->name('Incoming.GIP.dvrequests.receive');
-     Route::post('/dvrequests/{id}/start-processing', [GIPDvRequestProcessingController::class, 'startProcessing'])
-     ->middleware('permission:gip.approve')
-    ->name('Incoming.GIP.dvrequests.startProcessing');
     Route::get('/history', [GIPDvRequestProcessingController::class, 'history'])
     ->middleware('permission:gip.view')
     ->name('dvrequests.giphistory');
@@ -451,10 +453,6 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TUPAD'])->prefix
        Route::post('/dvrequests/{id}/receive', [TupadDvRequestProcessingController::class, 'receive'])
     ->middleware('permission:tupad.approve')
     ->name('Incoming.TUPAD.dvrequests.receive');
-
-    Route::post('/dvrequests/{id}/start-processing', [TupadDvRequestProcessingController::class, 'startProcessing'])
-    ->middleware('permission:tupad.approve')
-    ->name('dvrequests.startProcessing');
     Route::get('/history', [TupadDvRequestProcessingController::class, 'history'])
     ->middleware('permission:tupad.view')
     ->name('dvrequests.tupadhistory');
@@ -494,9 +492,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TEV'])->prefix('
     Route::get('/dvrequests/{id}', [TEVDvRequestProcessingController::class, 'show']) 
     ->name('Incoming.TEV.dvrequests.withid');
        Route::post('/dvrequests/{id}/receive', [TEVDvRequestProcessingController::class, 'receive'])
-    ->name('Incoming.TEV.dvrequests.receive');
-    Route::post('/dvrequests/{id}/start-processing', [TEVDvRequestProcessingController::class, 'startProcessing'])
-    ->name('dvrequests.startProcessing');
+    ->name('Incoming.TEV.dvrequests.receive');      
     Route::get('/history', [TEVDvRequestProcessingController::class, 'history'])
     ->name('dvrequests.tevhistory');
     Route::get('/fetch-all', [TEVDvRequestProcessingController::class, 'fetchAll'])
@@ -532,15 +528,10 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
     Route::get('/dvrequests', [ObligateDVORSController::class, 'index'])
         ->middleware('permission:budget.view')
         ->name('dvrequests.index');
-        
+
     Route::get('/dvrequests/fetch', [ObligateDVORSController::class, 'fetchDvRequests'])
         ->middleware('permission:budget.view')
         ->name('dvrequests.fetch');
-        
-    Route::get('/dvrequests/recent', [ObligateDVORSController::class, 'fetchRecent'])
-        ->middleware('permission:budget.view')
-        ->name('dvrequests.recent');
-        
     Route::get('/dvrequests/verify', [ObligateDVORSController::class, 'redirectToFirstPending'])
         ->middleware('permission:budget.view')
         ->name('dvrequests.verifyors');
@@ -553,11 +544,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
     Route::get('/dvrequests/{id}', [ObligateDVORSController::class, 'show'])
         ->middleware('permission:budget.view')
         ->name('dvrequests.withid');
-    
-    // ====================================
-    // DV REQUEST ACTIONS (POST/PUT)
-    // ====================================
-    
+ 
     Route::post('/dvrequests/{id}/receive', [ObligateDVORSController::class, 'receive'])
         ->middleware('permission:budget.edit')
         ->name('dvrequests.receive');
@@ -733,20 +720,14 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Accounting_III'])->prefix
     // Your existing routes
     Route::get('/dvrequests', [RANCAController::class, 'index'])
     ->name('dvrequests.index');
-    
     Route::get('/dvrequests/fetch', [RANCAController::class, 'fetchDvRequests'])
     ->name('dvrequests.fetch');
-    Route::get('/dvrequests/recent', [RANCAController::class, 'fetchDvRecent'])
-    ->name('dvrequests.recent');
-
     Route::get('/dvrequests/{id}', [RANCAController::class, 'show'])
     ->name('dvrequests.show');
     Route::get('/redirect-first-pending', [RANCAController::class, 'redirectToFirstPending'])
     ->name('dvrequest.redirectFirstPending');
     Route::post('/dvrequests/{id}/receive', [RANCAController::class, 'receive'])
     ->name('dvrequests.receive');
-    Route::post('/dvrequests/{id}/start-processing', [RANCAController::class, 'startProcessing'])
-    ->name('dvrequests.start');
     Route::put('/dvrequests/{id}/update-amount', [RANCAController::class, 'updateAmount'])
     ->name('dvrequests.updateAmount');
     Route::post('/dvrequests/{id}/validate', [RANCAController::class, 'validateDV'])

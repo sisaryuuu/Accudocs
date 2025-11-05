@@ -60,7 +60,7 @@
                             <option value="">All Steps</option>
                             <option value="received" {{ request('step') == 'received' ? 'selected' : '' }}>Received</option>
                             <option value="processed" {{ request('step') == 'processed' ? 'selected' : '' }}>Processed</option>
-                            <option value="completed" {{ request('step') == 'completed' ? 'selected' : '' }}>Completed</option>
+                            <option value="completed" {{ request('step') == 'released' ? 'selected' : '' }}>Completed</option>
                             <option value="rejected" {{ request('step') == 'rejected' ? 'selected' : '' }}>Rejected</option>
                         </select>
                     </div>
@@ -116,7 +116,7 @@
                         <div>
                             <p class="text-sm text-green-600 font-medium">Completed</p>
                             <p class="text-2xl font-bold text-green-800">
-                                {{ $releaseHistory->where('transaction_step', 'completed')->count() }}
+                                {{ $releaseHistory->where('transaction_step', 'released')->count() }}
                             </p>
                         </div>
                         <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -198,7 +198,7 @@
                                         <span class="px-2 py-1 text-xs font-medium rounded-full status-processed">
                                             <i class="fas fa-cog mr-1"></i> Processed
                                         </span>
-                                    @elseif($history->transaction_step == 'completed')
+                                    @elseif($history->transaction_step == 'released')
                                         <span class="px-2 py-1 text-xs font-medium rounded-full status-completed">
                                             <i class="fas fa-check-circle mr-1"></i> Completed
                                         </span>

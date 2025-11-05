@@ -86,11 +86,16 @@
             </div>
         </div>
 
-        <!-- Search Input -->
-        <div class="mb-4">
-            <input type="text" id="searchInput" 
-                   placeholder="🔍 Search DV Requests (Control No, ORS No, Program, Respocenter, Submitted By)..."
-                   class="w-full md:w-1/2 px-4 py-2 border rounded-lg shadow-sm focus:ring focus:ring-blue-200 focus:outline-none">
+        <!-- Search and Pagination Info -->
+        <div class="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div class="flex-1">
+                <input type="text" id="searchInput" 
+                       placeholder="🔍 Search DV Requests (Control No, ORS No, Program, Respocenter, Submitted By)..."
+                       class="w-full md:w-2/3 px-4 py-2 border rounded-lg shadow-sm focus:ring focus:ring-blue-200 focus:outline-none">
+            </div>
+            <div id="pagination-info" class="text-sm text-gray-600">
+                Showing <span id="current-range">0</span> of <span id="total-records">0</span> records
+            </div>
         </div>
 
         <!-- Main Content Card -->
@@ -105,6 +110,47 @@
                     <p class="text-gray-500">Loading requests...</p>
                 </div>
             </div>
+
+            <!-- Pagination Controls -->
+            <div id="pagination-controls" class="flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-gray-50">
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm text-gray-700">Rows per page:</span>
+                    <select id="per-page-select" class="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="10">10</option>
+                        <option value="25" selected>25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    <button id="first-page" class="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                    <button id="prev-page" class="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                    
+                    <div id="page-numbers" class="flex items-center space-x-1">
+                        <!-- Page numbers will be generated here -->
+                    </div>
+                    
+                    <button id="next-page" class="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                    <button id="last-page" class="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -114,16 +160,369 @@
 
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const currentUserId = {{ auth()->id() }};
-    const tableContainer = document.getElementById('dv-table-container');
-    const searchInput = document.getElementById('searchInput');
-    const connectionStatus = document.getElementById('connection-status');
-    const toastContainer = document.getElementById('toast-container');
-    const agingAlertsContainer = document.getElementById('aging-alerts-container');
-    let allRequests = [];
-    let searchTerm = "";
-    let cachedAgingData = [];
+// ====================================
+// GLOBAL VARIABLES
+// ====================================
+let currentPage = 1;
+let perPage = 25;
+let totalPages = 1;
+let totalRecords = 0;
+let allRequests = [];
+let searchTerm = "";
+let cachedAgingData = [];
+let searchTimeout;
+
+// ====================================
+// GLOBAL DOM ELEMENTS
+// ====================================
+let perPageSelect, firstPageBtn, prevPageBtn, nextPageBtn, lastPageBtn;
+let pageNumbersContainer, currentRangeSpan, totalRecordsSpan;
+let tableContainer, searchInput, connectionStatus, toastContainer, agingAlertsContainer;
+
+// ====================================
+// PAGINATION FUNCTIONS
+// ====================================
+
+function updatePaginationInfo() {
+    const start = ((currentPage - 1) * perPage) + 1;
+    const end = Math.min(currentPage * perPage, totalRecords);
+    
+    currentRangeSpan.textContent = `${start}-${end}`;
+    totalRecordsSpan.textContent = totalRecords;
+    
+    // Update pagination controls state
+    firstPageBtn.disabled = currentPage === 1;
+    prevPageBtn.disabled = currentPage === 1;
+    nextPageBtn.disabled = currentPage === totalPages;
+    lastPageBtn.disabled = currentPage === totalPages;
+    
+    // Generate page numbers
+    generatePageNumbers();
+}
+
+function generatePageNumbers() {
+    const pages = [];
+    const maxVisiblePages = 5;
+    
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    // Adjust if we're near the end
+    if (endPage - startPage + 1 < maxVisiblePages) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    // First page
+    if (startPage > 1) {
+        pages.push(1);
+        if (startPage > 2) {
+            pages.push('...');
+        }
+    }
+    
+    // Middle pages
+    for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+    }
+    
+    // Last page
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            pages.push('...');
+        }
+        pages.push(totalPages);
+    }
+    
+    // Render page numbers
+    pageNumbersContainer.innerHTML = '';
+    pages.forEach(page => {
+        if (page === '...') {
+            const span = document.createElement('span');
+            span.className = 'px-3 py-1 text-gray-500';
+            span.textContent = '...';
+            pageNumbersContainer.appendChild(span);
+        } else {
+            const button = document.createElement('button');
+            button.className = `px-3 py-1 rounded text-sm font-medium transition ${
+                page === currentPage 
+                    ? 'bg-blue-500 text-white' 
+                    : 'text-gray-700 hover:bg-gray-200'
+            }`;
+            button.textContent = page;
+            button.onclick = () => goToPage(page);
+            pageNumbersContainer.appendChild(button);
+        }
+    });
+}
+
+function goToPage(page) {
+    if (page < 1 || page > totalPages || page === currentPage) return;
+    
+    currentPage = page;
+    renderTable(getPaginatedData());
+    updatePaginationInfo();
+    
+    // Scroll to top of table
+    tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function getPaginatedData() {
+    const startIndex = (currentPage - 1) * perPage;
+    const endIndex = startIndex + perPage;
+    return allRequests.slice(startIndex, endIndex);
+}
+
+// ====================================
+// TOAST FUNCTIONS
+// ====================================
+
+function showToast(message, type = 'success') {
+    const toastId = 'toast-' + Date.now();
+    const isSuccess = type === 'success';
+    
+    const toastHTML = `
+        <div id="${toastId}" class="toast-notification transform transition-all duration-300 ease-in-out translate-x-full opacity-0">
+            <div class="flex items-center w-full max-w-sm p-4 mb-4 text-gray-500 bg-white rounded-lg shadow-lg border-l-4 ${isSuccess ? 'border-green-500' : 'border-red-500'}" role="alert">
+                <div class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg ${isSuccess ? 'text-green-500 bg-green-100' : 'text-red-500 bg-red-100'}">
+                    ${isSuccess ? 
+                        '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' :
+                        '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>'
+                    }
+                </div>
+                <div class="ml-3 text-sm font-medium text-gray-900">${message}</div>
+                <button type="button" class="ml-auto -mx-1.5 -my-1.5 bg-white text-gray-400 hover:text-gray-900 rounded-lg focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex h-8 w-8" onclick="dismissToast('${toastId}')">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    const toast = document.getElementById(toastId);
+
+    setTimeout(() => {
+        toast.classList.remove('translate-x-full', 'opacity-0');
+        toast.classList.add('translate-x-0', 'opacity-100');
+    }, 100);
+
+    setTimeout(() => {
+        dismissToast(toastId);
+    }, 4000);
+}
+
+function dismissToast(toastId) {
+    const toast = document.getElementById(toastId);
+    if (toast) {
+        toast.classList.add('translate-x-full', 'opacity-0');
+        toast.classList.remove('translate-x-0', 'opacity-100');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }
+}
+
+// ====================================
+// ACTION HANDLERS
+// ====================================
+
+async function handleReceiveAction(requestId, button) {
+    const originalText = button.innerHTML;
+    button.innerHTML = 'Processing...';
+    button.disabled = true;
+
+    try {
+        const response = await fetch(`/Accounting/dvrequests/${requestId}/receive`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            let message = result.message || 'Document has been received by RANCA.';
+            
+            showToast(message, 'success');
+            // Refresh all data
+            fetchDvRequests();
+            fetchAgingDocuments();
+            updateStatistics();
+            
+        } else {
+            showToast(result.message || 'Failed to receive document.', 'error');
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    } catch (error) {
+        console.error('Error receiving document:', error);
+        showToast('An error occurred while processing the request.', 'error');
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// ====================================
+// DATA FETCHING FUNCTIONS (GLOBAL)
+// ====================================
+
+async function fetchDvRequests() {
+    try {
+        const res = await fetch("{{ route('Accounting.dvrequests.fetch') }}?search=" + encodeURIComponent(searchTerm));
+        
+        // Check if response is OK
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
+        // Check if response is JSON
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await res.text();
+            console.error('Expected JSON but got:', text.substring(0, 200));
+            throw new Error('Server returned non-JSON response');
+        }
+        
+        const data = await res.json();
+        
+        allRequests = data;
+        totalRecords = data.length;
+        totalPages = Math.ceil(totalRecords / perPage);
+        
+        // Reset to first page when data changes
+        currentPage = 1;
+        
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+        
+    } catch (err) {
+        console.error('Failed to fetch DV requests:', err);
+        
+        // Show user-friendly error message
+        tableContainer.innerHTML = `
+            <div class="text-center py-16">
+                <div class="mx-auto w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">Failed to Load Data</h3>
+                <p class="text-gray-500 mb-4">${err.message}</p>
+                <button onclick="fetchDvRequests()" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Try Again
+                </button>
+            </div>
+        `;
+    }
+}
+
+async function fetchAgingDocuments() {
+    try {
+        console.log('Fetching RANCA aging documents...');
+        
+        const res = await fetch('{{ route("Accounting.aging.documents") }}');
+        
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        console.log('RANCA aging documents response:', data);
+        
+        if (!data.success) {
+            throw new Error(data.message || 'Failed to fetch aging documents');
+        }
+        
+        cachedAgingData = data.documents || [];
+        
+        if (agingAlertsContainer) {
+            renderAgingAlerts(data.documents, data.aging_count);
+        }
+        
+    } catch (err) {
+        console.error('Failed to fetch aging documents:', err);
+        
+        // Don't show toast for 404 - it's expected if routes aren't set up
+        if (!err.message.includes('404')) {
+            showToast('Failed to load aging documents: ' + err.message, 'error');
+        }
+        
+        if (agingAlertsContainer) {
+            agingAlertsContainer.innerHTML = '';
+        }
+    }
+}
+
+async function updateStatistics() {
+    try {
+        const res = await fetch('{{ route("Accounting.aging.statistics") }}');
+        
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        
+        if (!data.success) {
+            throw new Error(data.message || 'Failed to fetch statistics');
+        }
+        
+        document.getElementById('stat-critical').textContent = data.critical || 0;
+        document.getElementById('stat-high').textContent = data.high || 0;
+        document.getElementById('stat-medium').textContent = data.medium || 0;
+        document.getElementById('stat-total').textContent = data.total_aging || 0;
+        
+    } catch (err) {
+        console.error('Failed to fetch statistics:', err);
+        // Don't show toast for statistics errors to avoid spam
+    }
+}
+
+// ====================================
+// TABLE RENDERING FUNCTIONS
+// ====================================
+
+function renderTable(dvRequests) {
+    if (dvRequests.length === 0) {
+        tableContainer.innerHTML = `
+            <div class="text-center py-16">
+                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                <p class="text-gray-500">Try adjusting your search filter.</p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="overflow-x-auto">
+            <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
+                <thead class="bg-gray-50 text-[13px]">
+                    <tr>
+                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DV Number</th>
+                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ORS Number</th>
+                        <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                        <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
+    `;
 
     const statusColors = {
         'Outgoing_finalized': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
@@ -131,6 +530,245 @@ document.addEventListener('DOMContentLoaded', function() {
         'RANCA_in_process': ['bg-blue-100 text-blue-800','bg-blue-400','In Process'],
         'RANCA_validated': ['bg-green-100 text-green-800','bg-green-400','Validated'],
     };
+
+    dvRequests.forEach(request => {
+        const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
+        html += `
+            <tr class="hover:bg-gray-50 transition-colors duration-150">
+                <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                    #${request.id}
+                </td>
+                 <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                    ${request.dv_number || '—'}
+                </td>
+                 <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                     ${request.ors_number || '—'}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
+                <td class="px-6 py-4 text-sm text-gray-600"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span></td>
+                <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
+                <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
+                    <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}</span></td>
+                <td class="px-6 py-4 text-sm text-gray-600">${request.date}</td>
+                <td class="px-5 py-4 text-center text-sm font-medium">
+                    ${
+                        request.status === 'Outgoing_finalized'
+                        ? `<button type="button" 
+                                onclick="handleReceiveAction(${request.id}, this)"
+                                class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">
+                                Receive
+                        </button>`    
+                        : `<a href="/Accounting/dvrequests/${request.id}" 
+                                class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
+                                View / Process
+                        </a>`
+                        
+                    }
+                </td>
+            </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    tableContainer.innerHTML = html;
+}
+
+function renderAgingAlerts(documents, count) {
+    if (!agingAlertsContainer) {
+        console.error('Aging alerts container is null');
+        return;
+    }
+
+    if (!documents || documents.length === 0) {
+        agingAlertsContainer.innerHTML = '';
+        return;
+    }
+
+    const agingDocs = documents.filter(doc => !['RANCA_validated', 'completed'].includes(doc.status));
+    
+    if (agingDocs.length === 0) {
+        agingAlertsContainer.innerHTML = '';
+        return;
+    }
+
+    function calculateUrgency(daysOld) {
+        const days = Math.abs(Number(daysOld)) || 0;
+        if (days >= 10) return 'critical';
+        if (days >= 7) return 'high';
+        if (days >= 3) return 'medium';
+        return 'low';
+    }
+
+    agingDocs.forEach(doc => {
+        doc.urgency = calculateUrgency(doc.days_old);
+    });
+
+    let urgencyIcon = {
+        'critical': '🚨',
+        'high': '⚠️',
+        'medium': '⏰',
+        'low': 'ℹ️'
+    };
+
+    let bgColor = {
+        'critical': 'bg-red-50 border-red-500',
+        'high': 'bg-orange-50 border-orange-500',
+        'medium': 'bg-yellow-50 border-yellow-500',
+        'low': 'bg-blue-50 border-blue-500'
+    };
+
+    let textColor = {
+        'critical': 'text-red-900',
+        'high': 'text-orange-900',
+        'medium': 'text-yellow-900',
+        'low': 'text-blue-900'
+    };
+
+    const highestUrgency = agingDocs.reduce((highest, doc) => {
+        const urgencyOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
+        return urgencyOrder[doc.urgency] > urgencyOrder[highest] ? doc.urgency : highest;
+    }, 'low');
+
+    let html = `
+        <div class="rounded-lg border-l-4 p-5 ${bgColor[highestUrgency]} shadow-md transition-all duration-300">
+            <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">${urgencyIcon[highestUrgency]}</span>
+                    <div>
+                        <h3 class="font-bold text-lg ${textColor[highestUrgency]}">Documents Need Processing</h3>
+                        <p class="text-sm opacity-80 ${textColor[highestUrgency]}">${agingDocs.length} document(s) older than 3 days</p>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button id="minimize-alerts" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg id="minimize-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                        <svg id="expand-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div id="alerts-content" class="transition-all duration-300 overflow-hidden">
+                <div class="space-y-2 mt-4 max-h-64 overflow-y-auto">
+                    ${agingDocs.slice(0, 5).map(doc => {
+                        const docBgColor = {
+                            'critical': 'bg-red-100 border-red-200',
+                            'high': 'bg-orange-100 border-orange-200', 
+                            'medium': 'bg-yellow-100 border-yellow-200',
+                            'low': 'bg-blue-100 border-blue-200'
+                        };
+                        
+                        // Simplified status logic for RANCA
+                        const isReceived = ['RANCA_received', 'RANCA_in_process'].includes(doc.status);
+                        const statusText = isReceived ? 'Received - Needs Processing' : 'Pending Receipt';
+                        
+                        return `
+                        <div class="flex items-center justify-between p-3 ${docBgColor[doc.urgency]} border rounded-lg hover:opacity-90 transition-all duration-200">
+                            <div class="flex-1">
+                                <p class="font-semibold text-sm ${textColor[doc.urgency]}">#${doc.id}</p>
+                                <p class="text-xs opacity-70 ${textColor[doc.urgency]}">${doc.submitted_by} • ${doc.program} • ${doc.status}</p>
+                                <p class="text-xs font-medium mt-1 ${doc.days_old >= 10 ? 'text-red-700' : doc.days_old >= 7 ? 'text-orange-700' : 'text-yellow-700'}">
+                                    ${doc.days_old} days old • ${statusText}
+                                </p>
+                            </div>
+                        </div>
+                    `}).join('')}
+                </div>
+
+                ${agingDocs.length > 5 ? `
+                    <p class="text-xs mt-3 opacity-75 ${textColor[highestUrgency]}">
+                        +${agingDocs.length - 5} more documents
+                    </p>
+                ` : ''}
+            </div>
+        </div>
+    `;
+
+    agingAlertsContainer.innerHTML = html;
+
+    // Add minimize/expand functionality
+    const minimizeButton = document.getElementById('minimize-alerts');
+    const minimizeIcon = document.getElementById('minimize-icon');
+    const expandIcon = document.getElementById('expand-icon');
+    const alertsContent = document.getElementById('alerts-content');
+
+    if (minimizeButton && alertsContent) {
+        minimizeButton.addEventListener('click', function() {
+            if (alertsContent.style.maxHeight === '0px' || alertsContent.style.display === 'none') {
+                alertsContent.style.maxHeight = '1000px';
+                alertsContent.style.display = 'block';
+                minimizeIcon.classList.add('hidden');
+                expandIcon.classList.remove('hidden');
+            } else {
+                alertsContent.style.maxHeight = '0px';
+                alertsContent.style.display = 'none';
+                minimizeIcon.classList.remove('hidden');
+                expandIcon.classList.add('hidden');
+            }
+        });
+    }
+}
+
+// ====================================
+// GLOBAL REFRESH FUNCTION
+// ====================================
+
+window.refreshAllData = function() {
+    // Show loading state
+    if (tableContainer) {
+        tableContainer.innerHTML = `
+            <div class="text-center py-16">
+                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </div>
+                <p class="text-gray-500">Refreshing requests...</p>
+            </div>
+        `;
+    }
+    
+    // Clear search and cached data
+    if (searchInput) searchInput.value = '';
+    
+    allRequests = [];
+    cachedAgingData = [];
+    searchTerm = "";
+    
+    // Reset pagination
+    currentPage = 1;
+    
+    // Refresh all data
+    fetchDvRequests();
+    fetchAgingDocuments();
+    updateStatistics();
+}
+
+// ====================================
+// MAIN APPLICATION CODE
+// ====================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    const currentUserId = {{ auth()->id() }};
+    
+    // Initialize DOM elements
+    tableContainer = document.getElementById('dv-table-container');
+    searchInput = document.getElementById('searchInput');
+    connectionStatus = document.getElementById('connection-status');
+    toastContainer = document.getElementById('toast-container');
+    agingAlertsContainer = document.getElementById('aging-alerts-container');
+    
+    // Pagination elements
+    perPageSelect = document.getElementById('per-page-select');
+    firstPageBtn = document.getElementById('first-page');
+    prevPageBtn = document.getElementById('prev-page');
+    nextPageBtn = document.getElementById('next-page');
+    lastPageBtn = document.getElementById('last-page');
+    pageNumbersContainer = document.getElementById('page-numbers');
+    currentRangeSpan = document.getElementById('current-range');
+    totalRecordsSpan = document.getElementById('total-records');
 
     // Initialize Pusher
     const pusher = new Pusher('{{ config('broadcasting.connections.pusher.key') }}', {
@@ -328,7 +966,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateStatistics();
     });
 
-        // ============ CONNECTION MONITORING ============
+    // ============ CONNECTION MONITORING ============
     pusher.connection.bind('connected', function() {
         console.log('✅ Pusher connected successfully');
         console.log('📍 Current user ID:', currentUserId);
@@ -361,428 +999,31 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('📡 Channel:', 'dv-requests-ranca');
     console.log('👤 Current User ID:', currentUserId);
 
-
-    // ============ TOAST FUNCTIONS ============
-    function showToast(message, type = 'success') {
-        const toastId = 'toast-' + Date.now();
-        const isSuccess = type === 'success';
-        
-        const toastHTML = `
-            <div id="${toastId}" class="toast-notification transform transition-all duration-300 ease-in-out translate-x-full opacity-0">
-                <div class="flex items-center w-full max-w-sm p-4 mb-4 text-gray-500 bg-white rounded-lg shadow-lg border-l-4 ${isSuccess ? 'border-green-500' : 'border-red-500'}" role="alert">
-                    <div class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg ${isSuccess ? 'text-green-500 bg-green-100' : 'text-red-500 bg-red-100'}">
-                        ${isSuccess ? 
-                            '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' :
-                            '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>'
-                        }
-                    </div>
-                    <div class="ml-3 text-sm font-medium text-gray-900">${message}</div>
-                    <button type="button" class="ml-auto -mx-1.5 -my-1.5 bg-white text-gray-400 hover:text-gray-900 rounded-lg focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex h-8 w-8" onclick="dismissToast('${toastId}')">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `;
-        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
-        const toast = document.getElementById(toastId);
-
-        setTimeout(() => {
-            toast.classList.remove('translate-x-full', 'opacity-0');
-            toast.classList.add('translate-x-0', 'opacity-100');
-        }, 100);
-
-        setTimeout(() => {
-            dismissToast(toastId);
-        }, 4000);
-    }
-
-    window.dismissToast = function(toastId) {
-        const toast = document.getElementById(toastId);
-        if (toast) {
-            toast.classList.add('translate-x-full', 'opacity-0');
-            toast.classList.remove('translate-x-0', 'opacity-100');
-            setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }
-    }
-
-    // ============ ACTION HANDLERS ============
-    window.handleReceiveAction = async function(requestId, button) {
-        const originalText = button.innerHTML;
-        button.innerHTML = 'Processing...';
-        button.disabled = true;
-
-        try {
-            const response = await fetch(`/Accounting/dvrequests/${requestId}/receive`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                    'Accept': 'application/json'
-                }
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.success) {
-                let message = result.message || 'Document has been received by RANCA.';
-                
-                showToast(message, 'success');
-                // Refresh all data
-                fetchDvRequests();
-                fetchAgingDocuments();
-                updateStatistics();
-                
-            } else {
-                showToast(result.message || 'Failed to receive document.', 'error');
-                button.innerHTML = originalText;
-                button.disabled = false;
-            }
-        } catch (error) {
-            console.error('Error receiving document:', error);
-            showToast('An error occurred while processing the request.', 'error');
-            button.innerHTML = originalText;
-                button.disabled = false;
-        }
-    }
-
-    // Manual refresh function
-    window.refreshAllData = function() {
-        // Show loading state
-        const tableContainer = document.getElementById('dv-table-container');
-        if (tableContainer) {
-            tableContainer.innerHTML = `
-                <div class="text-center py-16">
-                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                        <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </div>
-                    <p class="text-gray-500">Refreshing requests...</p>
-                </div>
-            `;
-        }
-        
-        // Clear search and cached data
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) searchInput.value = '';
-        
-        if (typeof allRequests !== 'undefined') allRequests = [];
-        if (typeof cachedAgingData !== 'undefined') cachedAgingData = [];
-        if (typeof searchTerm !== 'undefined') searchTerm = "";
-        
-        // Refresh all data
-        fetchDvRequests();
-        fetchAgingDocuments();
-        updateStatistics();
-    }
-
-    // ============ TABLE RENDERING ============
-    function renderTable(dvRequests) {
-        if (dvRequests.length === 0) {
-            tableContainer.innerHTML = `
-                <div class="text-center py-16">
-                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
-                    <p class="text-gray-500">Try adjusting your search filter.</p>
-                </div>
-            `;
-            return;
-        }
-
-        let html = `
-            <div class="overflow-x-auto">
-                <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
-                    <thead class="bg-gray-50 text-[13px]">
-                        <tr>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DV Number</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ORS Number</th>
-                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
-                            <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
-        `;
-
-        dvRequests.forEach(request => {
-            const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
-            html += `
-                <tr class="hover:bg-gray-50 transition-colors duration-150">
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                        #${request.id}
-                    </td>
-                     <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                        ${request.dv_number || '—'}
-                    </td>
-                     <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                         ${request.ors_number || '—'}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
-                    <td class="px-6 py-4 text-sm text-gray-600"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span></td>
-                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
-                    <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
-                        <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}</span></td>
-                    <td class="px-6 py-4 text-sm text-gray-600">${request.date}</td>
-                    <td class="px-5 py-4 text-center text-sm font-medium">
-                        ${
-                            request.status === 'Outgoing_finalized'
-                            ? `<button type="button" 
-                                    onclick="handleReceiveAction(${request.id}, this)"
-                                    class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">
-                                    Receive
-                            </button>`    
-                            : `<a href="/Accounting/dvrequests/${request.id}" 
-                                    class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
-                                    View / Process
-                            </a>`
-                            
-                        }
-                    </td>
-                </tr>`;
-        });
-
-        html += `</tbody></table></div>`;
-        tableContainer.innerHTML = html;
-    }
-
-    async function fetchDvRequests() {
-        try {
-            const res = await fetch("{{ route('Accounting.dvrequests.fetch') }}?search=" + encodeURIComponent(searchTerm));
-            const data = await res.json();
-            allRequests = data;
-            renderTable(data);
-        } catch (err) {
-            console.error('Failed to fetch DV requests', err);
-            tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
-        }
-    }
-
-    // ============ AGING DOCUMENTS FUNCTIONS ============
-    async function fetchAgingDocuments() {
-        try {
-            console.log('Fetching RANCA aging documents...');
-            
-            const res = await fetch('{{ route("Accounting.aging.documents") }}');
-            
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
-            
-            const data = await res.json();
-            console.log('RANCA aging documents response:', data);
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to fetch aging documents');
-            }
-            
-            cachedAgingData = data.documents || [];
-            
-            if (agingAlertsContainer) {
-                renderAgingAlerts(data.documents, data.aging_count);
-            }
-            
-        } catch (err) {
-            console.error('Failed to fetch aging documents:', err);
-            
-            // Don't show toast for 404 - it's expected if routes aren't set up
-            if (!err.message.includes('404')) {
-                showToast('Failed to load aging documents: ' + err.message, 'error');
-            }
-            
-            if (agingAlertsContainer) {
-                agingAlertsContainer.innerHTML = '';
-            }
-        }
-    }
-
-    async function updateStatistics() {
-        try {
-            const res = await fetch('{{ route("Accounting.aging.statistics") }}');
-            
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
-            
-            const data = await res.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to fetch statistics');
-            }
-            
-            document.getElementById('stat-critical').textContent = data.critical || 0;
-            document.getElementById('stat-high').textContent = data.high || 0;
-            document.getElementById('stat-medium').textContent = data.medium || 0;
-            document.getElementById('stat-total').textContent = data.total_aging || 0;
-            
-        } catch (err) {
-            console.error('Failed to fetch statistics:', err);
-            // Don't show toast for statistics errors to avoid spam
-        }
-    }
-
-    function renderAgingAlerts(documents, count) {
-        if (!agingAlertsContainer) {
-            console.error('Aging alerts container is null');
-            return;
-        }
-
-        if (!documents || documents.length === 0) {
-            agingAlertsContainer.innerHTML = '';
-            return;
-        }
-
-        const agingDocs = documents.filter(doc => !['RANCA_validated', 'completed'].includes(doc.status));
-        
-        if (agingDocs.length === 0) {
-            agingAlertsContainer.innerHTML = '';
-            return;
-        }
-
-        function calculateUrgency(daysOld) {
-            const days = Math.abs(Number(daysOld)) || 0;
-            if (days >= 10) return 'critical';
-            if (days >= 7) return 'high';
-            if (days >= 3) return 'medium';
-            return 'low';
-        }
-
-        agingDocs.forEach(doc => {
-            doc.urgency = calculateUrgency(doc.days_old);
-        });
-
-        let urgencyIcon = {
-            'critical': '🚨',
-            'high': '⚠️',
-            'medium': '⏰',
-            'low': 'ℹ️'
-        };
-
-        let bgColor = {
-            'critical': 'bg-red-50 border-red-500',
-            'high': 'bg-orange-50 border-orange-500',
-            'medium': 'bg-yellow-50 border-yellow-500',
-            'low': 'bg-blue-50 border-blue-500'
-        };
-
-        let textColor = {
-            'critical': 'text-red-900',
-            'high': 'text-orange-900',
-            'medium': 'text-yellow-900',
-            'low': 'text-blue-900'
-        };
-
-        const highestUrgency = agingDocs.reduce((highest, doc) => {
-            const urgencyOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
-            return urgencyOrder[doc.urgency] > urgencyOrder[highest] ? doc.urgency : highest;
-        }, 'low');
-
-        let html = `
-            <div class="rounded-lg border-l-4 p-5 ${bgColor[highestUrgency]} shadow-md transition-all duration-300">
-                <div class="flex items-start justify-between mb-3">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">${urgencyIcon[highestUrgency]}</span>
-                        <div>
-                            <h3 class="font-bold text-lg ${textColor[highestUrgency]}">Documents Need Processing</h3>
-                            <p class="text-sm opacity-80 ${textColor[highestUrgency]}">${agingDocs.length} document(s) older than 3 days</p>
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button id="minimize-alerts" class="text-gray-400 hover:text-gray-600 transition-colors">
-                            <svg id="minimize-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                            <svg id="expand-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <div id="alerts-content" class="transition-all duration-300 overflow-hidden">
-                    <div class="space-y-2 mt-4 max-h-64 overflow-y-auto">
-                        ${agingDocs.slice(0, 5).map(doc => {
-                            const docBgColor = {
-                                'critical': 'bg-red-100 border-red-200',
-                                'high': 'bg-orange-100 border-orange-200', 
-                                'medium': 'bg-yellow-100 border-yellow-200',
-                                'low': 'bg-blue-100 border-blue-200'
-                            };
-                            
-                            // Simplified status logic for RANCA
-                            const isReceived = ['RANCA_received', 'RANCA_in_process'].includes(doc.status);
-                            const statusText = isReceived ? 'Received - Needs Processing' : 'Pending Receipt';
-                            
-                            return `
-                            <div class="flex items-center justify-between p-3 ${docBgColor[doc.urgency]} border rounded-lg hover:opacity-90 transition-all duration-200">
-                                <div class="flex-1">
-                                    <p class="font-semibold text-sm ${textColor[doc.urgency]}">#${doc.id}</p>
-                                    <p class="text-xs opacity-70 ${textColor[doc.urgency]}">${doc.submitted_by} • ${doc.program} • ${doc.status}</p>
-                                    <p class="text-xs font-medium mt-1 ${doc.days_old >= 10 ? 'text-red-700' : doc.days_old >= 7 ? 'text-orange-700' : 'text-yellow-700'}">
-                                        ${doc.days_old} days old • ${statusText}
-                                    </p>
-                                </div>
-                            </div>
-                        `}).join('')}
-                    </div>
-
-                    ${agingDocs.length > 5 ? `
-                        <p class="text-xs mt-3 opacity-75 ${textColor[highestUrgency]}">
-                            +${agingDocs.length - 5} more documents
-                        </p>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-
-        agingAlertsContainer.innerHTML = html;
-
-        // Add minimize/expand functionality
-        const minimizeButton = document.getElementById('minimize-alerts');
-        const minimizeIcon = document.getElementById('minimize-icon');
-        const expandIcon = document.getElementById('expand-icon');
-        const alertsContent = document.getElementById('alerts-content');
-
-        if (minimizeButton && alertsContent) {
-            minimizeButton.addEventListener('click', function() {
-                if (alertsContent.style.maxHeight === '0px' || alertsContent.style.display === 'none') {
-                    alertsContent.style.maxHeight = '1000px';
-                    alertsContent.style.display = 'block';
-                    minimizeIcon.classList.add('hidden');
-                    expandIcon.classList.remove('hidden');
-                } else {
-                    alertsContent.style.maxHeight = '0px';
-                    alertsContent.style.display = 'none';
-                    minimizeIcon.classList.remove('hidden');
-                    expandIcon.classList.add('hidden');
-                }
-            });
-        }
-    }
-
     // ============ EVENT HANDLERS ============
     
     // Search with debounce
-    let searchTimeout;
     searchInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
             searchTerm = this.value;
+            currentPage = 1; // Reset to first page when searching
             fetchDvRequests();
         }, 300);
     });
+
+    // ============ PAGINATION EVENT HANDLERS ============
+    perPageSelect.addEventListener('change', function() {
+        perPage = parseInt(this.value);
+        currentPage = 1;
+        totalPages = Math.ceil(totalRecords / perPage);
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+    });
+
+    firstPageBtn.addEventListener('click', () => goToPage(1));
+    prevPageBtn.addEventListener('click', () => goToPage(currentPage - 1));
+    nextPageBtn.addEventListener('click', () => goToPage(currentPage + 1));
+    lastPageBtn.addEventListener('click', () => goToPage(totalPages));
 
     // ============ AUTO-REFRESH ============
     
@@ -795,6 +1036,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ============ INITIAL LOAD ============
     
+    // Initialize pagination
+    updatePaginationInfo();
+
     // Initial load
     fetchDvRequests();
     fetchAgingDocuments();

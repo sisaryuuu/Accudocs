@@ -34,111 +34,108 @@ class RANCAController extends Controller
         return view('Accounting.index');
     }
 
-    /** Fetch DV requests for RANCA */
-    public function fetchDvRequests()
-    {
-        try {
-            $currentUserId = auth()->id();
-            $lockDuration  = now()->subMinutes(10);
+   /** Fetch DV requests for RANCA */
+public function fetchDvRequests(Request $request)
+{
+    try {
+        $currentUserId = auth()->id();
+        $lockDuration  = now()->subMinutes(10);
+        $search = $request->get('search', '');
 
-            $dvRequests = DvRequest::with([
-                    'program', 
-                    'focalPerson', 
-                    'respocenter',
-                    'orsRequest',
-                    'orsRequest.uacsCodes',
-                    'orsRequest.AdlCode',
-                    'orsRequest.Mfopap'
-                ])
-               ->whereIn('status', ['Outgoing_finalized','RANCA_received','RANCA_in_process'])
-                ->where(function ($q) use ($currentUserId, $lockDuration) {
-                    $q->whereNull('locked_by')
-                      ->orWhere('locked_by', $currentUserId)
-                      ->orWhere('locked_at', '<=', $lockDuration);
-                })
-                ->latest()
-                ->get();
+        $query = DvRequest::with([
+                'program', 
+                'focalPerson', 
+                'respocenter',
+                'orsRequest',
+                'orsRequest.uacsCodes',
+                'orsRequest.AdlCode',
+                'orsRequest.Mfopap'
+            ])
+           ->whereIn('status', ['Outgoing_finalized','RANCA_received'])
+            ->where(function ($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by')
+                  ->orWhere('locked_by', $currentUserId)
+                  ->orWhere('locked_at', '<=', $lockDuration);
+            });
 
-            return response()->json($dvRequests->map(function ($req) {
-                // ✅ SAFE: Check if orsRequest exists first
-                $orsRequest = $req->orsRequest;
-
-                // ✅ SAFE: Handle UACS codes
-                $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
-                $uacsDisplay = $uacsCodes->isNotEmpty() 
-                    ? $uacsCodes->map(function($uacs) {
-                        return $uacs->uacscode . ' - ' . $uacs->description;
-                    })->implode('<br>') 
-                    : '—';
-
-                // ✅ SAFE: Get ADL code - check if orsRequest AND adlCode exist
-                $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
-                    $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
-                    '—';
-                
-                // ✅ SAFE: Get MFO/PAP code - check if orsRequest AND mfopap exist
-                $mfopapCode = ($orsRequest && $orsRequest->Mfopap) ? 
-                    $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription : 
-                    '—';
-
-                // ✅ SAFE: Get ORS number
-                $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
-
-                return [
-                    'id'           => $req->id,
-                    'control_no'   => $req->accounting_control_number ? 
-                        'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 5, '0', STR_PAD_LEFT) : 
-                        '—',
-                    'dv_number'   => $req->dv_number ?? '—',
-                    'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                    'program'      => $req->program->prcode ?? 'N/A',
-                    'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                    'amount'       => number_format($req->amount, 2),
-                    'status'       => $req->status,
-                    'date'         => $req->created_at->format('M d, Y'),
-                    'ors_number'   => $orsNumber,
-                    'uacs_codes'   => $uacsDisplay,
-                    'allotment_code'  => $req->allotcode ?? '—',
-                    'adl_code'     => $adlCode,
-                    'mfopap_code'  => $mfopapCode,
-                ];
-            }));
-
-        } catch (\Exception $e) {
-            \Log::error('Error in fetchDvRequests: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
-            
-            return response()->json([
-                'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
-            ], 500);
+        // Add search functionality
+        if (!empty($search)) {
+            $query->where(function($q) use ($search) {
+                $q->where('dv_number', 'like', "%{$search}%")
+                  ->orWhere('accounting_control_number', 'like', "%{$search}%")
+                  ->orWhereHas('orsRequest', function($orsQuery) use ($search) {
+                      $orsQuery->where('ors_number', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('program', function($programQuery) use ($search) {
+                      $programQuery->where('prcode', 'like', "%{$search}%")
+                                   ->orWhere('description', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('respocenter', function($rcQuery) use ($search) {
+                      $rcQuery->where('rccode', 'like', "%{$search}%")
+                              ->orWhere('description', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('focalPerson', function($userQuery) use ($search) {
+                      $userQuery->where('fname', 'like', "%{$search}%")
+                               ->orWhere('lname', 'like', "%{$search}%");
+                  });
+            });
         }
+
+        $dvRequests = $query->latest()->get();
+            
+        return response()->json($dvRequests->map(function ($req) {
+            // ✅ SAFE: Check if orsRequest exists first
+            $orsRequest = $req->orsRequest;
+
+            // ✅ SAFE: Handle UACS codes
+            $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
+            $uacsDisplay = $uacsCodes->isNotEmpty() 
+                ? $uacsCodes->map(function($uacs) {
+                    return $uacs->uacscode . ' - ' . $uacs->description;
+                })->implode('<br>') 
+                : '—';
+
+            // ✅ SAFE: Get ADL code - check if orsRequest AND adlCode exist
+            $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
+                $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
+                '—';
+            
+            // ✅ SAFE: Get MFO/PAP code - check if orsRequest AND mfopap exist
+            $mfopapCode = ($orsRequest && $orsRequest->Mfopap) ? 
+                $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription : 
+                '—';
+
+            // ✅ SAFE: Get ORS number
+            $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
+
+            return [
+                'id'           => $req->id,
+                'control_no'   => $req->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 5, '0', STR_PAD_LEFT) : 
+                    '—',
+                'dv_number'   => $req->dv_number ?? '—',
+                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                'program'      => $req->program->prcode ?? 'N/A',
+                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                'amount'       => number_format($req->amount, 2),
+                'status'       => $req->status,
+                'date'         => $req->created_at->format('M d, Y'),
+                'ors_number'   => $orsNumber,
+                'uacs_codes'   => $uacsDisplay,
+                'allotment_code'  => $req->allotcode ?? '—',
+                'adl_code'     => $adlCode,
+                'mfopap_code'  => $mfopapCode,
+            ];
+        }));
+
+    } catch (\Exception $e) {
+        \Log::error('Error in fetchDvRequests: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+        ], 500);
     }
-
-    /** Fetch recent DV requests */
-    public function fetchDvRecent()
-    {
-        try {
-            $currentUserId = auth()->id();
-            $lockDuration  = now()->subMinutes(10);
-
-            $recent = DvRequest::with(['focalPerson', 'program', 'respocenter'])
-                ->whereIn('status', ['Outgoing_finalized','RANCA_received','RANCA_in_process'])
-                ->whereNotNull('focalperson_id')
-                ->where(function ($q) use ($currentUserId, $lockDuration) {
-                    $q->whereNull('locked_by')
-                      ->orWhere('locked_by', $currentUserId)
-                      ->orWhere('locked_at', '<=', $lockDuration);
-                })
-                ->latest()
-                ->take(5)
-                ->get();
-
-            return response()->json($recent);
-            
-        } catch (\Exception $e) {
-            \Log::error('Error in RANCA fetchDvRecent: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to fetch recent requests'], 500);
-        }
     }
 
     /** Show DV for processing */
@@ -285,95 +282,6 @@ class RANCAController extends Controller
         return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
 }
-    /** Start processing */
-    public function startProcessing(Request $request, $id)
-    {
-        try {
-            $dvRequest = DvRequest::findOrFail($id);
-            $statusBefore = $dvRequest->status;
-            $startedAt = now();
-
-            if ($dvRequest->status !== 'RANCA_received') {
-                return response()->json(['success' => false, 'message' => 'Must be received first.'], 422);
-            }
-
-            $dvRequest->update([
-                'status'    => 'RANCA_in_process',
-                'locked_by' => auth()->id(),
-                'locked_at' => $startedAt,
-            ]);
-
-            // ✅ SAVE VERIFICATION HISTORY
-            $this->saveRANCAValidationHistory(
-                $dvRequest,
-                'process',
-                'Processing started by RANCA',
-                [
-                    'status_before' => $statusBefore,
-                    'status_after' => 'RANCA_in_process',
-                    'processed_by' => auth()->id(),
-                    'processed_at' => $startedAt->toISOString(),
-                    'amount' => $dvRequest->amount,
-                    'dv_number' => $dvRequest->dv_number
-                ]
-            );
-
-            $this->logAction($dvRequest->id, 'Accounting_III', 'RANCA_in_process', 'Processing started by RANCA');
-
-            // Notify focal person
-            $focalId = $dvRequest->focalperson_id;
-            $remarks = 'DV Request is now being processed by RANCA';
-
-            if ($focalId) {
-                Notification::create([
-                    'focalperson_id' => $focalId,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => 'RANCA_in_process',
-                    'action'         => 'Processing Started',
-                    'remarks'        => $remarks,
-                ]);
-
-                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                    'dv_request_id' => $dvRequest->id,
-                    'status'        => 'RANCA_in_process',
-                    'remarks'       => $remarks,
-                    'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                ]);
-            }
-
-            // Real-time notification to RANCA channel
-            $this->pusher->trigger('dv-requests-ranca', 'dv-request-processing', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => 'RANCA_in_process',
-                'action_performer_id' => auth()->id(), // ✅ ADDED
-                'timestamp'     => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true, 
-                    'message' => 'Processing started.',
-                    'data' => [
-                        'id' => $dvRequest->id,
-                        'status' => 'RANCA_in_process',
-                        'started_at' => $startedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
-                    ]
-                ]);
-            }
-
-            return redirect()->route('Accounting.dvrequests.index')
-                ->with('success', 'Processing started.');
-
-        } catch (\Exception $e) {
-            \Log::error('Error starting RANCA processing: ' . $e->getMessage());
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
-            }
-
-            return redirect()->back()->with('error', 'An error occurred while starting processing.');
-        }
-    }
 
     /** Update amount during processing */
     public function updateAmount(Request $request, $id)
@@ -399,7 +307,7 @@ class RANCAController extends Controller
                 ], 422);
             }
 
-            if (!in_array($dvRequest->status, ['RANCA_received', 'RANCA_in_process'])) {
+            if (!in_array($dvRequest->status, ['RANCA_received'])) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Amount can only be edited while request is received or in process.'
@@ -515,7 +423,7 @@ class RANCAController extends Controller
             $dvRequest = DvRequest::findOrFail($id);
             $statusBefore = $dvRequest->status;
 
-            if (!in_array($dvRequest->status, ['RANCA_received', 'RANCA_in_process'])) {
+            if ($dvRequest->status !== 'RANCA_received') {
                 return redirect()->back()->with('error', 'This DV request cannot be finalized.');
             }
 
@@ -634,10 +542,7 @@ public function reject(Request $request, $id)
         $rejectedAt = now();
 
         // Check if request can be rejected by RANCA
-        if (!in_array($dvRequest->status, [
-            'RANCA_received', 
-            'RANCA_in_process'
-        ])) {
+        if ($dvRequest->status !== 'RANCA_received') {
             return response()->json([
                 'success' => false,
                 'message' => 'This request cannot be rejected at its current status: ' . $statusBefore

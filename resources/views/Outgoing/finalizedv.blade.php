@@ -180,21 +180,27 @@
                 </div>
 
                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 @if($mop->pivot->paymentDetail)
-                        <div class="text-xs text-gray-600 mt-1 space-y-1">
+                 @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
+                    @foreach($dvRequest->modeOfPayments as $mop)
+                        @if($mop->pivot && $mop->pivot->paymentDetail)
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700">Bank Name</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
-                            <div class="text-xs text-gray-600 mt-1 space-y-1">
+                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                            </div>
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
-                            <div class="text-xs text-gray-600 mt-1 space-y-1">
+                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                            </div>
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700">Bank Address</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                        </div>
-                @else
+                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                            </div>
+                            @break
+                        @endif
+                    @endforeach
+                    @if(!$dvRequest->modeOfPayments->contains(function($mop) { return $mop->pivot && $mop->pivot->paymentDetail; }))
                         <p class="text-xs text-gray-400">No payment details available</p>
+                    @endif
                 @endif
                  </div>
                 <div>
@@ -228,23 +234,21 @@
 
 <!-- Actions Section -->
 @if($dvRequest->status === 'Outgoing_received')
-    <!-- Start Processing Mode -->
+    <!-- Finalize Mode - Directly show Finalize/Reject buttons when received -->
     <div id="button-container" class="flex justify-end space-x-3">
+        <button type="submit" 
+                class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Finalize
+        </button>
         <button type="button"
-                onclick="handleStartProcessing({{ $dvRequest->id }}, this)"
-                class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                id="start-btn">
-                <span class="button-text">Start Processing</span>
-                <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-            </button>
-            <a href="{{ route('Incoming.GIP.index') }}"
-            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
-            onclick="releaseLock(event, {{ $dvRequest->id }})">
-                Back
-            </a>
+                onclick="openRejectModal({{ $dvRequest->id }})"
+                class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Reject
+        </button>
+        <a href="{{ route('Outgoing.dvrequests.index') }}"
+           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Cancel
+        </a>
     </div>
     </form> <!-- Close form here -->
     
@@ -269,27 +273,6 @@
     </div>
     </form> <!-- Close form here -->
     
-@elseif($dvRequest->status === 'Outgoing_in_process')
-    <!-- Finalize Mode - Form button ONLY -->
-    <div id="button-container" class="flex justify-end space-x-3">
-        <button type="submit" 
-                class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-            Finalize
-        </button>
-    
-    </form> <!-- ✅ CLOSE FORM HERE BEFORE REJECT/CANCEL -->
-    <!-- Reject and Cancel buttons OUTSIDE the form -->
-        <button 
-            type="button"
-            onclick="openRejectModal({{ $dvRequest->id }})"
-            class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-            Reject
-        </button>
-        <a href="{{ route('Outgoing.dvrequests.index') }}"
-           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-            Cancel
-        </a>
-    </div>
 @else
     <!-- Default mode -->
     <div id="button-container" class="flex justify-end space-x-3">
@@ -604,32 +587,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Function to show toast messages
-function showMessage(message, type = 'success') {
-    const container = document.getElementById('message-container');
-    const messageDiv = document.createElement('div');
-    
-    const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
-    
-    messageDiv.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg mb-4 transform transition-all duration-300 translate-x-full opacity-0`;
-    messageDiv.textContent = message;
-    
-    container.appendChild(messageDiv);
-    
-    setTimeout(() => {
-        messageDiv.classList.remove('translate-x-full', 'opacity-0');
-    }, 100);
-    
-    setTimeout(() => {
-        messageDiv.classList.add('translate-x-full', 'opacity-0');
-        setTimeout(() => {
-            if (messageDiv.parentNode) {
-                messageDiv.parentNode.removeChild(messageDiv);
-            }
-        }, 300);
-    }, 3000);
-}
-
 // Handle Receive Action
 async function handleReceiveAction(dvRequestId, buttonElement) {
     const spinner = document.getElementById('loading-spinner');
@@ -658,8 +615,8 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
 
         if (response.ok && data.success) {
             showMessage(data.message, 'success');
-            updateButtonsToStartProcessingMode(dvRequestId);
-            loadRecentRequests();
+            // After receiving, directly show Finalize/Reject buttons
+            updateButtonsToFinalizeMode(dvRequestId);
         } else {
             throw new Error(data.message || 'Error receiving request');
         }
@@ -672,163 +629,24 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
     }
 }
 
-// Handle Start Processing
-async function handleStartProcessing(dvRequestId, buttonElement) {
-    const spinner = document.getElementById('start-loading-spinner');
-    const buttonText = buttonElement.querySelector('.button-text');
-    
-    buttonElement.disabled = true;
-    buttonText.textContent = 'Starting...';
-    spinner.classList.remove('hidden');
-    
-    try {
-        const formData = new FormData();
-        formData.append('_token', document.querySelector('input[name="_token"]').value);
-        
-        const response = await fetch(`/Outgoing/dvrequests/${dvRequestId}/start-processing`, {
-            method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
-            },
-            body: formData
-        });
-
-        const responseText = await response.text();
-        let data = JSON.parse(responseText);
-
-        if (response.ok && data.success) {
-            showMessage(data.message, 'success');
-            updateButtonsToVerifyMode(dvRequestId);
-            loadRecentRequests();
-        } else {
-            throw new Error(data.message || 'Error starting processing');
-        }
-    } catch (error) {
-        console.error('Start Processing Error:', error);
-        showMessage(error.message || 'Failed to start processing', 'error');
-        buttonElement.disabled = false;
-        buttonText.textContent = 'Start Processing';
-        spinner.classList.add('hidden');
-    }
-}
-
-// Update Buttons to Start Processing Mode
-function updateButtonsToStartProcessingMode(dvRequestId) {
+// Update Buttons to Finalize Mode (after receiving)
+function updateButtonsToFinalizeMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
     buttonContainer.innerHTML = `
+        <button type="submit" 
+                class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Finalize
+        </button>
         <button type="button"
-            onclick="handleStartProcessing(${dvRequestId}, this)"
-            class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-            id="start-btn">
-            <span class="button-text">Start Processing</span>
-            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="start-loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
+                onclick="openRejectModal(${dvRequestId})"
+                class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Reject
         </button>
         <a href="{{ route('Outgoing.dvrequests.index') }}"
-            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
-            onclick="releaseLock(event, ${dvRequestId})">
-            Back
+           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+            Cancel
         </a>
     `;
-      const existingOutsideButtons = document.getElementById('outside-form-buttons');
-    if (existingOutsideButtons) {
-        existingOutsideButtons.remove();
-    }
-}
-
-function updateButtonsToVerifyMode(dvRequestId) {   
-    const buttonContainer = document.getElementById('button-container');
-    const form = buttonContainer.closest('form');
-    
-    // Clear existing button container content
-    buttonContainer.innerHTML = '';
-    
-    // Create Finalize button container (inside form)
-    const finalizeContainer = document.createElement('div');
-    finalizeContainer.className = 'flex justify-end space-x-3';
-    
-    const finalizeBtn = document.createElement('button');
-    finalizeBtn.type = 'submit';
-    finalizeBtn.className = 'inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    finalizeBtn.textContent = 'Finalize';
-    
-    finalizeContainer.appendChild(finalizeBtn);
-    buttonContainer.appendChild(finalizeContainer);
-    
-    // Create Reject and Cancel buttons container (outside form)
-    const outsideButtonsContainer = document.createElement('div');
-    outsideButtonsContainer.className = 'flex justify-end space-x-3 mt-3';
-    outsideButtonsContainer.id = 'outside-form-buttons';
-    
-    // Create Reject button (using data attribute instead of onclick)
-    const rejectBtn = document.createElement('button');
-    rejectBtn.type = 'button';
-    rejectBtn.id = 'reject-button';
-    rejectBtn.setAttribute('data-dv-id', dvRequestId);
-    rejectBtn.className = 'inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    rejectBtn.textContent = 'Reject';
-    
-    // Add event listener directly
-    rejectBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        console.log('🔴 Reject button clicked (direct listener), DV ID:', dvRequestId);
-        openRejectModal(dvRequestId);
-        return false;
-    });
-    
-    // Create Cancel link
-    const cancelLink = document.createElement('a');
-    cancelLink.href = '/Outgoing/dvrequests';
-    cancelLink.className = 'inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200';
-    cancelLink.textContent = 'Cancel';
-    
-    // Add buttons to container
-    outsideButtonsContainer.appendChild(rejectBtn);
-    outsideButtonsContainer.appendChild(cancelLink);
-    
-    // Remove any existing outside buttons first
-    const existingOutsideButtons = form.parentNode.querySelector('#outside-form-buttons');
-    if (existingOutsideButtons) {
-        existingOutsideButtons.remove();
-    }
-    
-    // Insert outside buttons after the form
-    form.parentNode.insertBefore(outsideButtonsContainer, form.nextSibling);
-    
-    console.log('✅ Buttons updated to verify mode');
-    console.log('✅ Form:', form);
-    console.log('✅ Outside buttons:', outsideButtonsContainer);
-}
-
-// Open reject modal
-function openRejectModal(dvRequestId) {
-    console.log('🔴 openRejectModal called with ID:', dvRequestId);
-    
-    currentRejectId = dvRequestId;
-    const modal = document.getElementById('rejectModal');
-    
-    modal.classList.remove('hidden');
-    document.getElementById('rejectRemarks').value = '';
-    document.getElementById('remarksError').classList.add('hidden');
-    document.body.style.overflow = 'hidden';
-    
-    console.log('🔴 Modal opened');
-}
-
-// Close reject modal
-function closeRejectModal() {
-    console.log('🟢 closeRejectModal called');
-    document.getElementById('rejectModal').classList.add('hidden');
-    document.getElementById('rejectRemarks').value = '';
-    document.getElementById('remarksError').classList.add('hidden');
-    currentRejectId = null;
-    document.body.style.overflow = 'auto';
 }
 
 // Lock Management
@@ -880,40 +698,4 @@ function releaseLock(event, id) {
         window.location.href = "{{ route('Outgoing.dvrequests.index') }}";
     });
 }
-
-// Load Recent Requests
-async function loadRecentRequests() {
-    try {
-        const res = await fetch("{{ route('Outgoing.dvrequests.recent') }}");
-        const data = await res.json();
-
-        let html = '';
-        if (data.length === 0) {
-            html = `<li class="text-sm text-gray-500">No recent requests.</li>`;
-        } else {
-            data.forEach(r => {
-                html += `
-                    <li>
-                        <a href="/Outgoing/dvrequests/${r.id}" 
-                           class="block p-3 bg-gray-50 hover:bg-indigo-50 rounded-lg border border-gray-200 transition">
-                            <p class="text-sm font-medium text-gray-900">
-                                Control #${r.id} • ${r.particulars ?? ''}
-                            </p>
-                            <p class="text-sm text-gray-600">
-                                ${(r.focal_person?.fname ?? 'Unknown')} ${(r.focal_person?.lname ?? '')} • 
-                                ${new Date(r.created_at).toLocaleDateString()}
-                            </p>
-                        </a>
-                    </li>`;
-            });
-        }
-        document.getElementById('recent-requests').innerHTML = html;
-    } catch (e) {
-        console.error("Failed to load recent requests", e);
-    }
-}
-
-// Auto-refresh recent requests every 5 seconds
-setInterval(loadRecentRequests, 5000);
-loadRecentRequests();
 </script>
