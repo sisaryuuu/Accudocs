@@ -34,109 +34,109 @@ class RANCAController extends Controller
         return view('Accounting.index');
     }
 
-   /** Fetch DV requests for RANCA */
-public function fetchDvRequests(Request $request)
-{
-    try {
-        $currentUserId = auth()->id();
-        $lockDuration  = now()->subMinutes(10);
-        $search = $request->get('search', '');
+        /** Fetch DV requests for RANCA */
+        public function fetchDvRequests(Request $request)
+        {
+            try {
+                $currentUserId = auth()->id();
+                $lockDuration  = now()->subMinutes(10);
+                $search = $request->get('search', '');
 
-        $query = DvRequest::with([
-                'program', 
-                'focalPerson', 
-                'respocenter',
-                'orsRequest',
-                'orsRequest.uacsCodes',
-                'orsRequest.AdlCode',
-                'orsRequest.Mfopap'
-            ])
-           ->whereIn('status', ['Outgoing_finalized','RANCA_received'])
-            ->where(function ($q) use ($currentUserId, $lockDuration) {
-                $q->whereNull('locked_by')
-                  ->orWhere('locked_by', $currentUserId)
-                  ->orWhere('locked_at', '<=', $lockDuration);
-            });
+                $query = DvRequest::with([
+                        'program', 
+                        'focalPerson', 
+                        'respocenter',
+                        'orsRequest',
+                        'orsRequest.uacsCodes',
+                        'orsRequest.AdlCode',
+                        'orsRequest.Mfopap'
+                    ])
+                ->whereIn('status', ['Outgoing_finalized','RANCA_received'])
+                    ->where(function ($q) use ($currentUserId, $lockDuration) {
+                        $q->whereNull('locked_by')
+                        ->orWhere('locked_by', $currentUserId)
+                        ->orWhere('locked_at', '<=', $lockDuration);
+                    });
 
-        // Add search functionality
-        if (!empty($search)) {
-            $query->where(function($q) use ($search) {
-                $q->where('dv_number', 'like', "%{$search}%")
-                  ->orWhere('accounting_control_number', 'like', "%{$search}%")
-                  ->orWhereHas('orsRequest', function($orsQuery) use ($search) {
-                      $orsQuery->where('ors_number', 'like', "%{$search}%");
-                  })
-                  ->orWhereHas('program', function($programQuery) use ($search) {
-                      $programQuery->where('prcode', 'like', "%{$search}%")
-                                   ->orWhere('description', 'like', "%{$search}%");
-                  })
-                  ->orWhereHas('respocenter', function($rcQuery) use ($search) {
-                      $rcQuery->where('rccode', 'like', "%{$search}%")
-                              ->orWhere('description', 'like', "%{$search}%");
-                  })
-                  ->orWhereHas('focalPerson', function($userQuery) use ($search) {
-                      $userQuery->where('fname', 'like', "%{$search}%")
-                               ->orWhere('lname', 'like', "%{$search}%");
-                  });
-            });
-        }
+                // Add search functionality
+                if (!empty($search)) {
+                    $query->where(function($q) use ($search) {
+                        $q->where('dv_number', 'like', "%{$search}%")
+                        ->orWhere('accounting_control_number', 'like', "%{$search}%")
+                        ->orWhereHas('orsRequest', function($orsQuery) use ($search) {
+                            $orsQuery->where('ors_number', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('program', function($programQuery) use ($search) {
+                            $programQuery->where('prcode', 'like', "%{$search}%")
+                                        ->orWhere('description', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('respocenter', function($rcQuery) use ($search) {
+                            $rcQuery->where('rccode', 'like', "%{$search}%")
+                                    ->orWhere('description', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('focalPerson', function($userQuery) use ($search) {
+                            $userQuery->where('fname', 'like', "%{$search}%")
+                                    ->orWhere('lname', 'like', "%{$search}%");
+                        });
+                    });
+                }
 
-        $dvRequests = $query->latest()->get();
-            
-        return response()->json($dvRequests->map(function ($req) {
-            // ✅ SAFE: Check if orsRequest exists first
-            $orsRequest = $req->orsRequest;
+                $dvRequests = $query->latest()->get();
+                    
+                return response()->json($dvRequests->map(function ($req) {
+                    // ✅ SAFE: Check if orsRequest exists first
+                    $orsRequest = $req->orsRequest;
 
-            // ✅ SAFE: Handle UACS codes
-            $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
-            $uacsDisplay = $uacsCodes->isNotEmpty() 
-                ? $uacsCodes->map(function($uacs) {
-                    return $uacs->uacscode . ' - ' . $uacs->description;
-                })->implode('<br>') 
-                : '—';
+                    // ✅ SAFE: Handle UACS codes
+                    $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
+                    $uacsDisplay = $uacsCodes->isNotEmpty() 
+                        ? $uacsCodes->map(function($uacs) {
+                            return $uacs->uacscode . ' - ' . $uacs->description;
+                        })->implode('<br>') 
+                        : '—';
 
-            // ✅ SAFE: Get ADL code - check if orsRequest AND adlCode exist
-            $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
-                $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
-                '—';
-            
-            // ✅ SAFE: Get MFO/PAP code - check if orsRequest AND mfopap exist
-            $mfopapCode = ($orsRequest && $orsRequest->Mfopap) ? 
-                $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription : 
-                '—';
+                    // ✅ SAFE: Get ADL code - check if orsRequest AND adlCode exist
+                    $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
+                        $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
+                        '—';
+                    
+                    // ✅ SAFE: Get MFO/PAP code - check if orsRequest AND mfopap exist
+                    $mfopapCode = ($orsRequest && $orsRequest->Mfopap) ? 
+                        $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription : 
+                        '—';
 
-            // ✅ SAFE: Get ORS number
-            $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
+                    // ✅ SAFE: Get ORS number
+                    $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
 
-            return [
-                'id'           => $req->id,
-                'control_no'   => $req->accounting_control_number ? 
-                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 5, '0', STR_PAD_LEFT) : 
-                    '—',
-                'dv_number'   => $req->dv_number ?? '—',
-                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                'program'      => $req->program->prcode ?? 'N/A',
-                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                'amount'       => number_format($req->amount, 2),
-                'status'       => $req->status,
-                'date'         => $req->created_at->format('M d, Y'),
-                'ors_number'   => $orsNumber,
-                'uacs_codes'   => $uacsDisplay,
-                'allotment_code'  => $req->allotcode ?? '—',
-                'adl_code'     => $adlCode,
-                'mfopap_code'  => $mfopapCode,
-            ];
-        }));
+                    return [
+                        'id'           => $req->id,
+                        'control_no'   => $req->accounting_control_number ? 
+                            'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
+                            '—',
+                        'dv_number'   => $req->dv_number ?? '—',
+                        'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                        'program'      => $req->program->prcode ?? 'N/A',
+                        'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                        'amount'       => number_format($req->amount, 2),
+                        'status'       => $req->status,
+                        'date'         => $req->created_at->format('M d, Y'),
+                        'ors_number'   => $orsNumber,
+                        'uacs_codes'   => $uacsDisplay,
+                        'allotment_code'  => $req->allotcode ?? '—',
+                        'adl_code'     => $adlCode,
+                        'mfopap_code'  => $mfopapCode,
+                    ];
+                }));
 
-    } catch (\Exception $e) {
-        \Log::error('Error in fetchDvRequests: ' . $e->getMessage());
-        \Log::error('Stack trace: ' . $e->getTraceAsString());
-        
-        return response()->json([
-            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
-        ], 500);
-    }
-    }
+            } catch (\Exception $e) {
+                \Log::error('Error in fetchDvRequests: ' . $e->getMessage());
+                \Log::error('Stack trace: ' . $e->getTraceAsString());
+                
+                return response()->json([
+                    'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+                ], 500);
+            }
+            }
 
     /** Show DV for processing */
     public function show($id)
@@ -635,7 +635,7 @@ public function reject(Request $request, $id)
             $this->pusher->trigger('dv-requests-ranca', 'dv-request-rejected', [
                 'dv_request_id'      => $dvRequest->id,
                 'control_number'     => $dvRequest->accounting_control_number ? 
-                    'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) : 
+                    'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
                     'Unknown',
                 'status'             => 'RANCA_rejected',
                 'rejected_by'        => auth()->user()->name ?? 'RANCA Officer',

@@ -48,13 +48,14 @@
                 Print
             </button>
 
-            <button onclick="downloadPDF()" 
-                    class="no-print inline-flex items-center px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-lg">
+        <a href="{{ route('BudgetOfficer.dvrequests.generateORSPDF', $dvRequest->id) }}" 
+            class="inline-flex items-center px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-lg"
+            target="_blank">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
-                Download PDF
-            </button>
+                Download ORS PDF
+            </a>
 
            <a href="{{ route('BudgetOfficer.dvrequests.loghistory') }}"
                class="no-print inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-lg">
@@ -124,55 +125,6 @@
 
 <!-- Include html2pdf library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
-<script>
-    // Download PDF function
-    function downloadPDF() {
-        const element = document.getElementById('ors-container');
-        const orsNumber = '{{ $data["ors_no"] ?? "ORS" }}';
-        const filename = `ORS_${orsNumber.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-        
-        // Show loading overlay
-        document.getElementById('loadingOverlay').classList.remove('hidden');
-        document.getElementById('loadingOverlay').classList.add('flex');
-        
-        const opt = {
-            margin: 0.5,
-            filename: filename,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
-            jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-
-        html2pdf().set(opt).from(element).save().then(() => {
-            // Hide loading overlay after PDF is generated
-            setTimeout(() => {
-                document.getElementById('loadingOverlay').classList.add('hidden');
-                document.getElementById('loadingOverlay').classList.remove('flex');
-            }, 500);
-        }).catch(err => {
-            console.error('PDF generation error:', err);
-            document.getElementById('loadingOverlay').classList.add('hidden');
-            document.getElementById('loadingOverlay').classList.remove('flex');
-            alert('Failed to generate PDF. Please try printing instead.');
-        });
-    }
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', function(event) {
-        // Ctrl+P or Cmd+P for print
-        if ((event.ctrlKey || event.metaKey) && event.key === 'p') {
-            event.preventDefault();
-            window.print();
-        }
-        
-        // Ctrl+S or Cmd+S for download
-        if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-            event.preventDefault();
-            downloadPDF();
-        }
-    });
-</script>
 
 <style>
     @media print {

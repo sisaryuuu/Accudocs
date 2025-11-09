@@ -4,7 +4,7 @@
 
 @section('content')
 @php
-    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget_Officer', 'Outgoing', 'Accounting_III', 'Regional_Director', 'Cashier'];
+    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget_Officer', 'Outgoing', 'Accountant_III', 'Regional_Director', 'Cashier'];
     
     $needsConfirmation = $dvRequest->status === 'Cashier_released' && !$dvRequest->confirmed_by_focal_person;
 
@@ -54,12 +54,12 @@
         'Outgoing_finalized' => 'Outgoing',
         'Outgoing_rejected' => 'Outgoing',
         
-        // RANCA (Accounting_III) statuses
-        'RANCA_received' => 'Accounting_III',   
-        'RANCA_in_process' => 'Accounting_III',
-        'RANCA_validated' => 'Accounting_III',
-        'RANCA_amount_updated' => 'Accounting_III',
-        'RANCA_rejected' =>'Accounting_III',
+        // RANCA (Accountant_III) statuses
+        'RANCA_received' => 'Accountant_III',   
+        'RANCA_in_process' => 'Accountant_III',
+        'RANCA_validated' => 'Accountant_III',
+        'RANCA_amount_updated' => 'Accountant_III',
+        'RANCA_rejected' =>'Accountant_III',
 
         // Regional Director statuses
         'Regional_Director_received' => 'Regional_Director',
@@ -530,7 +530,7 @@
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
                                                 </svg>
                                             </template>
-                                            <template x-if="step === 'Accounting_III'">
+                                            <template x-if="step === 'Accountant_III'">
                                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                                                 </svg>
@@ -733,11 +733,11 @@ function stepper() {
             'Outgoing_in_process': 'Outgoing',
             'Outgoing_finalized': 'Outgoing',
             'Outgoing_rejected': 'Outgoing',
-            'RANCA_received': 'Accounting_III',
-            'RANCA_in_process': 'Accounting_III',
-            'RANCA_validated': 'Accounting_III',
-            'RANCA_rejected': 'Accounting_III',
-            'RANCA_amount_updated': 'Accounting_III',
+            'RANCA_received': 'Accountant_III',
+            'RANCA_in_process': 'Accountant_III',
+            'RANCA_validated': 'Accountant_III',
+            'RANCA_rejected': 'Accountant_III',
+            'RANCA_amount_updated': 'Accountant_III',
             'Regional_Director_received': 'Regional_Director',
             'Regional_Director_signed_approved': 'Regional_Director',
             'Cashier_received': 'Cashier',
@@ -767,7 +767,7 @@ function stepper() {
                 if (step === 'Incoming' && logAction.includes('incoming')) return true;
                 if (step === 'Budget_Officer' && (logAction.includes('budget') || logAction.includes('ors'))) return true;
                 if (step === 'Outgoing' && logAction.includes('outgoing')) return true;
-                if (step === 'Accounting_III' && (logAction.includes('accounting') || logAction.includes('ranca'))) return true;
+                if (step === 'Accountant_III' && (logAction.includes('accounting') || logAction.includes('ranca'))) return true;
                 
                 return false;
             });

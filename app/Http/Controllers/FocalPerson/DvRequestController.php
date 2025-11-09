@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\FocalPerson;
 
+
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Cache;
 use App\Models\DvRequest;
@@ -27,8 +28,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
-
-
 
 class DvRequestController extends Controller
 {
@@ -390,22 +389,42 @@ public function history()
     }
 
     public function generatePDF($id)
-    {
-        $dvRequest = DvRequest::with(['focalperson', 'program', 'respocenter', 'modeOfPayments'])->findOrFail($id);
-        $dvRequest->modeOfPayments->each(fn($mop) => $mop->pivot->load('paymentDetail'));
+{
+     ini_set('max_execution_time', 300); // 5 minutes
+    ini_set('memory_limit', '512M');
+    try {
+        $dvRequest = DvRequest::with([
+                'focalperson', 
+                'program', 
+                'respocenter', 
+                'modeOfPayments'
+            ])
+            ->findOrFail($id);
 
+        // Authorization check
         if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
             abort(403, 'Unauthorized access.');
         }
 
+        // Load payment details
+        $dvRequest->modeOfPayments->each(function($mop) {
+            $mop->pivot->load('paymentDetail');
+        });
+
         $modeOfPayment = $dvRequest->modeOfPayments->first();
         $paymentDetail = $modeOfPayment?->pivot?->paymentDetail;
 
+        // Prepare data for PDF
+     
         $data = [
-            'payee' => trim($dvRequest->focalPerson->fname . ' ' . ($dvRequest->focalPerson->mi ? $dvRequest->focalPerson->mi . '. ' : '') . $dvRequest->focalPerson->lname),
+           'payee' => $this->formatFullName(
+                $dvRequest->focalperson->fname,
+                $dvRequest->focalperson->mi,
+                $dvRequest->focalperson->lname
+            ),
             'date' => $dvRequest->created_at->format('F d, Y'),
-            'address' => $dvRequest->focalPerson->Address,
-            'tin' => $dvRequest->tin_number,
+            'address' => $dvRequest->focalperson->Address,
+            'tin' => $dvRequest->focalperson->TIN_number,
             'mode_of_payment' => $modeOfPayment?->mopname ?? 'Not specified',
             'particulars' => $dvRequest->particulars,
             'amount' => number_format($dvRequest->amount, 2),
@@ -419,19 +438,148 @@ public function history()
             'imsd_head' => \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD'),
             'accountant_name' => \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT'),
             'regional_director' => \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR'),
+            'budget_officer' => \App\Models\Setting::get('budget_officer', 'NAME OF BUDGET OFFICER'),
         ];
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('vouchers.disbursement', $data)
-            ->setPaper('Legal', 'portrait');
 
-        return $pdf->download('DV_' . $dvRequest->reference_number . '.pdf');
+        // Generate PDF
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.initdv', $data)
+        ->setPaper('Legal', 'portrait')
+        ->setOption('defaultFont', 'Times New Roman')
+        ->setOption('isHtml5ParserEnabled', true)
+        ->setOption('isRemoteEnabled', true)
+        ->setOption('isFontSubsettingEnabled', true);
+
+        $filename = 'DV_' . ($dvRequest->reference_number ?? $dvRequest->id) . '_' . now()->format('Ymd_His') . '.pdf';
+
+        return $pdf->download($filename);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        \Log::error('DV Request not found', ['id' => $id, 'error' => $e->getMessage()]);
+        return redirect()->back()->with('error', 'DV Request not found.');
+    } catch (\Exception $e) {
+        \Log::error('PDF Generation Failed', [
+            'id' => $id, 
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        return redirect()->back()->with('error', 'Failed to generate PDF: ' . $e->getMessage());
     }
+}
+public function generateORSPDF($id)
+{
+    // Increase limits
+    set_time_limit(300); // 5 minutes
+    ini_set('memory_limit', '512M');
+    
+    \Log::info('=== ORS PDF Generation Started ===', ['id' => $id]);
+    
+    try {
+        \Log::info('Step 1: Fetching DV Request');
+        
+        $dvRequest = DvRequest::with([
+                'focalperson', 
+                'program', 
+                'respocenter', 
+            ])
+            ->findOrFail($id);
 
-    public function show(DvRequest $dvRequest)
-    {
+        \Log::info('Step 2: DV Request found', [
+            'dv_id' => $dvRequest->id,
+            'focal_id' => $dvRequest->focalperson_id,
+            'auth_id' => Auth::guard('focal')->id()
+        ]);
+
         if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+            \Log::error('Authorization failed');
             abort(403, 'Unauthorized access.');
         }
+
+        \Log::info('Step 3: Preparing data');
+
+        $data = [
+            'payee' => $this->formatFullName(
+                $dvRequest->focalperson->fname,
+                $dvRequest->focalperson->mi,
+                $dvRequest->focalperson->lname
+            ),
+            'ors_no' => '',
+            'date' => $dvRequest->created_at->format('F d, Y'),
+            'address' => $dvRequest->focalperson->Address ?? '',
+            'tin' => $dvRequest->focalperson->TIN_number ?? '',
+            'particulars' => $dvRequest->particulars ?? '',
+            'mfo' => $dvRequest->program->prcode ?? '',
+            'uacs' => '',
+            'amount' => $dvRequest->amount,
+        ];
+
+        \Log::info('Step 4: Data prepared');
+
+        $respocenter_code = $dvRequest->respocenter->rccode ?? '';
+        $respocenter_desc = $dvRequest->respocenter->description ?? '';
+        
+        \Log::info('Step 5: Respocenter data');
+
+        $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
+        $budget_officer = \App\Models\Setting::get('budget_officer', 'NAME OF BUDGET OFFICER');
+
+        \Log::info('Step 6: Settings retrieved');
+        \Log::info('Step 7: Loading view');
+
+        if (!view()->exists('pdf.initors')) {
+            \Log::error('View not found: pdf.initors');
+            return redirect()->back()->with('error', 'ORS template not found');
+        }
+
+        \Log::info('Step 8: Generating PDF');
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.initors', compact(
+            'data', 
+            'respocenter_code', 
+            'respocenter_desc',
+            'imsd_head',
+            'budget_officer'
+        ))
+        ->setPaper('Legal', 'portrait')
+        ->setOption('isRemoteEnabled', false)
+        ->setOption('isHtml5ParserEnabled', true)
+        ->setOption('isFontSubsettingEnabled', false);
+
+        $filename = 'ORS_' . ($dvRequest->ors_number ?? $dvRequest->reference_number ?? $dvRequest->id) . '_' . now()->format('Ymd_His') . '.pdf';
+
+        \Log::info('Step 9: Starting download');
+
+        // Use stream with attachment header
+       return $pdf->download($filename);
+
+    } catch (\Exception $e) {
+        \Log::error('ORS PDF Generation Failed', [
+            'id' => $id, 
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+        ]);
+        
+        return redirect()->back()->with('error', 'Failed to generate ORS PDF: ' . $e->getMessage());
+    }
+}
+
+private function formatFullName($firstName, $middleInitial, $lastName)
+{
+    $name = trim($lastName . ', ' . $firstName);
+    
+    if (!empty($middleInitial)) {
+        $name .= ' ' . strtoupper($middleInitial) . '.';
+    }
+    
+    return strtoupper(trim($name));
+}
+
+public function show(DvRequest $dvRequest)
+{
+    if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+        abort(403, 'Unauthorized access.');
+    }
         $dvRequest->load(['program', 'logs.focalPerson', 'logs.accountingUnit']);
 
         $logs = $dvRequest->logs;
@@ -489,39 +637,42 @@ public function history()
 
         return view('FocalPerson.dvrequest.edit', compact('dvRequest', 'programs'));
     }
+public function update(Request $request, DvRequest $dvRequest)
+{
+    if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+        abort(403, 'Unauthorized access.');
+    }
 
-    public function update(Request $request, DvRequest $dvRequest)
-    {
-        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
-            abort(403, 'Unauthorized access.');
-        }
+    // ✅ FIXED: Check if already received by IMSD
+    if (!in_array($dvRequest->status, ['submitted'])) {
+        return redirect()->route('FocalPerson.dvrequest.index')
+            ->with('error', 'This DV request cannot be updated. Current status: ' . $dvRequest->status);
+    }
 
-        if (!in_array($dvRequest->status, ['submitted', 'ORS_for_revision'])) {
-            return redirect()->route('FocalPerson.dvrequest.index')
-                ->with('error', 'This DV request cannot be updated unless it is in submitted or ORS_for_revision status.');
-        }
+    $request->validate([
+        'program_id'            => 'required|exists:programs,id',
+        'respocenter_id'        => 'required|exists:responcenters,id',
+        'amount'                => 'required|numeric|min:0',
+        'particulars'           => 'required|string|max:255',
+        'fname'                 => 'nullable|string|max:255',
+        'mi'                    => 'nullable|string|max:10',
+        'lname'                 => 'nullable|string|max:255',
+        'tin_number'            => 'nullable|string|max:20',
+        'address'               => 'nullable|string|max:255',
+        'mode_of_payment_id'    => 'required|exists:mode_of_payments,id',
+        'payment_details.bank_name'   => 'nullable|string|max:255',
+        'payment_details.bank_accnum' => 'nullable|string|max:255',
+        'payment_details.bank_address'=> 'nullable|string|max:255',
+    ]);
 
-        $request->validate([
-            'program_id'            => 'required|exists:programs,id',
-            'respocenter_id'        => 'required|exists:responcenters,id',
-            'amount'                => 'required|numeric|min:0',
-            'particulars'           => 'required|string|max:255',
-            'fname'                 => 'nullable|string|max:255',
-            'mi'                    => 'nullable|string|max:10',
-            'lname'                 => 'nullable|string|max:255',
-            'tin_number'            => 'nullable|string|max:20',
-            'address'               => 'nullable|string|max:255',
-            'mode_of_payment_id'    => 'required|exists:mode_of_payments,id',
-            'payment_details.bank_name'   => 'nullable|string|max:255',
-            'payment_details.bank_accnum' => 'nullable|string|max:255',
-            'payment_details.bank_address'=> 'nullable|string|max:255',
-        ]);
+    $oldData = $dvRequest->only([
+        'program_id', 'respocenter_id', 'amount', 'particulars',
+        'fname', 'mi', 'lname', 'tin_number', 'address'
+    ]);
 
-        $oldData = $dvRequest->only([
-            'program_id', 'respocenter_id', 'amount', 'particulars',
-            'fname', 'mi', 'lname', 'tin_number', 'address'
-        ]);
-
+    DB::beginTransaction();
+    
+    try {
         $dvRequest->update($request->only(array_keys($oldData)));
 
         $modeId = $request->mode_of_payment_id;
@@ -555,23 +706,105 @@ public function history()
         $changes[] = "Mode of Payment updated";
         $remarks = implode('; ', $changes);
 
-        $this->logAction($dvRequest, 'ORS_revision_updated', 'Updated', $remarks);
+        $this->logAction($dvRequest, 'Updated', 'Updated', $remarks);
+
+        // ✅ NEW: Notify IMSD about the update
+        try {
+            $this->pusher->trigger('dv-requests-imsd', 'dv-request-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'control_number' => $dvRequest->accounting_control_number 
+                    ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                    : 'Pending-CN',
+                'updated_by' => trim(Auth::guard('focal')->user()->fname . ' ' . Auth::guard('focal')->user()->lname),
+                'changes' => $remarks,
+                'program' => $dvRequest->program->prcode ?? 'N/A',
+                'amount' => number_format($dvRequest->amount, 2),
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        } catch (\Exception $pusherError) {
+            \Log::warning('Pusher notification failed for DV update: ' . $pusherError->getMessage());
+        }
+
+        DB::commit();
 
         return redirect()->route('FocalPerson.dvrequest.index')
             ->with('success', 'DV Request updated successfully.');
+            
+    } catch (\Exception $e) {
+        DB::rollBack();
+        
+        \Log::error('DV Request update failed', [
+            'dv_id' => $dvRequest->id,
+            'error' => $e->getMessage()
+        ]);
+        
+        return redirect()->back()
+            ->withInput()
+            ->with('error', 'Failed to update request: ' . $e->getMessage());
+    }
+}
+
+public function destroy(DvRequest $dvRequest)
+{
+    if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
+        abort(403, 'Unauthorized action.');
     }
 
-    public function destroy(DvRequest $dvRequest)
-    {
-        if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
-            abort(403, 'Unauthorized action.');
+    // ✅ FIXED: Prevent deletion if already received by IMSD
+    if ($dvRequest->status !== 'submitted') {
+        return redirect()->route('FocalPerson.dvrequest.index')
+            ->with('error', 'Cannot delete this request. It has already been received by IMSD (Status: ' . $dvRequest->status . ')');
+    }
+
+    DB::beginTransaction();
+    
+    try {
+        $controlNumber = $dvRequest->accounting_control_number 
+            ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+            : 'Pending-CN';
+        
+        $deletedBy = trim(Auth::guard('focal')->user()->fname . ' ' . Auth::guard('focal')->user()->lname);
+        $dvRequestId = $dvRequest->id;
+        $programCode = $dvRequest->program->prcode ?? 'N/A';
+        
+        // Delete related records first
+        DvRequestLog::where('dv_request_id', $dvRequest->id)->delete();
+        Notification::where('dv_request_id', $dvRequest->id)->delete();
+        
+        // Delete the main request
+        $dvRequest->delete();
+
+        // ✅ NEW: Notify IMSD about the deletion
+        try {
+            $this->pusher->trigger('dv-requests-imsd', 'dv-request-deleted', [
+                'dv_request_id' => $dvRequestId,
+                'control_number' => $controlNumber,
+                'deleted_by' => $deletedBy,
+                'program' => $programCode,
+                'reason' => 'Deleted by focal person before IMSD receipt',
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        } catch (\Exception $pusherError) {
+            \Log::warning('Pusher notification failed for DV deletion: ' . $pusherError->getMessage());
         }
 
-        $dvRequest->delete();
+        DB::commit();
 
         return redirect()->route('FocalPerson.dvrequest.index')
             ->with('success', 'DV Request deleted successfully.');
+            
+    } catch (\Exception $e) {
+        DB::rollBack();
+        
+        \Log::error('DV Request deletion failed', [
+            'dv_id' => $dvRequest->id,
+            'error' => $e->getMessage()
+        ]);
+        
+        return redirect()->back()
+            ->with('error', 'Failed to delete request: ' . $e->getMessage());
     }
+}
 
    public function logs(DvRequest $dvRequest, Request $request)
 {
@@ -700,82 +933,10 @@ public function history()
         ]);
     }
 
-    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing','Accountant III','Regional Director','Cashier'];
+    $steps = ['Submitted', 'IMSD', 'Incoming', 'Budget Officer', 'Outgoing','Accountant_III','Regional Director','Cashier'];
     
     return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs', 'steps'));
 }
-
-
-        // Add this method to your FocalPersonController or relevant controller
-
-    public function confirmReceipt(DVRequest $dvRequest)
-    {
-        try {
-            // Verify the request belongs to the authenticated focal person
-            if ($dvRequest->focalperson_id !== auth()->id()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unauthorized access'
-                ], 403);
-            }
-            
-            // Verify the status is Cashier_released
-            if ($dvRequest->status !== 'Cashier_released') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This request is not ready for confirmation'
-                ], 400);
-            }
-            
-            // Update the DV request status to Completed
-            $dvRequest->update([
-                'status' => 'Completed',
-                'confirmed_by_focal_person' => true,
-                'confirmed_at' => now()
-            ]);
-            
-            // Create a log entry for the confirmation
-            DVRequestLog::create([
-                'dv_request_id' => $dvRequest->id,
-                'focalperson_id' => auth()->id(),
-                'action' => 'Completed',
-                'remarks' => 'Receipt of payment confirmed by focal person',
-                'created_at' => now()
-            ]);
-            
-            $this->pusher->trigger(
-                'dv-requests-' . $dvRequest->focalperson_id,
-                'status-updated',
-                [
-                    'dvRequestId' => $dvRequest->id,
-                    'status' => 'Completed',
-                    'actor_name' => auth()->user()->fname . ' ' . auth()->user()->lname,
-                    'actor_avatar' => auth()->user()->profile_image 
-                        ? asset('storage/profiles/' . auth()->user()->profile_image)
-                        : asset('storage/profiles/default.png'),
-                    'remarks' => 'Receipt of payment confirmed by focal person',
-                    'action' => 'Completed',
-                    'isRejected' => false,
-                    'lastStep' => 'Completed'
-                ]
-            );
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Receipt confirmed successfully',
-                'status' => 'Completed'
-            ]);
-            
-        } catch (\Exception $e) {
-            \Log::error('Confirmation error: ' . $e->getMessage());
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'An error occurred while confirming receipt'
-            ], 500);
-        }
-    }
-
 
     protected function logAction(DvRequest $dvRequest, string $status, string $action, string $remarks): void
     {

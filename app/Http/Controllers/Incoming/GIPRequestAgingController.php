@@ -52,7 +52,7 @@ class GIPRequestAgingController extends Controller
                     return [
                         'id' => $request->id,
                         'alert_id' => $latestAlert ? $latestAlert->id : null,
-                        'control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 5, '0', STR_PAD_LEFT) : '—',
+                        'control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) : '—',
                         'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
                         'program' => $request->program->prcode ?? 'N/A',
                         'document_type' => 'GIP',

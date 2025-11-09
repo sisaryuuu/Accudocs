@@ -186,9 +186,9 @@
             .no-print { display: none; }
             
             .dole-logo {
-                width: 175px !important;
+                width: 120px !important;
                 height: auto !important;
-                max-width: 175px !important;
+                max-width: 120px !important;
             }
             
             /* Ensure QR code maintains minimum 1x1 cm size in print */

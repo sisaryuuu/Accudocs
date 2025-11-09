@@ -158,7 +158,12 @@
             <td style="border: 1px solid #000; padding: 2px 3px;">{{$data['particulars'] }}</td>
             <td class="center" style="border: 1px solid #000; padding: 2px 3px; text-align:center">{{ $data['mfo'] ?? ''}}</td>
             <td class="center" style="border: 1px solid #000; padding: 2px 3px; white-space: pre-line;">{{ $data['uacs'] ?? '' }}</td>
-            <td class="center" style="border: 1px solid #000; padding: 2px 3px;"><strong>₱{{ $data['amount'], 2 }}</strong></td>
+            <td class="center" style="border: 1px solid #000; padding: 2px 3px;"></td>
+
+        </tr>
+          <tr>
+            <td colspan="4" class="right bold" style="border: 1px solid #000; padding: 2px 3px;">TOTAL</td>
+            <td class="center bold" style="border: 1px solid #000; padding: 2px 3px;">₱{{$data['amount'], 2}}</td>
         </tr>
     </table>
     

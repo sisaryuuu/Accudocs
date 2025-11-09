@@ -105,7 +105,7 @@
 <table class="header-table compact-table no-bottom-margin tight-table">
     <tr>
         <td style="width: 12%; text-align: left; border: 1px solid #000; border-right: none; padding: 10px;">
-            <img src="{{ asset('storage/logo/DOLE.png') }}" alt="DOLE Logo" class="dole-logo">
+           <img src="{{ asset('storage/logo/DOLE.png') }}" alt="DOLE Logo"  style="display: block; margin: 5px auto; width: 120px; height: auto; max-height: 120px;">
         </td>
         <td style="width: 88%; border: 1px solid #000; border-left: none; padding: 10px;">
             <div class="org-info">
@@ -141,23 +141,34 @@
         </tr>
     </table>
         
-    <!-- Third Table - Particulars -->
-    <table class="compact-table no-bottom-margin tight-table">
-        <tr class="section-title">
-             <td style="width: 20%; border: 1px solid #000; padding: 2px 3px;">Responsibility <br> Center</td>
-            <td style="width: 30%; border: 1px solid #000; padding: 2px 3px;">Particulars</td>
-            <td style="width: 15%; border: 1px solid #000; padding: 2px 3px;">MFO/P.P.A</td>
-            <td style="width: 25%; border: 1px solid #000; padding: 2px 3px;">UACS / Expenditure</td>
-            <td style="width: 30%; border: 1px solid #000; padding: 2px 3px;">Amount</td>
-        </tr>
-        <tr style="height: 275px;">
-            <td style="border: 1px solid #000; padding: 2px 3px; text-align:center"><strong>{{ $data['responsibility_center'] }}</strong></td>
-            <td style="border: 1px solid #000; padding: 2px 3px;">{{$data['particulars'] }}</td>
-            <td class="center" style="border: 1px solid #000; padding: 2px 3px; text-align:center">{{ $data['mfo'] }}</td>
-            <td class="center" style="border: 1px solid #000; padding: 2px 3px; white-space: pre-line;">{{ $data['uacs'] }}</td>
-            <td class="center" style="border: 1px solid #000; padding: 2px 3px;"><strong>₱{{ number_format($data['amount'], 2) }}</strong></td>
-        </tr>
-    </table>
+      <!-- Third Table - Particulars -->
+  <!-- Third Table - Particulars -->
+<table class="compact-table no-bottom-margin tight-table">
+    <tr class="section-title">
+        <td style="width: 20%; border: 1px solid #000; padding: 2px 3px;">Responsibility <br> Center</td>
+        <td style="width: 30%; border: 1px solid #000; padding: 2px 3px;">Particulars</td>
+        <td style="width: 15%; border: 1px solid #000; padding: 2px 3px;">MFO/P.P.A</td>
+        <td style="width: 25%; border: 1px solid #000; padding: 2px 3px;">UACS / Expenditure</td>
+        <td style="width: 30%; border: 1px solid #000; padding: 2px 3px;">Amount</td>
+    </tr>
+    <tr style="height: 275px;">
+        <td style="border: 1px solid #000; padding: 2px 3px; text-align:center"><strong>{{ $data['responsibility_center'] }}</strong></td>
+        <td style="border: 1px solid #000; padding: 2px 3px;">{{ $data['particulars'] }}</td>
+        <td class="center" style="border: 1px solid #000; padding: 2px 3px; text-align:center">{{ $data['mfo'] }}  
+        @if(isset($data['adl_codes']) && $data['adl_codes'] != '—')
+                <br>
+                <span style="font-size: 10px; white-space: pre-line;">{{ $data['adl_codes'] }}</span>
+            @endif</td>
+        <td class="center" style="border: 1px solid #000; padding: 2px 3px; white-space: pre-line;">{{ $data['uacs'] }}</td>
+        <td class="center" style="border: 1px solid #000; padding: 2px 3px; white-space: pre-line;"><strong>{{ $data['uacs_amounts'] }}</strong></td>
+    </tr>
+    <!-- Total Row -->
+    <tr>
+        <td colspan="4" class="right bold" style="border: 1px solid #000; padding: 2px 3px;">TOTAL</td>
+        <td class="center bold" style="border: 1px solid #000; padding: 2px 3px;">₱{{ number_format($data['amount'], 2) }}</td>
+    </tr>
+</table>
+    
     
 <!-- Certification Section - Structured like Sections C and D -->
 <table class="compact-table no-bottom-margin tight-table">

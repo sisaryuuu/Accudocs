@@ -51,7 +51,7 @@ class ORSRequestAgingController extends Controller
                     'id' => $request->id, // This is the DV request ID
                     'alert_id' => $latestAlert ? $latestAlert->id : null,
                     'control_number' => $request->accounting_control_number ? 
-                        'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 5, '0', STR_PAD_LEFT) : '—',
+                        'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) : '—',
                     'ors_number' => $request->orsRequest->ors_number ?? '—',
                     'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
                     'program' => $request->program->prcode ?? 'N/A',

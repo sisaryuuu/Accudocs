@@ -29,8 +29,8 @@ class DvRequestProcessingController extends Controller
         $this->pusher = $pusher;
     }
 
-    // Index method: list all DV requests pending IMSD processing
-    public function index(Request $request)
+        // Index method: list all DV requests pending IMSD processing
+        public function index(Request $request)
     {
         $currentUserId = auth()->id();
         $lockDuration = now()->subMinutes(10);
@@ -57,7 +57,8 @@ class DvRequestProcessingController extends Controller
             });
         }
 
-        $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
+        // Changed from desc to asc to show newest at bottom
+        $dvRequests = $query->orderBy('created_at', 'asc')->paginate(10);
 
         return view('RegionalOffices.IMSD.index', compact('dvRequests'));
     }
@@ -90,12 +91,13 @@ class DvRequestProcessingController extends Controller
             });
         }
 
-        $dvRequests = $query->latest()->get();
+        // Changed from latest() to oldest() or orderBy asc
+        $dvRequests = $query->orderBy('created_at', 'asc')->get();
 
         $result = $dvRequests->map(function ($request) {
             $base = [
                 'id'             => $request->id,
-                'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 5, '0', STR_PAD_LEFT): '—', 
+                'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT): '—', 
                 'submitted_by'   => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
                 'submitted_to'   => auth()->id(),
                 'program'        => $request->program->prcode ?? 'N/A',
@@ -210,7 +212,7 @@ class DvRequestProcessingController extends Controller
             }
             
             $controlNumber = $dvRequest->accounting_control_number 
-                ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT) 
+                ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
                 : 'Pending-CN';
             
             $userName = auth()->user()->name ?? 'IMSD User';

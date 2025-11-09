@@ -320,6 +320,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Allotment Class</label>
                     <select name="allotment_class_id" 
+                        id="allotment-class-select"
                         class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
                         <option value="">-- Select Allotment Class --</option>
                         @foreach($allotment_classes as $class)
@@ -334,6 +335,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700">MFO/PAP</label>
                     <select name="mfopap_id" 
+                        id="mfopap-select"
                         class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
                         <option value="">-- Select MFO/PAP --</option>
                         @foreach($mfopaps as $mfopap)
@@ -348,6 +350,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Continuing/Current</label>
                     <select name="contcurrent_id" 
+                        id="contcurrent-select"
                         class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
                         <option value="">-- Select --</option>
                         @foreach($contcurrents as $cont)
@@ -694,6 +697,31 @@
 
 .remove-btn:hover {
     transform: scale(1.1);
+
+    
+}
+/* UACS Amount Validation Styles */
+#uacs-amount-validation {
+    transition: all 0.3s ease-in-out;
+}
+
+.uacs-amount-input:invalid {
+    border-color: #ef4444;
+}
+
+.uacs-amount-input:focus:invalid {
+    ring-color: #ef4444;
+}
+
+button[type="submit"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Highlight effect for amount inputs */
+.uacs-amount-input:focus {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 </style>
 
@@ -723,12 +751,31 @@ let selectedADLIds = new Set();
 let currentRejectDvRequestId = null;
 let currentDvRequestId = null;
 let currentOriginalAmount = 0;
-
 // ====================================
-// UACS DYNAMIC FORM FUNCTIONS
+// UACS DYNAMIC FORM FUNCTIONS WITH AMOUNT SUPPORT
 // ====================================
+// Function to get current gross amount dynamically
+function getGrossAmount() {
+    // Try to get from hidden input first (updated amount)
+    const hiddenAmount = document.getElementById('amount-hidden');
+    if (hiddenAmount && hiddenAmount.value) {
+        return parseFloat(hiddenAmount.value);
+    }
+    
+    // Try to get from amount display
+    const amountDisplay = document.querySelector('.amount-display span');
+    if (amountDisplay) {
+        const amountText = amountDisplay.textContent.replace(/[₱,]/g, '').trim();
+        return parseFloat(amountText) || 0;
+    }
+    
+    // Fallback to initial value
+    return {{ $dvRequest->amount }};
+}
 
-function addUACSRow(selectedId = null) {
+let grossAmount = getGrossAmount(); // Initialize with current amount
+
+function addUACSRow(selectedId = null, amount = null) {
     uacsRowCounter++;
     const rowId = `uacs-row-${uacsRowCounter}`;
     
@@ -745,7 +792,8 @@ function addUACSRow(selectedId = null) {
                 </span>
             </div>
             
-            <div class="flex-1">
+            <div class="flex-1 space-y-2">
+                <!-- UACS Code Selector -->
                 <select name="uacscode_ids[]" 
                         id="uacs-select-${uacsRowCounter}"
                         class="uacs-select w-full rounded-lg border-gray-300 shadow-sm text-sm" 
@@ -753,6 +801,24 @@ function addUACSRow(selectedId = null) {
                         required>
                     <option value="">-- Select UACS Code --</option>
                 </select>
+                
+                <!-- Amount Input -->
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700 whitespace-nowrap">Amount:</label>
+                    <div class="relative flex-1">
+                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₱</span>
+                        <input type="number" 
+                               name="uacs_amounts[]"
+                               id="uacs-amount-${uacsRowCounter}"
+                               step="0.01"
+                               min="0.01"
+                               value="${amount || ''}"
+                               placeholder="0.00"
+                               class="uacs-amount-input w-full pl-8 pr-3 py-1.5 rounded-lg border-gray-300 shadow-sm text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                               oninput="validateUACSAmounts()"
+                               required>
+                    </div>
+                </div>
             </div>
             
             <button type="button" 
@@ -769,6 +835,7 @@ function addUACSRow(selectedId = null) {
     container.insertAdjacentHTML('beforeend', rowHTML);
     initializeUACSSelect2(uacsRowCounter, selectedId);
     updateUACSRowNumbers();
+    validateUACSAmounts(); // Validate after adding new row
 }
 
 function generateUACSOptions(selectedId = null) {
@@ -896,6 +963,7 @@ function removeUACSRow(rowId, rowCounter) {
         row.remove();
         updateUACSRowNumbers();
         refreshAllUACSDropdowns();
+        validateUACSAmounts(); // Validate after removing row
         
         if (document.querySelectorAll('.uacs-row').length === 0) {
             addUACSRow();
@@ -911,6 +979,166 @@ function updateUACSRowNumbers() {
             numberBadge.textContent = index + 1;
         }
     });
+}
+
+// ====================================
+// UACS AMOUNT VALIDATION FUNCTIONS
+// ====================================
+
+function validateUACSAmounts() {
+    const amountInputs = document.querySelectorAll('.uacs-amount-input');
+    let total = 0;
+    let allFilled = true;
+    
+    amountInputs.forEach(input => {
+        const value = parseFloat(input.value) || 0;
+        total += value;
+        if (!input.value || value <= 0) {
+            allFilled = false;
+        }
+    });
+    
+    // Update or create validation message
+    let validationDiv = document.getElementById('uacs-amount-validation');
+    
+    if (!validationDiv) {
+        validationDiv = document.createElement('div');
+        validationDiv.id = 'uacs-amount-validation';
+        validationDiv.className = 'mt-3 p-3 rounded-lg text-sm';
+        
+        // Insert after the last button in UACS section
+        const uacsContainer = document.getElementById('uacs-container');
+        const nextElement = uacsContainer.nextElementSibling;
+        
+        // Find the last button (Auto-distribute or Add button)
+        let insertAfter = nextElement;
+        while (insertAfter && insertAfter.nextElementSibling && 
+               (insertAfter.nextElementSibling.tagName === 'BUTTON' || 
+                insertAfter.nextElementSibling.classList.contains('inline-flex'))) {
+            insertAfter = insertAfter.nextElementSibling;
+        }
+        
+        insertAfter.insertAdjacentElement('afterend', validationDiv);
+    }
+    
+    const difference = Math.abs(total - grossAmount);
+    const isValid = difference < 0.01 && allFilled; // 1 cent tolerance
+    
+    if (amountInputs.length === 0) {
+        validationDiv.style.display = 'none';
+        return true;
+    }
+    
+    validationDiv.style.display = 'block';
+    
+    if (isValid) {
+        validationDiv.className = 'mt-3 p-3 rounded-lg text-sm bg-green-50 border border-green-200';
+        validationDiv.innerHTML = `
+            <div class="flex items-center text-green-700">
+                <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+                <span class="font-medium">✓ Total UACS Amount: ₱${formatNumber(total)} equals Gross Amount: ₱${formatNumber(grossAmount)}</span>
+            </div>
+        `;
+    } else if (!allFilled) {
+        validationDiv.className = 'mt-3 p-3 rounded-lg text-sm bg-red-50 border border-red-200';
+        validationDiv.innerHTML = `
+            <div class="flex items-center text-red-700">
+                <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                </svg>
+                <span class="font-medium">Please enter amounts for all UACS codes</span>
+            </div>
+        `;
+    } else {
+        validationDiv.className = 'mt-3 p-3 rounded-lg text-sm bg-yellow-50 border border-yellow-200';
+        const remaining = grossAmount - total;
+        validationDiv.innerHTML = `
+            <div class="flex items-center text-yellow-700">
+                <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                </svg>
+                <div class="flex-1">
+                    <div class="font-medium mb-1">UACS amounts must equal gross amount</div>
+                    <div class="text-sm space-x-3">
+                        <span>Total UACS: ₱${formatNumber(total)}</span>
+                        <span class="text-gray-400">|</span>
+                        <span>Gross: ₱${formatNumber(grossAmount)}</span>
+                        <span class="text-gray-400">|</span>
+                        <span class="${remaining >= 0 ? 'text-yellow-800' : 'text-red-600'} font-semibold">
+                            ${remaining >= 0 ? 'Remaining' : 'Excess'}: ₱${formatNumber(Math.abs(remaining))}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Enable/disable submit button based on validation
+    const submitBtn = document.querySelector('form button[type="submit"]');
+    if (submitBtn && !submitBtn.hasAttribute('data-other-validation')) {
+        if (!isValid) {
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            submitBtn.title = 'Total UACS amounts must equal gross amount';
+        } else {
+            submitBtn.disabled = false;
+            submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            submitBtn.title = '';
+        }
+    }
+    
+    return isValid;
+}
+
+// Auto-distribute amounts equally across all UACS codes
+function autoDistributeAmounts() {
+    const amountInputs = document.querySelectorAll('.uacs-amount-input');
+    const count = amountInputs.length;
+    
+    if (count === 0) {
+        showMessage('Please add UACS codes first', 'error');
+        return;
+    }
+    
+    // Calculate equal distribution
+    const amountPerCode = (grossAmount / count).toFixed(2);
+    const lastAmount = (grossAmount - (amountPerCode * (count - 1))).toFixed(2);
+    
+    amountInputs.forEach((input, index) => {
+        input.value = index === count - 1 ? lastAmount : amountPerCode;
+    });
+    
+    validateUACSAmounts();
+    showMessage('Amounts distributed equally across ' + count + ' UACS code(s)', 'success');
+}
+
+// Add button initialization
+function initializeAutoDistributeButton() {
+    const uacsContainer = document.getElementById('uacs-container');
+    if (!uacsContainer) return;
+    
+    // Check if button already exists
+    if (document.getElementById('auto-distribute-btn')) return;
+    
+    const autoDistributeBtn = document.createElement('button');
+    autoDistributeBtn.type = 'button';
+    autoDistributeBtn.id = 'auto-distribute-btn';
+    autoDistributeBtn.onclick = autoDistributeAmounts;
+    autoDistributeBtn.className = 'mt-2 ml-2 inline-flex items-center px-3 py-1.5 text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors duration-200';
+    autoDistributeBtn.innerHTML = `
+        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+        </svg>
+        Auto-Distribute Equally
+    `;
+    
+    // Insert after the "Add Another UACS Code" button
+    const addUacsBtn = uacsContainer.nextElementSibling;
+    if (addUacsBtn) {
+        addUacsBtn.insertAdjacentElement('afterend', autoDistributeBtn);
+    }
 }
 
 // ====================================
@@ -1078,6 +1306,50 @@ function updateADLRowNumbers() {
 }
 
 // ====================================
+// ADDITIONAL SELECT2 INITIALIZATION
+// ====================================
+
+function initializeAdditionalSelect2() {
+    // Allotment Class Select2
+    $('#allotment-class-select').select2({
+        placeholder: '-- Select Allotment Class --',
+        allowClear: true,
+        width: '100%',
+        templateSelection: formatAdditionalSelection,
+        escapeMarkup: function(markup) { return markup; }
+    });
+
+    // MFO/PAP Select2
+    $('#mfopap-select').select2({
+        placeholder: '-- Select MFO/PAP --',
+        allowClear: true,
+        width: '100%',
+        templateSelection: formatAdditionalSelection,
+        escapeMarkup: function(markup) { return markup; }
+    });
+
+    // Continuing/Current Select2
+    $('#contcurrent-select').select2({
+        placeholder: '-- Select --',
+        allowClear: true,
+        width: '100%',
+        templateSelection: formatAdditionalSelection,
+        escapeMarkup: function(markup) { return markup; }
+    });
+}
+
+function formatAdditionalSelection(option) {
+    if (!option.id) return option.text;
+    
+    const text = option.text;
+    const parts = text.split(' - ');
+    const code = parts[0] || '';
+    const desc = parts.slice(1).join(' - ') || '';
+    
+    return $(`<span><strong>${code}</strong> ${desc ? '- ' + desc : ''}</span>`);
+}
+
+// ====================================
 // MODAL FUNCTIONS
 // ====================================
 
@@ -1138,14 +1410,40 @@ function formatNumber(number) {
     }).format(number);
 }
 
+// Updated showMessage function with warning support
 function showMessage(message, type = 'success') {
     const container = document.getElementById('message-container');
     const messageDiv = document.createElement('div');
     
-    const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+    let bgColor, icon;
+    switch(type) {
+        case 'success':
+            bgColor = 'bg-green-500';
+            icon = `<svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+            </svg>`;
+            break;
+        case 'error':
+            bgColor = 'bg-red-500';
+            icon = `<svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+            </svg>`;
+            break;
+        case 'warning':
+            bgColor = 'bg-yellow-500';
+            icon = `<svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+            </svg>`;
+            break;
+        default:
+            bgColor = 'bg-blue-500';
+            icon = `<svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+            </svg>`;
+    }
     
-    messageDiv.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg mb-4 transform transition-all duration-300 translate-x-full opacity-0`;
-    messageDiv.textContent = message;
+    messageDiv.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg mb-4 transform transition-all duration-300 translate-x-full opacity-0 flex items-center`;
+    messageDiv.innerHTML = icon + `<span>${message}</span>`;
     
     container.appendChild(messageDiv);
     
@@ -1160,7 +1458,7 @@ function showMessage(message, type = 'success') {
                 messageDiv.parentNode.removeChild(messageDiv);
             }
         }, 300);
-    }, 3000);
+    }, 4000); // Longer display time for warnings
 }
 
 // ====================================
@@ -1178,13 +1476,21 @@ document.addEventListener("DOMContentLoaded", () => {
         // Add first ADL row
         addADLRow();
 
+        // Initialize additional Select2 dropdowns
+        initializeAdditionalSelect2();
+
+         // ✅ NEW: Initialize auto-distribute button
+        initializeAutoDistributeButton();
+
         console.log('✅ Select2 initialized successfully');
         console.log('✅ First UACS and ADL rows added');
+        console.log('✅ Additional Select2 dropdowns initialized');
     } else {
         console.error('❌ jQuery or Select2 not loaded');
     }
     
-    // Amount Form Submission
+    // Add this to your existing Amount Form Submission handler
+
     const amountForm = document.getElementById('amountForm');
     if (amountForm) {
         amountForm.addEventListener('submit', async function(e) {
@@ -1193,7 +1499,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const submitBtn = document.getElementById('saveAmountBtn');
             const btnText = submitBtn.querySelector('.btn-text');
             const spinner = submitBtn.querySelector('svg');
-            
+
             const csrfToken = document.querySelector('meta[name="csrf-token"]');
             if (!csrfToken) {
                 console.error('❌ CSRF token not found in meta tag');
@@ -1238,14 +1544,35 @@ document.addEventListener("DOMContentLoaded", () => {
                 const data = await response.json();
 
                 if (response.ok && data.success) {
+                    // Update amount display
                     const amountDisplay = document.querySelector('.amount-display span');
                     if (amountDisplay) {
                         amountDisplay.textContent = `₱${formatNumber(newAmount)}`;
                     }
                     
+                    // Update hidden input
                     document.getElementById('amount-hidden').value = newAmount;
                     
-                    showMessage('Amount updated successfully!', 'success');
+                    // ✅ CRITICAL: Update grossAmount and re-validate UACS amounts
+                    grossAmount = newAmount;
+                    
+                    // Re-validate UACS amounts with new gross amount
+                    if (document.querySelectorAll('.uacs-amount-input').length > 0) {
+                        validateUACSAmounts();
+                        
+                        // Show warning if UACS amounts no longer match
+                        const uacsTotal = Array.from(document.querySelectorAll('.uacs-amount-input'))
+                            .reduce((sum, input) => sum + (parseFloat(input.value) || 0), 0);
+                        
+                        if (Math.abs(uacsTotal - newAmount) > 0.01) {
+                            showMessage('Amount updated successfully!', 'success');
+                        } else {
+                            showMessage('Amount updated successfully!', 'success');
+                        }
+                    } else {
+                        showMessage('Amount updated successfully!', 'success');
+                    }
+                    
                     closeAmountModal();
                 } else {
                     throw new Error(data.message || 'Failed to update amount');

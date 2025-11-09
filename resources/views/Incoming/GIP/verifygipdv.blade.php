@@ -8,36 +8,38 @@
         
         <!-- Left Section - Incoming Form -->
         <div class="lg:col-span-2 bg-white shadow rounded-xl p-6">
-            <h1 class="text-2xl font-bold text-gray-900 mb-6">Incoming</h1>
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">Incoming GIP</h1>
 
             <form action="{{ route('Incoming.GIP.dvrequests.verify', $dvRequest->id) }}" method="POST" class="space-y-6">
                 @csrf
 
+                <!-- Mode of Payment -->
                 <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Mode of Payment</label>
 
                     @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
-                    <ul class="space-y-2">
-                        @foreach($dvRequest->modeOfPayments as $mop)
-                            <li class="flex items-center p-3 rounded-lg border
-                                @if($loop->first) border-blue-500 bg-blue-50 @else border-gray-200 bg-white @endif">
-                                <input 
-                                    type="radio" 
-                                    name="selected_mop" 
-                                    value="{{ $mop->id }}" 
-                                    class="h-4 w-4 text-blue-600 border-gray-300 mr-2"
-                                    @if($loop->first) checked @endif
-                                    disabled
-                                >
-                                <span class="text-sm font-medium text-gray-900">{{ $mop->mopname ?? 'N/A' }}</span>
-                            </li>
-                        @endforeach
-                    </ul>
+                        <ul class="space-y-2">
+                            @foreach($dvRequest->modeOfPayments as $mop)
+                                <li class="flex items-center p-3 rounded-lg border
+                                    @if($loop->first) border-blue-500 bg-blue-50 @else border-gray-200 bg-white @endif">
+                                    <input 
+                                        type="radio" 
+                                        name="selected_mop" 
+                                        value="{{ $mop->id }}" 
+                                        class="h-4 w-4 text-blue-600 border-gray-300 mr-2"
+                                        @if($loop->first) checked @endif
+                                        disabled
+                                    >
+                                    <span class="text-sm font-medium text-gray-900">{{ $mop->mopname ?? 'N/A' }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
                     @else
-                    <p class="text-gray-400">N/A</p>
+                        <p class="text-gray-400">N/A</p>
                     @endif
                 </div>
 
+                <!-- Request Info -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Control No.</label>
@@ -53,101 +55,116 @@
                         <label class="block text-sm font-medium text-gray-700">Program</label>
                         <input type="text" value="{{ $dvRequest->program->prcode ?? 'N/A'}}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
-                        <p class="mt-1 text-sm text-gray-900">
-                          {{ $dvRequest->respocenter->rccode}} {{$dvRequest->respocenter->description}}
-                        </p>
-                    </div>
                 </div>
+
+                <!-- Responsibility Center -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
+                    <input type="text" value="{{ $dvRequest->respocenter->rccode ?? '' }} - {{ $dvRequest->respocenter->description ?? '' }}"
+                           class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                </div>
+
+                <!-- Particulars -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Particulars</label>
                     <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
-   
+
+                <!-- GIP Attachments Checklist -->
                 <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Attachments Verified by IMSD</h3>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">GIP Attachments Checklist</h3>
 
                     @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0)
-                        <!-- Scrollable container with max height -->
-                        <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg bg-white mb-4">
-                            <ul class="space-y-2 p-2">
-                                @foreach($dvRequest->gipAttachments as $attachment)
-                                    <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition border-b border-gray-100 last:border-b-0">
-                                        <input type="checkbox"
-                                            name="gip_attachments[{{ $attachment->id }}]"
-                                            id="gip_attachment_{{ $attachment->id }}"
-                                            class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mr-3 flex-shrink-0"
-                                            {{ $attachment->is_present ? 'checked' : '' }}>
-                                        <label for="gip_attachment_{{ $attachment->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
-                                            {{ $attachment->name }}
-                                        </label>
-                                        @if($attachment->is_present)
-                                            <span class="text-xs text-green-600 font-medium flex-shrink-0">✓ Present</span>
-                                        @else
-                                            <span class="text-xs text-gray-400 flex-shrink-0">Missing</span>
-                                        @endif
-                                    </li>
-                                @endforeach
-                            </ul>
-                        </div>
+                        <ul class="space-y-2">
+                            @foreach($dvRequest->gipAttachments as $attachment)
+                                <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition">
+                                    <input type="checkbox"
+                                        name="gip_attachments[{{ $attachment->id }}]"
+                                        id="gip_attachment_{{ $attachment->id }}"
+                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                                        {{ $attachment->is_present ? 'checked' : '' }}>
+                                    <label for="gip_attachment_{{ $attachment->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
+                                        {{ $attachment->name }}
+                                    </label>
+                                    @if($attachment->is_present)
+                                        <span class="text-xs text-green-600 font-medium">✓ Present</span>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                        
+                        <p class="text-xs text-gray-500 mt-4">
+                            <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
+                        </p>
                     @else
-                        <p class="text-sm text-gray-500">No attachments available.</p>
+                        <p class="text-gray-400">No attachments available.</p>
                     @endif
                 </div>
 
+                <!-- Amount -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Amount</label>
                         <input type="text" value="₱{{ number_format($dvRequest->amount, 2) }}" 
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        @if($mop->pivot->paymentDetail)
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Name</label>
-                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
-                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bank Address</label>
-                                <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }} " class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                            </div>
-                        @else
-                            <p class="text-xs text-gray-400">No payment details available</p>
-                        @endif
-                    </div>
                 </div>
 
+                <!-- Payment Details -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    @if($dvRequest->paymentDetails && $dvRequest->paymentDetails->count() > 0)
+                        @php
+                            $paymentDetail = $dvRequest->paymentDetails->first();
+                        @endphp
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Bank Name</label>
+                            <input type="text" value="{{ $paymentDetail->bank_name ?? 'N/A' }}" 
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
+                            <input type="text" value="{{ $paymentDetail->bank_accnum ?? 'N/A' }}" 
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Bank Address</label>
+                            <input type="text" value="{{ $paymentDetail->bank_address ?? 'N/A' }}" 
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        </div>
+                    @else
+                        <p class="text-xs text-gray-400 col-span-3">No payment details available</p>
+                    @endif
+                </div>
+
+                <!-- Received Info -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Received By</label>
-                        <input type="text" value="{{ $dvRequest->accountingUnit->fname ?? '' }} {{ $dvRequest->accountingUnit->lname ?? '' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                        <input type="text" value="{{ $dvRequest->accountingUnit->fname ?? '' }} {{ $dvRequest->accountingUnit->lname ?? '' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Received From</label>
-                        <input type="text"  value="{{ $dvRequest->focalPerson->fname ?? 'DILI MAKIT.AN' }} {{ $dvRequest->focalPerson->lname ?? 'WALA' }}"  class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
+                        <input type="text"  value="{{ $dvRequest->focalPerson->fname ?? 'Unknown' }} {{ $dvRequest->focalPerson->lname ?? '' }}"  class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
                 </div>
 
+                <!-- Date and Time -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Date Received</label>
                         <input type="date" 
                             value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d') : '' }}"
-                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Time</label>
                         <input type="time"   
                             value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('H:i') : '' }}"
-                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
                 </div>
 
+                <!-- Remarks -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Remarks / Lacking</label>
                     <textarea id="remarks" name="remarks" rows="3" 
@@ -193,20 +210,19 @@
                         </a>
                     </div>
                 @else
-                    <a href="{{ route('Incoming.GIP.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
-                        onclick="releaseLock(event, {{ $dvRequest->id }})">
+                    <a href="{{ route('Incoming.GIP.index') }}" onclick="releaseLock(event, {{ $dvRequest->id }})"
+                       class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                         Back
                     </a>
                 @endif
             </form>
-        </div> <!-- end left column (lg:col-span-2) -->
+        </div>
 
-        <!-- Sidebar (right column) -->
+        <!-- Right Sidebar -->
         <div class="lg:col-span-1">
         </div>
-    </div> <!-- end grid -->
-</div> <!-- end container -->
+    </div>
+</div>
 
 <!-- Reject Modal -->
 <div id="rejectModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -304,7 +320,6 @@
     }
 }
 </style>
-
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
 @endsection
 
@@ -449,20 +464,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Attachment checkbox event listeners
-    const checkboxes = document.querySelectorAll('input[name^="gip_attachments["]');
-    checkboxes.forEach(cb => {
+    // Handle GIP attachment checkboxes
+    const gipCheckboxes = document.querySelectorAll('input[name^="gip_attachments["]');
+    gipCheckboxes.forEach(cb => {
         cb.addEventListener('change', (e) => {
             const listItem = e.target.closest('li');
-            const statusSpan = listItem.querySelector('span.text-xs');
+            let statusSpan = listItem.querySelector('span.text-xs');
+
+            // If there's no existing span (for unchecked ones), create it
+            if (!statusSpan) {
+                statusSpan = document.createElement('span');
+                statusSpan.classList.add('text-xs', 'ml-2');
+                listItem.appendChild(statusSpan);
+            }
 
             if (e.target.checked) {
-                // When checked → mark as Present
+                // ✅ Mark as Present
                 statusSpan.textContent = '✓ Present';
                 statusSpan.classList.remove('text-gray-400');
                 statusSpan.classList.add('text-green-600', 'font-medium');
             } else {
-                // When unchecked → mark as Missing
+                // ❌ Mark as Missing
                 statusSpan.textContent = 'Missing';
                 statusSpan.classList.remove('text-green-600', 'font-medium');
                 statusSpan.classList.add('text-gray-400');
@@ -483,12 +505,10 @@ function showMessage(message, type = 'success') {
     
     container.appendChild(messageDiv);
     
-    // Animate in
     setTimeout(() => {
         messageDiv.classList.remove('translate-x-full', 'opacity-0');
     }, 100);
     
-    // Remove after 3 seconds
     setTimeout(() => {
         messageDiv.classList.add('translate-x-full', 'opacity-0');
         setTimeout(() => {
@@ -503,17 +523,14 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
     const spinner = document.getElementById('loading-spinner');
     const buttonText = buttonElement.querySelector('.button-text');
     
-    // Show loading state
     buttonElement.disabled = true;
     buttonText.textContent = 'Receiving...';
     spinner.classList.remove('hidden');
     
     try {
-        // Create form data for traditional form submission
         const formData = new FormData();
         formData.append('_token', document.querySelector('input[name="_token"]').value);
         
-        // Make AJAX request to receive the DV request
         const response = await fetch(`/Incoming/GIP/dvrequests/${dvRequestId}/receive`, {
             method: 'POST',
             headers: {
@@ -540,7 +557,7 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
         buttonText.textContent = 'Receive';
         spinner.classList.add('hidden');
     }
-}   
+}
 
 function updateButtonsToVerifyMode(dvRequestId) {
     const buttonContainer = document.getElementById('button-container');
@@ -594,9 +611,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 
-// 🔘 Manual release lock button (if you need it in blade)
 function releaseLock(event, id) {
-    event.preventDefault(); // stop normal redirect
+    event.preventDefault(); 
 
     fetch(`/Incoming/GIP/dvrequests/${id}/release-lock`, {
         method: "POST",
@@ -606,11 +622,9 @@ function releaseLock(event, id) {
             "Content-Type": "application/json"
         }
     }).then(() => {
-        // Redirect after releasing lock
         window.location.href = "{{ route('Incoming.GIP.index') }}";
     }).catch(err => {
         console.error("Release lock failed:", err);
-        // Still redirect to index to avoid stuck state
         window.location.href = "{{ route('Incoming.GIP.index') }}";
     });
 }

@@ -33,7 +33,7 @@ class OrsRequest extends Model
     public function uacsCodes()
     {
         return $this->belongsToMany(UacsCode::class, 'ors_request_uacscode', 'ors_request_id', 'uacscode_id')
-                    ->withPivot('order')
+                    ->withPivot(['order', 'amount'])
                     ->withTimestamps()
                     ->orderBy('ors_request_uacscode.order');
     }

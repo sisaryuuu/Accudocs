@@ -158,10 +158,167 @@
 @endsection
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
+// ============ GLOBAL FUNCTIONS (MUST BE OUTSIDE DOMContentLoaded) ============
+window.dismissToast = function(toastId) {
+    const toast = document.getElementById(toastId);
+    if (toast) {
+        toast.classList.add('translate-x-full', 'opacity-0');
+        toast.classList.remove('translate-x-0', 'opacity-100');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }
+}
+
+window.handleReceiveAction = async function(requestId, button) {
+    const originalText = button.innerHTML;
+    const originalState = button.disabled;
+    
+    button.innerHTML = `
+        <svg class="w-4 h-4 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        Processing...
+    `;
+    button.disabled = true;
+
+    try {
+        const response = await fetch(`/RegionalOffices/IMSD/dvrequests/${requestId}/receive`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({})
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            let message = result.message || 'Document has been received by IMSD.';
+            
+            window.showToast(message, 'success');
+            
+            // Trigger data refresh
+            if (window.fetchDvRequests) window.fetchDvRequests();
+            if (window.fetchAgingDocuments) window.fetchAgingDocuments();
+            if (window.updateStatistics) window.updateStatistics();
+            
+        } else {
+            const errorMessage = result.message || `Failed to receive document. (Status: ${response.status})`;
+            window.showToast(errorMessage, 'error');
+            button.innerHTML = originalText;
+            button.disabled = originalState;
+        }
+    } catch (error) {
+        console.error('Error receiving document:', error);
+        window.showToast('Network error occurred while processing the request.', 'error');
+        button.innerHTML = originalText;
+        button.disabled = originalState;
+    }
+}
+
+window.refreshAllData = function() {
+    const tableContainer = document.getElementById('dv-table-container');
+    if (tableContainer) {
+        tableContainer.innerHTML = `
+            <div class="text-center py-16">
+                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </div>
+                <p class="text-gray-500">Refreshing requests...</p>
+            </div>
+        `;
+    }
+    
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = '';
+    
+    if (window.fetchDvRequests) window.fetchDvRequests();
+    if (window.fetchAgingDocuments) window.fetchAgingDocuments();
+    if (window.updateStatistics) window.updateStatistics();
+}
+
+window.showToast = function(message, type = 'success') {
+    const toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) return;
+    
+    const toastId = 'toast-' + Date.now();
+    
+    const typeConfig = {
+        'success': {
+            borderColor: 'border-green-500',
+            bgColor: 'bg-green-100',
+            textColor: 'text-green-500',
+            icon: `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+            </svg>`
+        },
+        'error': {
+            borderColor: 'border-red-500',
+            bgColor: 'bg-red-100',
+            textColor: 'text-red-500',
+            icon: `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+            </svg>`
+        },
+        'warning': {
+            borderColor: 'border-orange-500',
+            bgColor: 'bg-orange-100',
+            textColor: 'text-orange-500',
+            icon: `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+            </svg>`
+        },
+        'info': {
+            borderColor: 'border-blue-500',
+            bgColor: 'bg-blue-100',
+            textColor: 'text-blue-500',
+            icon: `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+            </svg>`
+        }
+    };
+    
+    const config = typeConfig[type] || typeConfig.success;
+    
+    const toastHTML = `
+        <div id="${toastId}" class="toast-notification transform transition-all duration-300 ease-in-out translate-x-full opacity-0">
+            <div class="flex items-center w-full max-w-sm p-4 mb-4 text-gray-500 bg-white rounded-lg shadow-lg border-l-4 ${config.borderColor}" role="alert">
+                <div class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg ${config.textColor} ${config.bgColor}">
+                    ${config.icon}
+                </div>
+                <div class="ml-3 text-sm font-medium text-gray-900">${message}</div>
+                <button type="button" class="ml-auto -mx-1.5 -my-1.5 bg-white text-gray-400 hover:text-gray-900 rounded-lg focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex h-8 w-8" onclick="window.dismissToast('${toastId}')">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    const toast = document.getElementById(toastId);
+    
+    setTimeout(() => {
+        toast.classList.remove('translate-x-full', 'opacity-0');
+        toast.classList.add('translate-x-0', 'opacity-100');
+    }, 100);
+    
+    setTimeout(() => {
+        window.dismissToast(toastId);
+    }, 5000);
+}
+
+// ============ MAIN APPLICATION ============
 document.addEventListener('DOMContentLoaded', function() {
     const tableContainer = document.getElementById('dv-table-container');
     const searchInput = document.getElementById('search-input');
-    const toastContainer = document.getElementById('toast-container');
     const connectionStatus = document.getElementById('connection-status');
     const agingAlertsContainer = document.getElementById('aging-alerts-container');
     
@@ -172,7 +329,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const nextPageBtn = document.getElementById('next-page');
     const lastPageBtn = document.getElementById('last-page');
     const pageNumbersContainer = document.getElementById('page-numbers');
-    const paginationInfo = document.getElementById('pagination-info');
     const currentRangeSpan = document.getElementById('current-range');
     const totalRecordsSpan = document.getElementById('total-records');
 
@@ -228,10 +384,58 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Listen for new DV request submissions
     generalChannel.bind('dv-request-submitted', function(data) {
-        console.log('New DV request submitted:', data);
-        showToast(`New request from ${data.submitted_by}`, 'success');
+        console.log('✅ New DV request submitted:', data);
+        
+        const controlNum = data.control_number || 'New Request';
+        const program = data.program || '';
+        const submittedBy = data.submitted_by || 'Unknown';
+        
+        window.showToast(`New request ${controlNum} submitted by ${submittedBy}`, 'success');
+        
         fetchDvRequests();
-        // Check if this new document affects aging
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
+    });
+
+    // Listen for DV request updates
+    generalChannel.bind('dv-request-updated', function(data) {
+        console.log('📝 DV request updated by focal person:', data);
+        
+        window.showToast(
+            `Document ${data.control_number} updated by ${data.updated_by}`, 
+            'info'
+        );
+        
+        fetchDvRequests();
+        setTimeout(() => {
+            fetchAgingDocuments();
+            updateStatistics();
+        }, 1000);
+    });
+
+    // Listen for DV request deletions
+    generalChannel.bind('dv-request-deleted', function(data) {
+        console.log('🗑️ DV request deleted by focal person:', data);
+        
+        window.showToast(
+            `Document ${data.control_number} was deleted by ${data.deleted_by}`, 
+            'warning'
+        );
+        
+        const deletedRow = document.querySelector(`tr[data-dv-id="${data.dv_request_id}"]`);
+        if (deletedRow) {
+            deletedRow.style.transition = 'opacity 0.3s ease-out';
+            deletedRow.style.opacity = '0';
+            setTimeout(() => {
+                deletedRow.remove();
+                fetchDvRequests();
+            }, 300);
+        } else {
+            fetchDvRequests();
+        }
+        
         setTimeout(() => {
             fetchAgingDocuments();
             updateStatistics();
@@ -243,383 +447,59 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('DV request received:', data);
         
         let message = `Document ${data.control_number} received by ${data.received_by}`;
+        window.showToast(message, 'success');
         
-        showToast(message, 'success');
         fetchDvRequests();
-        // Update aging data since status changed
         setTimeout(() => {
             fetchAgingDocuments();
             updateStatistics();
         }, 1000);
     });
 
-    // Listen for processing started events
+    // Listen for other status updates
     generalChannel.bind('dv-request-processing', function(data) {
         console.log('DV request processing started:', data);
         fetchDvRequests();
-        // Update aging data since status changed
         setTimeout(() => {
             fetchAgingDocuments();
             updateStatistics();
         }, 1000);
     });
 
-    // Listen for verified events
     generalChannel.bind('dv-request-verified', function(data) {
         console.log('DV request verified:', data);
         fetchDvRequests();
-        // Update aging data since document is completed
         setTimeout(() => {
             fetchAgingDocuments();
             updateStatistics();
         }, 1000);
     });
 
-    // Listen for status updates
     generalChannel.bind('status-updated', function(data) {
         console.log('DV request status updated:', data);
         fetchDvRequests();
-        // Update aging data since status changed
         setTimeout(() => {
             fetchAgingDocuments();
             updateStatistics();
         }, 1000);
     });
 
-    // ============ AGING ALERTS ============
-    // Listen for aging document alerts
+    // Aging alerts
     generalChannel.bind('document-aging-alert', function(data) {
         console.log('IMSD Aging alert received:', data);
-        showToast(`Aging document: ${data.control_number} is ${data.days_old} days old`, 'warning');
-        // Refresh aging data immediately
+        window.showToast(`Aging document: ${data.control_number} is ${data.days_old} days old`, 'warning');
         fetchAgingDocuments();
         updateStatistics();
     });
 
-    // Listen for time-based aging updates (sent by scheduled task)
     generalChannel.bind('imsd-aging-update', function(data) {
         console.log('IMSD aging update received:', data);
-        showToast('Aging data updated', 'info');
+        window.showToast('Aging data updated', 'info');
         fetchAgingDocuments();
         updateStatistics();
     });
 
-    // Toast notification function
-    function showToast(message, type = 'success') {
-        const toastId = 'toast-' + Date.now();
-        const isSuccess = type === 'success';
-        
-        const toastHTML = `
-            <div id="${toastId}" class="toast-notification transform transition-all duration-300 ease-in-out translate-x-full opacity-0">
-                <div class="flex items-center w-full max-w-sm p-4 mb-4 text-gray-500 bg-white rounded-lg shadow-lg border-l-4 ${isSuccess ? 'border-green-500' : 'border-red-500'}" role="alert">
-                    <div class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg ${isSuccess ? 'text-green-500 bg-green-100' : 'text-red-500 bg-red-100'}">
-                        ${isSuccess ? 
-                            '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' :
-                            '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>'
-                        }
-                    </div>
-                    <div class="ml-3 text-sm font-medium text-gray-900">${message}</div>
-                    <button type="button" class="ml-auto -mx-1.5 -my-1.5 bg-white text-gray-400 hover:text-gray-900 rounded-lg focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex h-8 w-8" onclick="dismissToast('${toastId}')">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
-        const toast = document.getElementById(toastId);
-        
-        setTimeout(() => {
-            toast.classList.remove('translate-x-full', 'opacity-0');
-            toast.classList.add('translate-x-0', 'opacity-100');
-        }, 100);
-        
-        setTimeout(() => {
-            dismissToast(toastId);
-        }, 4000);
-    }
-
-    window.dismissToast = function(toastId) {
-        const toast = document.getElementById(toastId);
-        if (toast) {
-            toast.classList.add('translate-x-full', 'opacity-0');
-            toast.classList.remove('translate-x-0', 'opacity-100');
-            setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }
-    }
-
-    // Handle receive action
-    async function handleReceiveAction(requestId, button) {
-        const originalText = button.innerHTML;
-        const originalState = button.disabled;
-        
-        button.innerHTML = `
-            <svg class="w-4 h-4 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-            </svg>
-            Processing...
-        `;
-        button.disabled = true;
-
-        try {
-            const response = await fetch(`/RegionalOffices/IMSD/dvrequests/${requestId}/receive`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({}) // Send empty JSON body
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.success) {
-                let message = result.message || 'Document has been received by IMSD.';
-                
-                showToast(message, 'success');
-                
-                // Refresh all data
-                fetchDvRequests();
-                fetchAgingDocuments();
-                updateStatistics();
-                
-            } else {
-                const errorMessage = result.message || `Failed to receive document. (Status: ${response.status})`;
-                showToast(errorMessage, 'error');
-                button.innerHTML = originalText;
-                button.disabled = originalState;
-            }
-        } catch (error) {
-            console.error('Error receiving document:', error);
-            showToast('Network error occurred while processing the request.', 'error');
-            button.innerHTML = originalText;
-            button.disabled = originalState;
-        }
-    }
-
-    // Manual refresh function
-    window.refreshAllData = function() {
-        // Show loading state
-        const tableContainer = document.getElementById('dv-table-container');
-        if (tableContainer) {
-            tableContainer.innerHTML = `
-                <div class="text-center py-16">
-                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                        <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </div>
-                    <p class="text-gray-500">Refreshing requests...</p>
-                </div>
-            `;
-        }
-        
-        // Clear search and cached data
-        const searchInput = document.getElementById('search-input');
-        if (searchInput) searchInput.value = '';
-        
-        if (typeof allRequests !== 'undefined') allRequests = [];
-        if (typeof cachedAgingData !== 'undefined') cachedAgingData = [];
-        if (typeof searchTerm !== 'undefined') searchTerm = "";
-        
-        // Refresh all data
-        fetchDvRequests();
-        fetchAgingDocuments();
-        updateStatistics();
-    }
-
-    // ============ PAGINATION FUNCTIONS ============
-    function updatePaginationInfo() {
-        const start = ((currentPage - 1) * perPage) + 1;
-        const end = Math.min(currentPage * perPage, totalRecords);
-        
-        currentRangeSpan.textContent = `${start}-${end}`;
-        totalRecordsSpan.textContent = totalRecords;
-        
-        // Update pagination controls state
-        firstPageBtn.disabled = currentPage === 1;
-        prevPageBtn.disabled = currentPage === 1;
-        nextPageBtn.disabled = currentPage === totalPages;
-        lastPageBtn.disabled = currentPage === totalPages;
-        
-        // Generate page numbers
-        generatePageNumbers();
-    }
-
-    function generatePageNumbers() {
-        const pages = [];
-        const maxVisiblePages = 5;
-        
-        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-        
-        // Adjust if we're near the end
-        if (endPage - startPage + 1 < maxVisiblePages) {
-            startPage = Math.max(1, endPage - maxVisiblePages + 1);
-        }
-        
-        // First page
-        if (startPage > 1) {
-            pages.push(1);
-            if (startPage > 2) {
-                pages.push('...');
-            }
-        }
-        
-        // Middle pages
-        for (let i = startPage; i <= endPage; i++) {
-            pages.push(i);
-        }
-        
-        // Last page
-        if (endPage < totalPages) {
-            if (endPage < totalPages - 1) {
-                pages.push('...');
-            }
-            pages.push(totalPages);
-        }
-        
-        // Render page numbers
-        pageNumbersContainer.innerHTML = '';
-        pages.forEach(page => {
-            if (page === '...') {
-                const span = document.createElement('span');
-                span.className = 'px-3 py-1 text-gray-500';
-                span.textContent = '...';
-                pageNumbersContainer.appendChild(span);
-            } else {
-                const button = document.createElement('button');
-                button.className = `px-3 py-1 rounded text-sm font-medium transition ${
-                    page === currentPage 
-                        ? 'bg-blue-500 text-white' 
-                        : 'text-gray-700 hover:bg-gray-200'
-                }`;
-                button.textContent = page;
-                button.onclick = () => goToPage(page);
-                pageNumbersContainer.appendChild(button);
-            }
-        });
-    }
-
-    function goToPage(page) {
-        if (page < 1 || page > totalPages || page === currentPage) return;
-        
-        currentPage = page;
-        renderTable(getPaginatedData());
-        updatePaginationInfo();
-        
-        // Scroll to top of table
-        tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function getPaginatedData() {
-        const startIndex = (currentPage - 1) * perPage;
-        const endIndex = startIndex + perPage;
-        return allRequests.slice(startIndex, endIndex);
-    }
-
-  // ============ TABLE RENDERING ============
-function renderTable(dvRequests) {
-    if (dvRequests.length === 0) {
-        tableContainer.innerHTML = `
-            <div class="text-center py-16">
-                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                </div>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
-                <p class="text-gray-500">Try adjusting your search filter.</p>
-            </div>
-        `;
-        return;
-    }
-
-    // CORRECTED function to convert date to PHT
-    function formatToPHT(dateString) {
-        if (!dateString) return 'N/A';
-        
-        try {
-            const date = new Date(dateString);
-            
-            // Proper timezone conversion to Asia/Manila
-            return date.toLocaleString('en-US', {
-                timeZone: 'Asia/Manila',
-                month: 'short',
-                day: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        } catch (error) {
-            console.error('Error formatting date:', error);
-            return dateString; // Return original if parsing fails
-        }
-    }
-
-    let html = `
-        <div class="overflow-x-auto">
-            <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
-                <thead class="bg-gray-50 text-[13px]">
-                    <tr>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                        <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted (PHT)</th>
-                        <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
-    `;
-
-    dvRequests.forEach(request => {
-        const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
-        
-        // Use the corrected date formatting function
-        const formattedDate = formatToPHT(request.date);
-        
-        html += `
-            <tr class="hover:bg-gray-50 transition-colors duration-150">
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                    ${request.accounting_control_number}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
-                <td class="px-6 py-4 text-sm text-gray-600"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span></td>
-                <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
-                <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
-                    <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}</span></td>
-                <td class="px-6 py-4 text-sm text-gray-600" title="Philippine Time">${formattedDate}</td>
-                <td class="px-5 py-4 text-center text-sm font-medium">
-                    ${
-                        request.status === 'submitted'
-                        ? `<button type="button" 
-                                onclick="handleReceiveAction(${request.id}, this)"
-                                class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">
-                                Receive
-                        </button>`    
-                        : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" 
-                                class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
-                                View / Process
-                        </a>`
-                    }
-                </td>
-            </tr>`;
-    });
-
-    html += `</tbody></table></div>`;
-    tableContainer.innerHTML = html;
-}
-
+    // ============ DATA FETCHING FUNCTIONS ============
     async function fetchDvRequests() {
         try {
             const res = await fetch("{{ route('RegionalOffices.IMSD.fetchAll') }}?search=" + encodeURIComponent(searchTerm));
@@ -628,8 +508,6 @@ function renderTable(dvRequests) {
             allRequests = data;
             totalRecords = data.length;
             totalPages = Math.ceil(totalRecords / perPage);
-            
-            // Reset to first page when data changes
             currentPage = 1;
             
             renderTable(getPaginatedData());
@@ -641,48 +519,29 @@ function renderTable(dvRequests) {
         }
     }
 
-    window.handleReceiveAction = handleReceiveAction;
-
-    // ============ AGING DOCUMENTS FUNCTIONS ============
     async function fetchAgingDocuments() {
         try {
-            console.log('Fetching IMSD aging documents...');
-            
             const res = await fetch('{{ route("IMSD.aging.documents") }}');
-            
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             
             const data = await res.json();
-            console.log('IMSD aging documents response:', data);
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to fetch aging documents');
-            }
+            if (!data.success) throw new Error(data.message || 'Failed to fetch aging documents');
             
             cachedAgingData = data.documents || [];
             renderAgingAlerts(data.documents, data.aging_count);
             
         } catch (err) {
             console.error('Failed to fetch aging documents:', err);
-            showToast('Failed to load aging documents: ' + err.message, 'error');
         }
     }
 
     async function updateStatistics() {
         try {
             const res = await fetch('{{ route("IMSD.aging.statistics") }}');
-            
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             
             const data = await res.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to fetch statistics');
-            }
+            if (!data.success) throw new Error(data.message || 'Failed to fetch statistics');
             
             document.getElementById('stat-critical').textContent = data.critical || 0;
             document.getElementById('stat-high').textContent = data.high || 0;
@@ -691,150 +550,227 @@ function renderTable(dvRequests) {
             
         } catch (err) {
             console.error('Failed to fetch statistics:', err);
-            // Don't show toast for statistics errors to avoid spam
         }
     }
 
-    function renderAgingAlerts(documents, count) {
-        if (!agingAlertsContainer) {
-            console.error('Aging alerts container is null');
+    // Make functions available globally for window.handleReceiveAction
+    window.fetchDvRequests = fetchDvRequests;
+    window.fetchAgingDocuments = fetchAgingDocuments;
+    window.updateStatistics = updateStatistics;
+
+    // ============ RENDERING FUNCTIONS ============
+    function renderTable(dvRequests) {
+        if (dvRequests.length === 0) {
+            tableContainer.innerHTML = `
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                    <p class="text-gray-500">Try adjusting your search filter.</p>
+                </div>
+            `;
             return;
         }
 
-        if (!documents || documents.length === 0) {
-            agingAlertsContainer.innerHTML = '';
+        function formatToPHT(dateString) {
+            if (!dateString) return 'N/A';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleString('en-US', {
+                    timeZone: 'Asia/Manila',
+                    month: 'short',
+                    day: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            } catch (error) {
+                return dateString;
+            }
+        }
+
+        let html = `
+            <div class="overflow-x-auto">
+                <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
+                    <thead class="bg-gray-50 text-[13px]">
+                        <tr>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                            <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
+        `;
+
+        dvRequests.forEach(request => {
+            const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
+            const formattedDate = formatToPHT(request.date);
+            
+            html += `
+                <tr class="hover:bg-gray-50 transition-colors duration-150" data-dv-id="${request.id}">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${request.accounting_control_number}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">
+                        <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span>
+                    </td>
+                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
+                    <td class="px-6 py-4">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
+                            <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${formattedDate}</td>
+                    <td class="px-5 py-4 text-center text-sm font-medium">
+                        ${request.status === 'submitted' 
+                            ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">Receive</button>`    
+                            : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">View / Process</a>`
+                        }
+                    </td>
+                </tr>`;
+        });
+
+        html += `</tbody></table></div>`;
+        tableContainer.innerHTML = html;
+    }
+
+    function renderAgingAlerts(documents, count) {
+        if (!agingAlertsContainer || !documents || documents.length === 0) {
+            if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
             return;
         }
 
         const agingDocs = documents.filter(doc => !['IMSD_verified', 'completed'].includes(doc.status));
-        
         if (agingDocs.length === 0) {
             agingAlertsContainer.innerHTML = '';
             return;
         }
 
-        function calculateUrgency(daysOld) {
-            const days = Math.abs(Number(daysOld)) || 0;
-            if (days >= 10) return 'critical';
-            if (days >= 7) return 'high';
-            if (days >= 3) return 'medium';
-            return 'low';
-        }
-
+        // Aging alert rendering logic (keeping it concise)
         agingDocs.forEach(doc => {
-            doc.urgency = calculateUrgency(doc.days_old);
+            const days = Math.abs(Number(doc.days_old)) || 0;
+            doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
         });
 
-        let urgencyIcon = {
-            'critical': '🚨',
-            'high': '⚠️',
-            'medium': '⏰',
-            'low': 'ℹ️'
-        };
-
-        let bgColor = {
-            'critical': 'bg-red-50 border-red-500',
-            'high': 'bg-orange-50 border-orange-500',
-            'medium': 'bg-yellow-50 border-yellow-500',
-            'low': 'bg-blue-50 border-blue-500'
-        };
-
-        let textColor = {
-            'critical': 'text-red-900',
-            'high': 'text-orange-900',
-            'medium': 'text-yellow-900',
-            'low': 'text-blue-900'
-        };
-
         const highestUrgency = agingDocs.reduce((highest, doc) => {
-            const urgencyOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
-            return urgencyOrder[doc.urgency] > urgencyOrder[highest] ? doc.urgency : highest;
+            const order = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
+            return order[doc.urgency] > order[highest] ? doc.urgency : highest;
         }, 'low');
 
-        let html = `
-            <div class="rounded-lg border-l-4 p-5 ${bgColor[highestUrgency]} shadow-md transition-all duration-300">
+        const config = {
+            'critical': { icon: '🚨', bg: 'bg-red-50 border-red-500', text: 'text-red-900' },
+            'high': { icon: '⚠️', bg: 'bg-orange-50 border-orange-500', text: 'text-orange-900' },
+            'medium': { icon: '⏰', bg: 'bg-yellow-50 border-yellow-500', text: 'text-yellow-900' },
+            'low': { icon: 'ℹ️', bg: 'bg-blue-50 border-blue-500', text: 'text-blue-900' }
+        };
+
+        const c = config[highestUrgency];
+
+        agingAlertsContainer.innerHTML = `
+            <div class="rounded-lg border-l-4 p-5 ${c.bg} shadow-md">
                 <div class="flex items-start justify-between mb-3">
                     <div class="flex items-center gap-3">
-                        <span class="text-2xl">${urgencyIcon[highestUrgency]}</span>
+                        <span class="text-2xl">${c.icon}</span>
                         <div>
-                            <h3 class="font-bold text-lg ${textColor[highestUrgency]}">Documents Need Processing</h3>
-                            <p class="text-sm opacity-80 ${textColor[highestUrgency]}">${agingDocs.length} document(s) older than 3 days</p>
+                            <h3 class="font-bold text-lg ${c.text}">Documents Need Processing</h3>
+                            <p class="text-sm opacity-80 ${c.text}">${agingDocs.length} document(s) older than 3 days</p>
                         </div>
                     </div>
-                    <div class="flex gap-2">
-                        <button id="minimize-alerts" class="text-gray-400 hover:text-gray-600 transition-colors">
-                            <svg id="minimize-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                            <svg id="expand-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-                            </svg>
-                        </button>
-                    </div>
                 </div>
-
-                <div id="alerts-content" class="transition-all duration-300 overflow-hidden">
-                    <div class="space-y-2 mt-4 max-h-64 overflow-y-auto">
-                        ${agingDocs.slice(0, 5).map(doc => {
-                            const docBgColor = {
-                                'critical': 'bg-red-100 border-red-200',
-                                'high': 'bg-orange-100 border-orange-200', 
-                                'medium': 'bg-yellow-100 border-yellow-200',
-                                'low': 'bg-blue-100 border-blue-200'
-                            };
-                            
-                            // Simplified status logic
-                            const isReceived = ['IMSD_received', 'IMSD_in_process'].includes(doc.status);
-                            const statusText = isReceived ? 'Received - Needs Processing' : 'Not Received';
-                            
-                            return `
-                            <div class="flex items-center justify-between p-3 ${docBgColor[doc.urgency]} border rounded-lg hover:opacity-90 transition-all duration-200">
-                                <div class="flex-1">
-                                    <p class="font-semibold text-sm ${textColor[doc.urgency]}">${doc.control_number}</p>
-                                    <p class="text-xs opacity-70 ${textColor[doc.urgency]}">${doc.submitted_by} • ${doc.program} • ${doc.status}</p>
-                                    <p class="text-xs font-medium mt-1 ${doc.days_old >= 10 ? 'text-red-700' : doc.days_old >= 7 ? 'text-orange-700' : 'text-yellow-700'}">
-                                        ${doc.days_old} days old • ${statusText}
-                                    </p>
-                                </div>
-                            </div>
-                        `}).join('')}
-                    </div>
-
-                    ${agingDocs.length > 5 ? `
-                        <p class="text-xs mt-3 opacity-75 ${textColor[highestUrgency]}">
-                            +${agingDocs.length - 5} more documents
-                        </p>
-                    ` : ''}
+                <div class="space-y-2 mt-4">
+                    ${agingDocs.slice(0, 5).map(doc => `
+                        <div class="p-3 bg-white/50 border rounded-lg">
+                            <p class="font-semibold text-sm ${c.text}">${doc.control_number}</p>
+                            <p class="text-xs opacity-70 ${c.text}">${doc.submitted_by} • ${doc.program}</p>
+                            <p class="text-xs font-medium mt-1 text-red-700">${doc.days_old} days old</p>
+                        </div>
+                    `).join('')}
+                    ${agingDocs.length > 5 ? `<p class="text-xs mt-3 opacity-75 ${c.text}">+${agingDocs.length - 5} more documents</p>` : ''}
                 </div>
             </div>
         `;
-
-        agingAlertsContainer.innerHTML = html;
-
-        // Add minimize/expand functionality
-        const minimizeButton = document.getElementById('minimize-alerts');
-        const minimizeIcon = document.getElementById('minimize-icon');
-        const expandIcon = document.getElementById('expand-icon');
-        const alertsContent = document.getElementById('alerts-content');
-
-        if (minimizeButton && alertsContent) {
-            minimizeButton.addEventListener('click', function() {
-                if (alertsContent.style.maxHeight === '0px' || alertsContent.style.display === 'none') {
-                    alertsContent.style.maxHeight = '1000px';
-                    alertsContent.style.display = 'block';
-                    minimizeIcon.classList.add('hidden');
-                    expandIcon.classList.remove('hidden');
-                } else {
-                    alertsContent.style.maxHeight = '0px';
-                    alertsContent.style.display = 'none';
-                    minimizeIcon.classList.remove('hidden');
-                    expandIcon.classList.add('hidden');
-                }
-            });
-        }
     }
 
-    // ============ EVENT HANDLERS FOR PAGINATION ============
+    // ============ PAGINATION ============
+    function updatePaginationInfo() {
+        const start = ((currentPage - 1) * perPage) + 1;
+        const end = Math.min(currentPage * perPage, totalRecords);
+        
+        currentRangeSpan.textContent = `${start}-${end}`;
+        totalRecordsSpan.textContent = totalRecords;
+        
+        firstPageBtn.disabled = currentPage === 1;
+        prevPageBtn.disabled = currentPage === 1;
+        nextPageBtn.disabled = currentPage === totalPages;
+        lastPageBtn.disabled = currentPage === totalPages;
+        
+        generatePageNumbers();
+    }
+
+    function generatePageNumbers() {
+        const pages = [];
+        const max = 5;
+        let start = Math.max(1, currentPage - Math.floor(max / 2));
+        let end = Math.min(totalPages, start + max - 1);
+        
+        if (end - start + 1 < max) start = Math.max(1, end - max + 1);
+        
+        if (start > 1) {
+            pages.push(1);
+            if (start > 2) pages.push('...');
+        }
+        
+        for (let i = start; i <= end; i++) {
+            pages.push(i);
+        }
+        
+        if (end < totalPages) {
+            if (end < totalPages - 1) pages.push('...');
+            pages.push(totalPages);
+        }
+        
+        pageNumbersContainer.innerHTML = '';
+        pages.forEach(page => {
+            if (page === '...') {
+                const span = document.createElement('span');
+                span.className = 'px-3 py-1 text-gray-500';
+                span.textContent = '...';
+                pageNumbersContainer.appendChild(span);
+            } else {
+                const button = document.createElement('button');
+                button.className = `px-3 py-1 rounded text-sm font-medium transition ${
+                    page === currentPage ? 'bg-blue-500 text-white' : 'text-gray-700 hover:bg-gray-200'
+                }`;
+                button.textContent = page;
+                button.onclick = () => goToPage(page);
+                pageNumbersContainer.appendChild(button);
+            }
+        });
+    }
+
+    function goToPage(page) {
+        if (page < 1 || page > totalPages || page === currentPage) return;
+        currentPage = page;
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+        tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function getPaginatedData() {
+        const startIndex = (currentPage - 1) * perPage;
+        const endIndex = startIndex + perPage;
+        return allRequests.slice(startIndex, endIndex);
+    }
+
+    // ============ EVENT LISTENERS ============
     perPageSelect.addEventListener('change', function() {
         perPage = parseInt(this.value);
         currentPage = 1;
@@ -848,32 +784,24 @@ function renderTable(dvRequests) {
     nextPageBtn.addEventListener('click', () => goToPage(currentPage + 1));
     lastPageBtn.addEventListener('click', () => goToPage(totalPages));
 
-    // ============ SEARCH WITH DEBOUNCE ============
+    // Search with debounce
     let searchTimeout;
     searchInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
             searchTerm = this.value;
-            currentPage = 1; // Reset to first page when searching
+            currentPage = 1;
             fetchDvRequests();
         }, 300);
     });
 
     // ============ AUTO-REFRESH ============
-
-    // Refresh aging data more frequently (every 2 minutes)
-    setInterval(fetchAgingDocuments, 2 * 60 * 1000);
+    setInterval(fetchAgingDocuments, 2 * 60 * 1000); // Every 2 minutes
     setInterval(updateStatistics, 2 * 60 * 1000);
-    
-    // Refresh main table less frequently (every 5 minutes)
-    setInterval(fetchDvRequests, 5 * 60 * 1000);
+    setInterval(fetchDvRequests, 5 * 60 * 1000); // Every 5 minutes
 
     // ============ INITIALIZATION ============
-
-    // Initialize pagination
     updatePaginationInfo();
-
-    // Initial load
     fetchDvRequests();
     fetchAgingDocuments();
     updateStatistics();

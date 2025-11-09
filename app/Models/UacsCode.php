@@ -8,7 +8,7 @@ class UacsCode extends Model
 {
     protected $table = 'uacscodes';
     
-  protected $fillable = [
+    protected $fillable = [
         'parent_id',
         'uacscode',
         'description',
@@ -27,17 +27,11 @@ class UacsCode extends Model
     // RELATIONSHIPS
     // ========================
     
-    /**
-     * Get the parent UACS code
-     */
     public function parent()
     {
         return $this->belongsTo(UACSCode::class, 'parent_id');
     }
 
-    /**
-     * Get all children UACS codes
-     */
     public function children()
     {
         return $this->hasMany(UACSCode::class, 'parent_id')
@@ -45,21 +39,18 @@ class UacsCode extends Model
                     ->orderBy('uacscode');
     }
 
-    /**
-     * Get all descendants recursively
-     */
     public function descendants()
     {
         return $this->children()->with('descendants');
     }
 
     /**
-     * ORS Requests using this UACS code
+     * ORS Requests using this UACS code with amount
      */
     public function orsRequests()
     {
         return $this->belongsToMany(ORSRequest::class, 'ors_request_uacscode')
-                    ->withPivot('order')
+                    ->withPivot('order', 'amount')
                     ->withTimestamps();
     }
 
@@ -69,7 +60,6 @@ class UacsCode extends Model
     
     /**
      * Get full hierarchical path
-     * Example: "Expenses → Financial Assistance/Subsidy → Subsidies - Other"
      */
     public function getFullPathAttribute()
     {
@@ -101,13 +91,22 @@ class UacsCode extends Model
         return $indent . $this->display_name;
     }
 
+    /**
+     * Get amount for specific ORS request (from pivot)
+     */
+    public function getAmountForOrs($orsRequestId)
+    {
+        $pivot = $this->orsRequests()
+                     ->where('ors_request_id', $orsRequestId)
+                     ->first();
+        
+        return $pivot ? $pivot->pivot->amount : 0;
+    }
+
     // ========================
     // QUERY SCOPES
     // ========================
     
-    /**
-     * Get only root nodes (no parent)
-     */
     public function scopeRoots($query)
     {
         return $query->whereNull('parent_id')
@@ -115,9 +114,6 @@ class UacsCode extends Model
                      ->orderBy('uacscode');
     }
 
-    /**
-     * Get only selectable items (usually leaf nodes)
-     */
     public function scopeSelectable($query)
     {
         return $query->where('is_selectable', true)
@@ -125,9 +121,6 @@ class UacsCode extends Model
                      ->orderBy('uacscode');
     }
 
-    /**
-     * Get by level
-     */
     public function scopeByLevel($query, $level)
     {
         return $query->where('level', $level)
@@ -135,9 +128,6 @@ class UacsCode extends Model
                      ->orderBy('uacscode');
     }
 
-    /**
-     * Get children of specific parent
-     */
     public function scopeChildrenOf($query, $parentId)
     {
         return $query->where('parent_id', $parentId)
@@ -149,25 +139,16 @@ class UacsCode extends Model
     // HELPER METHODS
     // ========================
     
-    /**
-     * Check if this is a leaf node (no children)
-     */
     public function isLeaf()
     {
         return $this->children()->count() === 0;
     }
 
-    /**
-     * Check if this is a root node (no parent)
-     */
     public function isRoot()
     {
         return $this->parent_id === null;
     }
 
-    /**
-     * Get all ancestor IDs (for breadcrumb trails)
-     */
     public function getAncestorIds()
     {
         $ids = collect();
@@ -181,9 +162,6 @@ class UacsCode extends Model
         return $ids;
     }
 
-    /**
-     * Get all ancestors (for breadcrumb)
-     */
     public function ancestors()
     {
         $ancestors = collect();
@@ -197,9 +175,6 @@ class UacsCode extends Model
         return $ancestors->reverse();
     }
 
-    /**
-     * Get breadcrumb array
-     */
     public function getBreadcrumb()
     {
         return $this->ancestors()
@@ -213,9 +188,6 @@ class UacsCode extends Model
                     ->toArray();
     }
 
-    /**
-     * Get all descendant IDs
-     */
     public function getDescendantIds()
     {
         $ids = collect([$this->id]);
@@ -231,9 +203,6 @@ class UacsCode extends Model
     // STATIC HELPER METHODS
     // ========================
     
-    /**
-     * Build hierarchical tree structure
-     */
     public static function buildTree($items = null, $parentId = null)
     {
         if ($items === null) {
@@ -262,9 +231,6 @@ class UacsCode extends Model
         return $tree;
     }
 
-    /**
-     * Get flattened list with proper indentation
-     */
     public static function getFlattenedList($parentId = null, $level = 0)
     {
         $list = collect();
@@ -283,5 +249,23 @@ class UacsCode extends Model
         }
         
         return $list;
+    }
+
+    /**
+     * Get total amount for this UACS code across all ORS requests
+     */
+    public function getTotalAmount()
+    {
+        return $this->orsRequests()->sum('ors_request_uacscode.amount');
+    }
+
+    /**
+     * Get ORS requests with amounts
+     */
+    public function getOrsWithAmounts()
+    {
+        return $this->orsRequests()
+                    ->select('ors_requests.*', 'ors_request_uacscode.amount as uacs_amount')
+                    ->get();
     }
 }

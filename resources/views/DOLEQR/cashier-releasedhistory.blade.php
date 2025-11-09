@@ -60,7 +60,7 @@
                             <option value="">All Steps</option>
                             <option value="received" {{ request('step') == 'received' ? 'selected' : '' }}>Received</option>
                             <option value="processed" {{ request('step') == 'processed' ? 'selected' : '' }}>Processed</option>
-                            <option value="completed" {{ request('step') == 'released' ? 'selected' : '' }}>Completed</option>
+                            <option value="completed" {{ request('step') == 'completed' ? 'selected' : '' }}>Completed</option>
                             <option value="rejected" {{ request('step') == 'rejected' ? 'selected' : '' }}>Rejected</option>
                         </select>
                     </div>
@@ -114,9 +114,9 @@
                 <div class="bg-green-50 p-4 rounded-lg border border-green-100">
                     <div class="flex justify-between items-center">
                         <div>
-                            <p class="text-sm text-green-600 font-medium">Completed</p>
+                            <p class="text-sm text-green-600 font-medium">Released</p>
                             <p class="text-2xl font-bold text-green-800">
-                                {{ $releaseHistory->where('transaction_step', 'released')->count() }}
+                                {{ $releaseHistory->where('release_step', 'completed')->count() }}
                             </p>
                         </div>
                         <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -151,7 +151,8 @@
                             <th class="px-4 py-3">Payee</th>
                             <th class="px-4 py-3">Program</th>
                             <th class="px-4 py-3">Transaction Step</th>
-                            <th class="px-4 py-3">Status Change</th>
+                            <th class="px-4 py-3">Status Before</th>
+                            <th class="px-4 py-3">Current Status</th>
                             <th class="px-4 py-3">Remarks</th>
                             <th class="px-4 py-3">Details</th>
                         </tr>
@@ -189,35 +190,46 @@
                                 </td>
                                 
                                 <!-- Transaction Step -->
-                                <td class="px-4 py-3">
-                                    @if($history->transaction_step == 'received')
-                                        <span class="px-2 py-1 text-xs font-medium rounded-full status-received">
-                                            <i class="fas fa-inbox mr-1"></i> Received
-                                        </span>
-                                    @elseif($history->transaction_step == 'processed')
-                                        <span class="px-2 py-1 text-xs font-medium rounded-full status-processed">
-                                            <i class="fas fa-cog mr-1"></i> Processed
-                                        </span>
-                                    @elseif($history->transaction_step == 'released')
-                                        <span class="px-2 py-1 text-xs font-medium rounded-full status-completed">
-                                            <i class="fas fa-check-circle mr-1"></i> Completed
-                                        </span>
-                                    @endif
-                                </td>
-                                
+                                <!-- Transaction Step (FIXED) -->
+            <td class="px-4 py-3">
+                @if($history->release_step == 'received')
+                    <span class="px-2 py-1 text-xs font-medium rounded-full status-received">
+                        <i class="fas fa-inbox mr-1"></i> Received
+                    </span>
+                @elseif($history->release_step == 'processed')
+                    <span class="px-2 py-1 text-xs font-medium rounded-full status-processed">
+                        <i class="fas fa-cog mr-1"></i> Processed
+                    </span>
+                @elseif($history->release_step == 'released')
+                    <span class="px-2 py-1 text-xs font-medium rounded-full status-completed">
+                        <i class="fas fa-check-circle mr-1"></i> Released
+                    </span>
+                @else
+                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                        {{ ucfirst($history->release_step) }}
+                    </span>
+                @endif
+            </td>
                                 <!-- Status Change -->
                                 <td class="px-4 py-3">
                                     <div class="flex items-center text-xs">
                                         <span class="px-2 py-1 bg-gray-100 text-gray-600 rounded">
                                             {{ $history->status_before }}
                                         </span>
-                                        <i class="fas fa-arrow-right mx-2 text-gray-400"></i>
+                                  
                                         <span class="px-2 py-1 bg-green-100 text-green-700 rounded font-medium">
                                             {{ $history->status_after }}
                                         </span>
                                     </div>
                                 </td>
-                                
+                                  <td class="px-4 py-3">
+                                    <div class="flex items-center text-xs">
+                                     
+                                        <span class="px-2 py-1 bg-green-100 text-green-700 rounded font-medium">
+                                            {{ $history->status_after }}
+                                        </span>
+                                    </div>
+                                </td>
                                 <!-- Remarks -->
                                 <td class="px-4 py-3 text-gray-700 max-w-xs">
                                     {{ Str::limit($history->remarks, 50) ?: '—' }}

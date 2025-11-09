@@ -196,45 +196,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="bg-orange-50 p-4 rounded-lg border border-orange-100">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <p class="text-sm text-orange-600 font-medium">On Hold</p>
-                            <p class="text-2xl font-bold text-orange-800">
-                                {{ $verificationHistory->where('verification_step', 'onhold')->count() }}
-                            </p>
-                        </div>
-                        <div class="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
-                            <i class="fas fa-pause-circle text-orange-600"></i>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <p class="text-sm text-purple-600 font-medium">For Revision</p>
-                            <p class="text-2xl font-bold text-purple-800">
-                                {{ $verificationHistory->where('verification_step', 'revise')->count() }}
-                            </p>
-                        </div>
-                        <div class="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
-                            <i class="fas fa-edit text-purple-600"></i>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-red-50 p-4 rounded-lg border border-red-100">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <p class="text-sm text-red-600 font-medium">Rejected</p>
-                            <p class="text-2xl font-bold text-red-800">
-                                {{ $verificationHistory->where('verification_step', 'reject')->count() }}
-                            </p>
-                        </div>
-                        <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                            <i class="fas fa-times-circle text-red-600"></i>
-                        </div>
-                    </div>
-                </div>
+
             </div>
 
             <!-- Table Section -->
@@ -262,7 +224,6 @@
                                 <td class="table-cell font-medium text-gray-900">
                                     #{{ $history->dvRequest->accounting_control_number }}
                                 </td>
-                                
                                 <!-- ORS Number -->
                                 <td class="table-cell text-gray-700">
                                     @if($history->orsRequest && $history->orsRequest->ors_number)

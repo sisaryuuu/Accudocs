@@ -44,7 +44,7 @@ class DocumentAgingNotification extends Notification
     public function toArray(object $notifiable): array
     {
         $controlNumber = $this->dvRequest->accounting_control_number 
-            ? 'CN #-' . now()->year . '-' . str_pad($this->dvRequest->accounting_control_number, 5, '0', STR_PAD_LEFT)
+            ? 'CN #-' . now()->year . '-' . str_pad($this->dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT)
             : 'N/A';
 
         $submittedBy = trim(

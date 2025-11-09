@@ -20,7 +20,6 @@ use App\Models\DvRequestLog;
 use SimpleSoftwareIO\QrCode\Facades\Qrcode;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
-use Barryvdh\DomPDF\Facade\Pdf;
 use App\Traits\TriggersDashboardUpdate; // ADD DASHBOARD UPDATE TRAIT
 
 class OutgoingDvController extends Controller
@@ -55,7 +54,7 @@ class OutgoingDvController extends Controller
         return response()->json($dvRequests->map(function ($req) {
             return [
                 'id'           => $req->id,
-                'control_no' => $req->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 5, '0', STR_PAD_LEFT): '—',
+                'control_no' => $req->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT): '—',
                 'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
                 'program'      => $req->program->prcode ?? 'N/A',
                 'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
@@ -503,7 +502,6 @@ class OutgoingDvController extends Controller
             ->with('success', "DV Request finalized with DV Number: {$dvNumber}")
             ->with('print_modal', true);
     }
-
     private function generateDvQrCode($dvRequestId, $dvNumber)
     {
         try {
@@ -519,9 +517,9 @@ class OutgoingDvController extends Controller
                 return null;
             }
 
-            // Check if QR code already exists and is valid
-            if ($dvRequest->qr_code_token && $dvRequest->qr_code_data) {
-                \Log::info('Using existing QR code');
+            // ✅ FIX: Check if QR code already exists FIRST (remove the recursive call)
+            if ($dvRequest->qr_code_data) {
+                \Log::info('Using existing QR code from database');
                 return $dvRequest->qr_code_data;
             }
 
@@ -611,7 +609,6 @@ class OutgoingDvController extends Controller
             return null;
         }
     }
-
     // Helper method to display QR code in your view
     public function getQrCodeForDv($id)
     {
@@ -653,6 +650,10 @@ class OutgoingDvController extends Controller
             ], 500);
         }
     }
+
+
+
+
 
     public function reject(Request $request, $id)
     {
@@ -787,45 +788,7 @@ class OutgoingDvController extends Controller
         return view('Outgoing.print-official-dv', compact('dvRequest'));
     }
 
-    public function generatePdf($id)
-    {
-        try {
-            $dvRequest = DvRequest::with([
-                'program',
-                'focalPerson', 
-                'respocenter',
-                'orsRequest.uacsCodes', // ✅ Load through orsRequest
-            ])->findOrFail($id);
-
-            if ($dvRequest->status !== 'Outgoing_finalized') {
-                return redirect()->back()->with('error', 'This DV has not been finalized yet.');
-            }
-
-            if (!$dvRequest->dv_number) {
-                return redirect()->back()->with('error', 'DV Number has not been assigned yet.');
-            }
-
-            $data = $this->prepareDvData($dvRequest);
-            
-            $pdf = Pdf::loadView('Outgoing.pdf.dv-document', $data);
-            $pdf->setPaper('legal', 'portrait');
-            $pdf->setOptions([
-                'isHtml5ParserEnabled' => true,
-                'isRemoteEnabled' => true,
-                'defaultFont' => 'times',
-                'dpi' => 150,
-            ]);
-
-            $filename = 'DV_' . str_replace('-', '_', $dvRequest->dv_number) . '_' . date('Ymd') . '.pdf';
-            
-            return $pdf->download($filename);
-
-        } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Error generating PDF: ' . $e->getMessage());
-        }
-    }
-
-    public function previewDv($id)
+public function previewDv($id)
     {
         try {
             \Log::info('Accessing previewDv for ID: ' . $id);
@@ -910,6 +873,151 @@ class OutgoingDvController extends Controller
             return redirect()->back()->with('error', 'Error accessing DV preview: ' . $e->getMessage());
         }
     }
+    public function generatePdf($id)
+    {
+        // Increase execution time for PDF generation
+        set_time_limit(120);
+        ini_set('memory_limit', '256M');
+
+        try {
+            \Log::info('=== DV PDF Generation Started ===', ['id' => $id]);
+            
+            $dvRequest = DvRequest::with([
+                'program',
+                'focalPerson', 
+                'respocenter',
+                'modeOfPayments',
+                'orsRequest.uacsCodes', // Make sure this relationship is correct
+                'orsRequest.AdlCode',
+                'orsRequest.Mfopap',
+                'orsRequest.allotmentClass',
+                'orsRequest.continuingOrCurrent'
+            ])->findOrFail($id);
+
+            // Add DEBUG logging for UACS codes
+            \Log::info('UACS Codes Debug', [
+                'ors_request_exists' => !is_null($dvRequest->orsRequest),
+                'ors_id' => $dvRequest->orsRequest->id ?? 'N/A',
+                'uacs_codes_loaded' => $dvRequest->orsRequest && $dvRequest->orsRequest->relationLoaded('uacsCodes'),
+                'uacs_codes_count' => $dvRequest->orsRequest && $dvRequest->orsRequest->uacsCodes ? $dvRequest->orsRequest->uacsCodes->count() : 0,
+                'uacs_codes_sample' => $dvRequest->orsRequest && $dvRequest->orsRequest->uacsCodes ? $dvRequest->orsRequest->uacsCodes->take(2)->toArray() : 'No UACS codes'
+            ]);
+
+            if ($dvRequest->status !== 'Outgoing_finalized') {
+                return redirect()->back()->with('error', 'This DV has not been finalized yet.');
+            }
+
+            if (!$dvRequest->dv_number) {
+                return redirect()->back()->with('error', 'DV Number has not been assigned yet.');
+            }
+
+            // Get payment details
+            $modeOfPayment = $dvRequest->modeOfPayments->first();
+            $paymentDetail = null;
+            
+            if (method_exists($dvRequest, 'paymentDetail')) {
+                $paymentDetail = $dvRequest->paymentDetail;
+            } elseif ($modeOfPayment && method_exists($modeOfPayment->pivot, 'paymentDetail')) {
+                $paymentDetail = $modeOfPayment->pivot->paymentDetail;
+            }
+
+            $orsRequest = $dvRequest->orsRequest;
+            
+            // Get UACS codes from ORS request (not from DV request)
+            $uacsCodes = $orsRequest && $orsRequest->uacsCodes ? $orsRequest->uacsCodes : collect();    
+
+            // ✅ EFFICIENT QR CODE HANDLING
+            $qrCode = $dvRequest->qr_code_data;
+            
+            if (!$qrCode) {
+                \Log::info('Generating QR code for DV', ['dv_no' => $dvRequest->dv_number]);
+                
+                // Generate QR code with minimal settings for performance
+                $qrCode = $this->generateDvQrCode($dvRequest->id, $dvRequest->dv_number, false); // Pass false for simple generation
+                
+                // Save for future use (but don't block PDF generation)
+                $dvRequest->update(['qr_code_data' => $qrCode]);
+                \Log::info('QR code generated and saved');
+            }
+
+            // ✅ PREPARE DATA FOR PDF
+            $data = [
+                'date' => $dvRequest->created_at->format('F d, Y'),
+                'dv_no' => $dvRequest->dv_number,
+                'mode_of_payment' => $modeOfPayment?->mopname ?? 'Not specified',
+                'payee' => $this->formatFullName(
+                    $dvRequest->focalPerson->fname ?? '',
+                    $dvRequest->focalPerson->mi ?? '',
+                    $dvRequest->focalPerson->lname ?? ''
+                ),
+                'tin' => $dvRequest->focalPerson->TIN_number ?? '___________',
+                'ors_number' => $orsRequest->ors_number ?? '___________',
+                'address' => $dvRequest->focalPerson->Address ?? 'DAVAO CITY',
+                'particulars' => $dvRequest->particulars ?? 'N/A',
+                'amount' => number_format($dvRequest->amount, 2),
+                'respocenter_code' => $dvRequest->respocenter->rccode ?? '',
+                'respocenter_desc' => $dvRequest->respocenter->description ?? '',
+                'mfocode' => $orsRequest->Mfopap->mfocode ?? '',
+                'mfodescription' => $orsRequest->Mfopap->mfodescription ?? '',
+                'bank_name' => $paymentDetail?->bank_name ?? '',
+                'bank_accnum' => $paymentDetail?->bank_accnum ?? '',
+                'bank_address' => $paymentDetail?->bank_address ?? '',
+            ];
+
+            // ✅ GET SETTINGS
+            $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
+            $accountant_name = \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT');
+            $regional_director = \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR');
+
+            \Log::info('DV PDF Data Prepared', [
+                'dv_no' => $data['dv_no'],
+                'payee' => $data['payee'],
+                'amount' => $data['amount'],
+                'uacs_count' => $uacsCodes->count(),
+                'uacs_data' => $uacsCodes->isNotEmpty() ? $uacsCodes->pluck('uacscode', 'description')->toArray() : 'No UACS data',
+                'has_qr_code' => !empty($qrCode)
+            ]);
+
+            // ✅ USE COMPACT WITH OPTIMIZED PDF OPTIONS - ADD $uacsCodes HERE
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.finaldv', compact(
+                'data', 
+                'imsd_head',
+                'accountant_name',
+                'regional_director',
+                'qrCode',
+                'uacsCodes' // ← ADD THIS LINE - You were missing this!
+            ))
+            ->setPaper('legal', 'portrait')
+            ->setOption('isHtml5ParserEnabled', true)
+            ->setOption('isRemoteEnabled', true) // ✅ Enable remote for QR code images
+            ->setOption('defaultFont', 'Times New Roman')
+            ->setOption('isFontSubsettingEnabled', true)
+            ->setOption('isPhpEnabled', false)
+            ->setOption('dpi', 96)
+            ->setOption('chroot', base_path());
+
+            $filename = 'DV_' . str_replace('-', '_', $dvRequest->dv_number) . '_' . now()->format('Ymd_His') . '.pdf';
+            
+            \Log::info('DV PDF Generated Successfully', ['filename' => $filename]);
+            
+            return $pdf->download($filename);
+
+        } catch (\Exception $e) {
+            \Log::error('PDF Generation Error: ' . $e->getMessage(), [
+                'dv_request_id' => $id,
+                'error' => $e->getTraceAsString()
+            ]);
+            return redirect()->back()->with('error', 'Error generating PDF: ' . $e->getMessage());
+        }
+    }
+
+// Keep your helper method
+private function formatFullName($fname, $mi, $lname)
+{
+    $name = trim($fname . ' ' . ($mi ? $mi . ' ' : '') . $lname);
+    return $name ?: 'NAME OF PAYEE';
+}
+
 
     // Add this method to your OutgoingDvController
     public function previewFromHistory($id)

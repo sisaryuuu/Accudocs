@@ -194,6 +194,8 @@ Route::middleware(['auth:focal', 'verified', 'role:Focal_Person'])->group(functi
             ->name('preview');
         Route::get('/{id}/generate-pdf', [DvRequestController::class, 'generatePDF'])
             ->name('generatePDF');
+        Route::get('/{id}/generate-ors-pdf', [DvRequestController::class, 'generateORSPDF'])
+            ->name('generateORSPDF');
         Route::get('/{dvRequest}/logs', [DvRequestController::class, 'logs'])
             ->middleware('permission:focalperson.view')
             ->name('logs');
@@ -560,10 +562,13 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
     Route::post('/dvrequests/{id}/obligate', [ObligateDVORSController::class, 'store'])
         ->middleware('permission:budget.approve')
         ->name('dvrequests.store');
-        
     
     Route::get('/dv-requests/{id}/preview-ors', [ObligateDVORSController::class, 'previewOrs'])
+    ->middleware('permission:budget.view')
     ->name('dvrequests.previewOrs');
+
+    Route::get('/dv-requests/{id}/generate-ors-pdf', [ObligateDVORSController::class, 'generateORSPDF'])
+    ->name('dvrequests.generateORSPDF');
 
     Route::post('/dvrequests/{id}/reject', [ObligateDVORSController::class, 'reject'])
     ->name('dvrequests.reject');

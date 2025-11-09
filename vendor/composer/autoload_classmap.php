@@ -36,7 +36,6 @@ return array(
     'App\\Http\\Controllers\\Incoming\\TUPADRequestAgingController' => $baseDir . '/app/Http/Controllers/Incoming/TUPADRequestAgingController.php',
     'App\\Http\\Controllers\\Incoming\\TupadDvRequestProcessingController' => $baseDir . '/app/Http/Controllers/Incoming/TupadDvRequestProcessingController.php',
     'App\\Http\\Controllers\\Outgoing\\OutgoingDvController' => $baseDir . '/app/Http/Controllers/Outgoing/OutgoingDvController.php',
-    'App\\Http\\Controllers\\Outgoing\\OutgoingRequestAgingController' => $baseDir . '/app/Http/Controllers/Outgoing/OutgoingRequestAgingController.php',
     'App\\Http\\Controllers\\QRCode\\DOLEQRController' => $baseDir . '/app/Http/Controllers/QRCode/DOLEQRController.php',
     'App\\Http\\Controllers\\SmsTestController' => $baseDir . '/app/Http/Controllers/SmsTestController.php',
     'App\\Http\\Middleware\\TrustProxies' => $baseDir . '/app/Http/Middleware/TrustProxies.php',

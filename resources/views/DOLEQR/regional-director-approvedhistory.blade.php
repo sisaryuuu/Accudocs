@@ -147,7 +147,8 @@
                             <th class="px-4 py-3">Program</th>
                             <th class="px-4 py-3">Amount</th>
                             <th class="px-4 py-3">Action Step</th>
-                            <th class="px-4 py-3">Status Change</th>
+                            <th class="px-4 py-3">Status Before</th>
+                            <th class="px-4 py-3">Current Status</th>
                             <th class="px-4 py-3">Remarks</th>
                             <th class="px-4 py-3">Details</th>
                         </tr>
