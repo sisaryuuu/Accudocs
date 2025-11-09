@@ -309,54 +309,51 @@ function initializeCharts() {
         options: commonChartOptions
     });
 
-    // Staff Performance Chart
-    const staffPerformanceCtx = document.getElementById('staffPerformanceChart').getContext('2d');
-    charts.staffPerformance = new Chart(staffPerformanceCtx, {
-        type: 'bar',
-        data: {
-            labels: @json($staffPerformance->pluck('staff_name')),
-            datasets: [
-                {
-                    label: 'Total Processed',
-                    data: @json($staffPerformance->pluck('total_processed')),
-                    backgroundColor: '#3b82f6',
-                    order: 2
-                },
-                {
-                    label: 'Avg Hours',
-                    data: @json($staffPerformance->pluck('avg_hours')),
-                    backgroundColor: '#f59e0b',
-                    type: 'line',
-                    order: 1,
-                    yAxisID: 'y1'
-                }
-            ]
+    // Staff Performance Chart (Average Total Requests per Month)
+const staffPerformanceCtx = document.getElementById('staffPerformanceChart').getContext('2d');
+charts.staffPerformance = new Chart(staffPerformanceCtx, {
+    type: 'line',
+    data: {
+        labels: @json($staffPerformance->pluck('month_label')),
+        datasets: [{
+            label: 'Average Requests Handled per Month',
+            data: @json($staffPerformance->pluck('total_requests')),
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59,130,246,0.2)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 5,
+            pointHoverRadius: 7
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+            duration: 1000,
+            easing: 'easeInOutQuart'
         },
-        options: {
-            ...commonChartOptions,
-            scales: {
-                ...commonChartOptions.scales,
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Total Processed'
-                    }
-                },
-                y1: {
-                    beginAtZero: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Avg Hours'
-                    },
-                    grid: {
-                        drawOnChartArea: false
-                    }
+        plugins: {
+            legend: { position: 'top' }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'Number of Requests'
+                }
+            },
+            x: {
+                title: {
+                    display: true,
+                    text: 'Month'
                 }
             }
         }
-    });
+    }
+});
+
 
     // Bottleneck Chart
     const bottleneckCtx = document.getElementById('bottleneckChart').getContext('2d');

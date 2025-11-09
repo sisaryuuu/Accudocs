@@ -154,23 +154,23 @@ trait TriggersDashboardUpdate
         ]);
 
         // =============================================
-        // STAFF PERFORMANCE
-        // =============================================
-        $staffPerformance = DB::table('dv_requests')
-            ->select(
-                'locked_by',
-                DB::raw('COUNT(*) as total_processed'),
-                DB::raw('AVG(TIMESTAMPDIFF(HOUR, created_at, locked_at)) as avg_hours')
-            )
-            ->whereNotNull('locked_by')
-            ->groupBy('locked_by')
-            ->get()
-            ->map(function ($item) {
-                // Get user full name
-                $user = DB::table('users')->where('id', $item->locked_by)->first();
-                $item->staff_name = $user ? $user->full_name : 'Unknown Staff';
-                return $item;
-            });
+// STAFF PERFORMANCE - AVERAGE TOTAL REQUESTS PER MONTH (LAST 12 MONTHS)
+// =============================================
+$staffPerformance = DB::table('dv_requests')
+    ->select(
+        DB::raw("DATE_FORMAT(created_at, '%Y-%m') as month"),
+        DB::raw('COUNT(id) as total_requests')
+    )
+    ->where('created_at', '>=', now()->subMonths(12)) // only last 12 months
+    ->groupBy('month')
+    ->orderBy('month')
+    ->get()
+    ->map(function ($item) {
+        $item->month_label = date('F Y', strtotime($item->month . '-01'));
+        return $item;
+    });
+
+
 
         // =============================================
         // BOTTLENECKS (Top 5 Slowest Processing)

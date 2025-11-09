@@ -22,7 +22,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // ✅ Always force HTTPS (most reliable solution)
-        URL::forceScheme('https');
+        URL::forceScheme('http');
         
         // Alternative: Check environment
         // if ($this->app->environment('production') || 
