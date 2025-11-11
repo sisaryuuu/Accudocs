@@ -433,22 +433,22 @@ class ObligateDVORSController extends Controller
         return response()->json($recentDvRequest);
     }
 
-    public function updateAmount(Request $request, $id)
+       public function updateAmount(Request $request, $id)
     {
         $request->validate([
             'amount'  => 'required|numeric|min:0.01',
             'remarks' => 'nullable|string|max:1000',
         ]);
-
+    
         $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
-
+    
         if (!in_array($dvRequest->status, ['ORS_received', 'ORS_onhold'])) {
             return response()->json([
                 'success' => false,
                 'message' => 'Amount can only be edited while request is received or on hold.'
             ], 422);
         }
-
+    
         $currentUserId = auth()->id();
         $lockDuration = now()->subMinutes(10);
         
@@ -460,25 +460,44 @@ class ObligateDVORSController extends Controller
                 'message' => 'This request is currently locked by another user.'
             ], 422);
         }
-
+    
         $oldAmount = $dvRequest->amount;
         $newAmount = $request->amount;
-
+    
         try {
             DB::beginTransaction();
-
+    
             $dvRequest->update([
                 'amount'    => $newAmount,
                 'locked_by' => $currentUserId,
                 'locked_at' => now(),
             ]);
-
+    
             if ($dvRequest->orsRequest) {
                 $dvRequest->orsRequest->update([
                     'gross' => $newAmount,
                 ]);
             }
-
+    
+            // ✅ Create a NEW type of history record for amount updates
+            // This will NOT have obligated_amount, preserving the original obligation record
+            $this->saveBudgetObligationHistory(
+                $dvRequest,
+                'amount_updated', // ✅ Different step name
+                "Amount updated from ₱" . number_format($oldAmount, 2) . 
+                " to ₱" . number_format($newAmount, 2) . 
+                ($request->remarks ? " - Reason: " . $request->remarks : ""),
+                [
+                    'status_before' => $dvRequest->status,
+                    'status_after'  => $dvRequest->status,
+                    'old_amount'    => $oldAmount,
+                    'new_amount'    => $newAmount,
+                    'updated_by'    => $currentUserId,
+                    'updated_at'    => now()->toISOString(),
+                    // ✅ Note: No 'amount' key here to avoid confusion
+                ]
+            );
+    
             $this->logAction(
                 $dvRequest->id,
                 'Budget_Officer',
@@ -487,7 +506,7 @@ class ObligateDVORSController extends Controller
                 " to ₱" . number_format($newAmount, 2) . 
                 ($request->remarks ? " - Reason: " . $request->remarks : "")
             );
-
+    
             if ($dvRequest->focalperson_id) {
                 Notification::create([
                     'focalperson_id' => $dvRequest->focalperson_id,
@@ -496,7 +515,7 @@ class ObligateDVORSController extends Controller
                     'action'         => 'Amount Updated',
                     'remarks'        => $request->remarks ?? "Budget Officer updated the DV/ORS gross amount from ₱" . number_format($oldAmount, 2) . " to ₱" . number_format($newAmount, 2),
                 ]);
-
+    
                 // ✅ Trigger Pusher events
                 $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'amount-updated', [
                     'dv_request_id' => $dvRequest->id,
@@ -505,7 +524,7 @@ class ObligateDVORSController extends Controller
                     'remarks'       => $request->remarks,
                     'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);
-
+    
                 // ✅ To Budget Officer channel
                 $this->pusher->trigger('dv-requests-budget-officer', 'amount-updated', [
                     'dv_request_id' => $dvRequest->id,
@@ -515,9 +534,9 @@ class ObligateDVORSController extends Controller
                     'action_performer_id' => $currentUserId,
                 ]);
             }
-
+    
             DB::commit();
-
+    
             return response()->json([
                 'success' => true,
                 'message' => 'Amount successfully updated.',
@@ -529,11 +548,11 @@ class ObligateDVORSController extends Controller
                     'updated_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
                 ]
             ]);
-
+    
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error updating amount: ' . $e->getMessage());
-
+    
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while updating the amount.'
@@ -943,6 +962,25 @@ public function generateORSPDF($id)
 
         $orsRequest = $dvRequest->orsRequest;
 
+        // ✅ ADD LOGO HANDLING
+        $logo_url = null;
+        $logoPath = '/home/u203167746/domains/accudocs.accudocs.site/AccudocsProject/storage/app/public/logo/DOLE.png';
+        
+        if (file_exists($logoPath)) {
+            $imageData = file_get_contents($logoPath);
+            $base64 = base64_encode($imageData);
+            $logo_url = 'data:image/png;base64,' . $base64;
+            \Log::info('Logo loaded for ORS PDF');
+        } else {
+            // Fallback SVG logo
+            $svg = '<svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+                <rect width="200" height="100" fill="#f8f9fa" stroke="#dee2e6"/>
+                <text x="100" y="50" text-anchor="middle" dy=".3em" font-family="Arial" font-size="12" fill="#6c757d">DOLE LOGO</text>
+            </svg>';
+            $logo_url = 'data:image/svg+xml;base64,' . base64_encode($svg);
+            \Log::info('Using SVG fallback logo for ORS PDF');
+        }
+
         // ✅ PREPARE UACS DATA AS STRUCTURED ARRAY
         $uacsItems = [];
         foreach ($orsRequest->uacsCodes as $uacs) {
@@ -1010,21 +1048,38 @@ public function generateORSPDF($id)
         $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
         $budget_officer = \App\Models\Setting::get('budget_officer', auth()->user()->name ?? 'Budget Officer');
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.finalors', compact(
+        // ✅ MANUAL DOMPDF INSTANCE - BYPASS LARAVEL WRAPPER
+        $dompdf = new \Dompdf\Dompdf();
+        
+        // Set options directly
+        $options = new \Dompdf\Options();
+        $options->set('defaultFont', 'Times New Roman');
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', false); // ← CRITICAL: Set to false
+        $options->set('isFontSubsettingEnabled', true);
+        $options->set('chroot', base_path());
+        $options->set('tempDir', sys_get_temp_dir());
+        $options->set('fontDir', storage_path('fonts'));
+        $options->set('fontCache', storage_path('fonts'));
+        
+        $dompdf->setOptions($options);
+        $dompdf->setPaper('Legal', 'portrait');
+
+        // Load HTML content - ADD LOGO_URL TO COMPACT
+        $html = view('pdf.finalors', compact(
             'data', 
             'status',
             'imsd_head',
-            'budget_officer'
-        ))
-        ->setPaper('Legal', 'portrait')
-        ->setOption('defaultFont', 'Times New Roman')
-        ->setOption('isHtml5ParserEnabled', true)
-        ->setOption('isRemoteEnabled', true)
-        ->setOption('isFontSubsettingEnabled', true);
+            'budget_officer',
+            'logo_url' // ← ADD THIS
+        ))->render();
+
+        $dompdf->loadHtml($html);
+        $dompdf->render();
 
         $filename = 'ORS_' . $orsRequest->ors_number . '_' . now()->format('Ymd_His') . '.pdf';
 
-        return $pdf->download($filename);
+        return $dompdf->stream($filename);
 
     } catch (\Exception $e) {
         \Log::error('ORS PDF Generation Failed', [
@@ -1226,13 +1281,31 @@ private function formatFullName($fname, $mi, $lname)
             'orsRequest.AllotmentClass',
             'orsRequest.ContinuingOrCurrent',
             'verifier'
-        ])
-        ->where('verified_by', auth()->id());
-
-        // Search by DV Number
+        ]);
         if ($request->has('search') && $request->search) {
             $query->whereHas('dvRequest', function($q) use ($request) {
-                $q->where('accounting_control_number', 'like', '%' . $request->search . '%');
+                $searchTerm = $request->search;
+                
+                // Check if search includes the full CN format
+                if (preg_match('/CN\s*#-(\d{4})-(\d+)/', $searchTerm, $matches)) {
+                    $year = $matches[1];
+                    $controlNumber = $matches[2];
+                    
+                    $q->where('accounting_control_number', 'like', '%' . $controlNumber . '%');
+                } 
+                // Check if search includes year-controlnumber format
+                elseif (preg_match('/(\d{4})-(\d+)/', $searchTerm, $matches)) {
+                    $controlNumber = $matches[2];
+                    $q->where('accounting_control_number', 'like', '%' . $controlNumber . '%');
+                }
+                // Regular search (just numbers)
+                else {
+                    // Extract only numbers from search term
+                    $numbersOnly = preg_replace('/[^0-9]/', '', $searchTerm);
+                    if (!empty($numbersOnly)) {
+                        $q->where('accounting_control_number', 'like', '%' . $numbersOnly . '%');
+                    }
+                }
             });
         }
 
@@ -1267,9 +1340,25 @@ private function formatFullName($fname, $mi, $lname)
         return view('BudgetOfficer.loghistory', compact('verificationHistory', 'programs'));
     }
 
-    // VERIFICATION HISTORY HELPER METHOD
+    /**
+     * VERIFICATION HISTORY HELPER METHOD
+     * Saves verification history with preserved obligation amount
+     */
     protected function saveBudgetObligationHistory($dvRequest, $step, $remarks = null, $data = [])
     {
+        // ✅ Capture the amount at the time of obligation
+        // Only store obligated_amount when the step is 'obligate' or 'receive'
+        $obligatedAmount = null;
+        
+        if ($step === 'obligate') {
+            // For obligation, use the current DV request amount
+            $obligatedAmount = $dvRequest->amount;
+        } elseif ($step === 'receive') {
+            // For receive, also capture the amount at reception
+            $obligatedAmount = $dvRequest->amount;
+        }
+        // For other steps (reject, amount_updated, etc.), leave it null
+        
         BudgetObligationHistory::create([
             'dv_request_id' => $dvRequest->id,
             'ors_request_id' => $dvRequest->orsRequest->id ?? null,
@@ -1278,11 +1367,11 @@ private function formatFullName($fname, $mi, $lname)
             'status_before' => $data['status_before'] ?? $dvRequest->getOriginal('status'),
             'status_after' => $dvRequest->status,
             'verification_data' => $data,
+            'obligated_amount' => $obligatedAmount, // ✅ NEW: Store the immutable amount
             'remarks' => $remarks,
             'verified_at' => now(),
         ]);
     }
-
     private function generateOrsNumber($allotmentClassId, $contcurrentId, $dvRequest)
     {
         $year  = now()->format('Y');

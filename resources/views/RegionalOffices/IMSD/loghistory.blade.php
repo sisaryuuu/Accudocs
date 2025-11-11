@@ -65,7 +65,6 @@
                             <option value="GIP" {{ request('program') == 'GIP' ? 'selected' : '' }}>GIP</option>
                             <option value="TUPAD" {{ request('program') == 'TUPAD' ? 'selected' : '' }}>TUPAD</option>
                             <option value="TEV" {{ request('program') == 'TEV' ? 'selected' : '' }}>TEV</option>
-                            <option value="CASH_FOR_WORK" {{ request('program') == 'CASH_FOR_WORK' ? 'selected' : '' }}>Cash for Work</option>
                         </select>
                     </div>
                     <div>

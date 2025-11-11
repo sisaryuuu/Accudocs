@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class TEVAttachment extends Model
 {
-     protected $table = 'tev_attachments';
+    use HasFactory;
+
+    protected $table = 'tev_attachments';
 
     protected $fillable = [
         'dv_request_id',
@@ -18,17 +21,38 @@ class TEVAttachment extends Model
 
     protected $casts = [
         'is_present' => 'boolean',
+        'sort_order' => 'integer',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | Relationships
-    |--------------------------------------------------------------------------
-    */
-
-    // Each attachment belongs to one DV Request (nullable if master template)
+    /**
+     * Relationship: Belongs to DV Request
+     */
     public function dvRequest()
     {
-        return $this->belongsTo(DvRequest::class);
+        return $this->belongsTo(DvRequest::class, 'dv_request_id');
+    }
+
+    /**
+     * Scope: Get only master templates
+     */
+    public function scopeMasterTemplates($query)
+    {
+        return $query->whereNull('dv_request_id');
+    }
+
+    /**
+     * Scope: Get attachments for a specific modality
+     */
+    public function scopeForModality($query, $modality)
+    {
+        return $query->where('modality', $modality);
+    }
+
+    /**
+     * Scope: Get attachments for a specific DV request
+     */
+    public function scopeForDvRequest($query, $dvRequestId)
+    {
+        return $query->where('dv_request_id', $dvRequestId);
     }
 }

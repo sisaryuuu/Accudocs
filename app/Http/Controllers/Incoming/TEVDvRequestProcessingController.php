@@ -63,53 +63,137 @@ class TEVDvRequestProcessingController extends Controller
         return view('Incoming.TEV.index', compact('dvRequests'));
     }
     
-    public function show($id)
-{
-    $dvRequest = DvRequest::with([
-        'accountingUnit',
-        'program',
-        'logs',
-        'focalPerson',
-        'respocenter',
-        'modeOfPayments',
-        'paymentDetails', // This will use your hasManyThrough relationship
-        'tevAttachments',
-        'logs'])
-                        ->whereHas('program', fn($q) => 
-                            $q->where('prcode', 'TEV')) 
-                        ->findOrFail($id);
-
-
-    $lockDuration = now()->subMinutes(10);
-    $currentUserId = auth()->id();
-
-     if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
-        return redirect()->route('Incoming.TEV.index')
-            ->with('error', 'This DV Request is currently being processed by another user.');
+ public function show($id)
+    {
+        $dvRequest = DvRequest::with([
+            'accountingUnit',
+            'program',
+            'focalPerson',
+            'respocenter',
+            'modeOfPayments',
+            'paymentDetails',
+            'tevAttachments',
+            'logs'
+        ])
+        ->whereHas('program', fn($q) => $q->where('prcode', 'TEV')) 
+        ->findOrFail($id);
+        
+        $lockDuration = now()->subMinutes(10);
+        $currentUserId = auth()->id();
+    
+        if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
+            return redirect()->route('Incoming.TEV.index')
+                ->with('error', 'This DV Request is currently being processed by another user.');
+        }
+    
+        // ✅ AUTO-SET DEFAULT MODALITY IF NOT SET
+        if (!$dvRequest->tev_modality) {
+            $dvRequest->update([
+                'tev_modality' => 'Cash Advance for Local Travel', // Set default modality
+                'locked_by' => $currentUserId,
+                'locked_at' => now(),
+            ]);
+            $dvRequest->refresh();
+        } else {
+            if (!$dvRequest->locked_by || $dvRequest->locked_at <= $lockDuration) {
+                $dvRequest->update([
+                    'locked_by' => $currentUserId,
+                    'locked_at' => now(),
+                ]);
+            }
+        }
+        
+        // ✅ FIX: Use consistent variable name
+        $tevSelectedModality = $dvRequest->tev_modality;
+        
+        // ✅ DEBUG: Log everything
+        Log::info('=== TEV ATTACHMENTS DEBUG ===', [
+            'dv_request_id' => $dvRequest->id,
+            'tev_modality_from_db' => $dvRequest->getRawOriginal('tev_modality'),
+            'tev_modality_selected' => $tevSelectedModality,
+        ]);
+        
+        // Get or create attachments - ✅ FIXED variable name
+        $tevAttachments = $this->getOrCreateTevAttachmentsForDvRequest($dvRequest, $tevSelectedModality);
+        
+        // ✅ DEBUG: Log attachment results
+        Log::info('TEV Attachments fetched', [
+            'count' => $tevAttachments->count(),
+            'names' => $tevAttachments->pluck('name')->toArray(),
+            'is_present' => $tevAttachments->pluck('is_present', 'name')->toArray(),
+        ]);
+    
+        // Check if master templates exist
+        $masterCount = TEVAttachment::whereNull('dv_request_id')
+            ->where('modality', $tevSelectedModality)
+            ->count();
+        
+        Log::info('TEV Master templates check', [
+            'modality' => $tevSelectedModality,
+            'master_count' => $masterCount,
+        ]);
+    
+        if ($tevAttachments->isEmpty()) {
+            Log::error('NO TEV ATTACHMENTS FOUND!', [
+                'dv_request_id' => $dvRequest->id,
+                'modality' => $tevSelectedModality,
+                'master_templates_exist' => $masterCount > 0,
+            ]);
+        }
+    
+        $lastLog = $dvRequest->logs()->latest()->first();
+        $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
+    
+        return view('Incoming.TEV.verifytevdv', compact(
+            'dvRequest', 
+            'lastStep', 
+            'tevAttachments',
+            'tevSelectedModality'
+        ));
     }
 
-    if (!$dvRequest->locked_by || $dvRequest->locked_at <= $lockDuration) {
-        $dvRequest->update([
-            'locked_by' => $currentUserId,
-            'locked_at' => now(),
+protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
+{
+    if (!$modality) {
+        return collect();
+    }
+
+    // Check if attachments already exist for this DV request and modality
+    $existingAttachments = $dvRequest->tevAttachments()
+        ->where('modality', $modality)
+        ->orderBy('sort_order')
+        ->get();
+
+    if ($existingAttachments->isNotEmpty()) {
+        return $existingAttachments;
+    }
+
+    // ✅ If no attachments exist, create them from master templates
+    $masterTemplates = TEVAttachment::whereNull('dv_request_id')
+        ->where('modality', $modality)
+        ->orderBy('sort_order')
+        ->get();
+
+    if ($masterTemplates->isEmpty()) {
+        \Log::warning("No TEV master templates found for modality: {$modality}");
+        return collect();
+    }
+
+    // Create attachments for this DV request
+    $createdAttachments = [];
+    foreach ($masterTemplates as $template) {
+        $createdAttachments[] = TEVAttachment::create([
+            'dv_request_id' => $dvRequest->id,
+            'name' => $template->name,
+            'modality' => $template->modality,
+            'is_present' => false,
+            'sort_order' => $template->sort_order,
         ]);
     }
 
-    $tevSelectedModality= $dvRequest->tev_modality;
+    \Log::info("Created " . count($createdAttachments) . " TEV attachments for DV Request {$dvRequest->id}, modality: {$modality}");
 
-    $tevAttachments = collect();
-    if($tevSelectedModality){
-        $tevAttachments = $dvRequest->tevAttachments()
-        ->where('modality', $tevSelectedModality)
-        ->orderBy('sort_order')
-        ->get();
-    }
-
-
-    $lastLog = $dvRequest->logs()->latest()->first();
-    $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
-
-    return view('Incoming.TEV.verifytevdv', compact('dvRequest', 'lastStep','tevAttachments'));
+    return collect($createdAttachments);
 }
  public function receive(Request $request, $id)
 {
@@ -312,42 +396,61 @@ class TEVDvRequestProcessingController extends Controller
             'date'         => $dvRequest->created_at->format('M d, Y h:i A'),
         ]);
     }
-
+    
     public function verify(Request $request, $id)
-{
-    $request->validate([
-        'remarks' => 'nullable|string|max:1000',
-        'tev_attachments' => 'array',
-    ]);
+    {
+        $request->validate([
+            'remarks' => 'nullable|string|max:1000',
+            'tev_attachments' => 'array',
+            'tev_modality' => 'sometimes|string',
+        ]);
 
-    $dvRequest = DvRequest::with('tevAttachments')
-        ->whereHas('program', fn($q) => $q->where('prcode', 'TEV')) 
-        ->findOrFail($id);
-    $statusBefore = $dvRequest->status;
-    $verifiedAt = now(); // Define verifiedAt here
-    $currentUserId = auth()->id();
+        $dvRequest = DvRequest::with('tevAttachments')
+            ->whereHas('program', fn($q) => $q->where('prcode', 'TEV')) 
+            ->findOrFail($id);
+        
+        $statusBefore = $dvRequest->status;
+        $verifiedAt = now();
+        $currentUserId = auth()->id();
+        $attachmentData = [];
+        $checkedCount = 0;
+        $totalCount = 0;
+        
+        // ✅ UPDATE MODALITY IF CHANGED
+        if ($request->has('tev_modality') && $request->tev_modality !== $dvRequest->tev_modality) {
+            $dvRequest->update(['tev_modality' => $request->tev_modality]);
+            $dvRequest->refresh();
+            
+            // Ensure attachments exist for new modality
+            $this->getOrCreateTevAttachmentsForDvRequest($dvRequest, $request->tev_modality);
+            $dvRequest->refresh();
+        }
+        
+        // ✅ FIXED: Update TEV attachments correctly
+        if ($dvRequest->tev_modality && $request->has('tev_attachments')) {
+            // Get all attachments for current modality
+            $allAttachments = $dvRequest->tevAttachments()
+                ->where('modality', $dvRequest->tev_modality)
+                ->get();
 
+            $totalCount = $allAttachments->count();
+            
+            // Convert request attachments to array for easier checking
+            $requestAttachments = $request->tev_attachments ?? [];
 
-    $attachmentData = [];
-    if ($dvRequest->tev_modality) {
-        // Get all submitted attachment IDs
-        $submittedIds = $request->has('tev_attachments') 
-            ? array_keys($request->tev_attachments) 
-            : [];
-
-        // Update all attachments for this modality AND collect data for history
-        $dvRequest->tevAttachments()
-            ->where('modality', $dvRequest->tev_modality)
-            ->get()
-            ->each(function($attachment) use ($submittedIds, &$attachmentData) {
-                $isPresent = in_array($attachment->id, $submittedIds);
+            foreach ($allAttachments as $attachment) {
+                // ✅ FIX: Check if checkbox was checked for this attachment
+                $isPresent = false;
+                
+                // Check if this attachment's name exists in the request array
+                if (isset($requestAttachments[$attachment->name]) && $requestAttachments[$attachment->name] == '1') {
+                    $isPresent = true;
+                    $checkedCount++;
+                }
                 
                 // Update the attachment
-                $attachment->update([
-                    'is_present' => $isPresent
-                ]);
-                
-                // Collect attachment data for verification history
+                $attachment->update(['is_present' => $isPresent]);
+
                 $attachmentData[] = [
                     'id' => $attachment->id,
                     'name' => $attachment->name,
@@ -355,92 +458,103 @@ class TEVDvRequestProcessingController extends Controller
                     'modality' => $attachment->modality,
                     'type' => 'tev'
                 ];
-            });
-    }
-                        
-    // Update DV request status
-    $dvRequest->update([
-        'status'     => 'Incoming-TEV_verified',
-        'locked_by'  => null,
-        'locked_at'  => null,
-    ]);
+                
+                Log::info('TEV Attachment updated', [
+                    'attachment_id' => $attachment->id,
+                    'attachment_name' => $attachment->name,
+                    'is_present' => $isPresent ? 'true' : 'false',
+                    'was_checked' => isset($requestAttachments[$attachment->name]) ? 'yes' : 'no'
+                ]);
+            }
+        }
 
-    // Define remarks with proper fallback
-    $remarks = $request->remarks ?? 'DV Request approved and forwarded to Budget Officer.';
-    $status = 'Incoming-TEV_verified';
-    $action = 'Approved';
-    $focalId = $dvRequest->focalperson_id;
-
- 
-      // ✅ FIXED: Save verification history FIRST with proper data
-    $this->saveIncomingTEVVerificationHistory(
-        $dvRequest,
-        'verify',
-        $remarks, // Use the defined remarks variable
-        [
-            'status_before' => $statusBefore,
-            'status_after'  => 'Incoming-TEV_verified',
-            'verified_by'   => $currentUserId,
-            'attachments_checked' => $attachmentData,
-            'modality' => $dvRequest->tev_modality,
-            'verified_at' => $verifiedAt->toISOString()
-        ]
-    );
-
-    // ✅ FIXED: Log action with proper parameters
-    $this->logAction(
-        $dvRequest->id,
-        'Incoming-TEV',     // Department
-        'Approved',         // Action
-        'Incoming-TEV_verified', // Status
-        $remarks            // Remarks
-    );
-
-     
-
-
-    // Create notification for focal person
-    Notification::create([
-        'focalperson_id' => $focalId,
-        'dv_request_id'  => $dvRequest->id,
-        'status'         => $status,
-        'action'         => $action,
-        'remarks'        => $remarks,
-    ]);
-
-    // Trigger Pusher notifications
-    $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
-        'dv_request_id' => $dvRequest->id,
-        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-        'program'       => $dvRequest->program->prcode ?? 'N/A',
-        'status'        => $status,
-        'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        // ✅ Add attachment counts to remarks
+        $attachmentSummary = $totalCount > 0 ? "{$checkedCount}/{$totalCount} checked" : "0/0 checked";
         
-    ]);
+        $baseRemarks = $request->remarks ?? 'TEV DV Request approved and forwarded to Budget Officer.';
+        $remarksWithAttachments = $baseRemarks . " [Attachments: {$attachmentSummary}]";
 
-    if ($focalId) {
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+        // Update status
+        $dvRequest->update([
+            'status'     => 'Incoming-TEV_verified',
+            'locked_by'  => null,
+            'locked_at'  => null,
+        ]);
+        
+        // Pusher notification to Budget Officer
+        $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
+            'dv_request_id' => $dvRequest->id,
+            'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+            'program'       => $dvRequest->program->prcode ?? 'N/A',
+            'status'        => 'Incoming-TEV_verified',
+            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'attachments_checked' => $attachmentSummary,
+        ]);
+        
+        $focalId = $dvRequest->focalperson_id;
+        $status = 'Incoming-TEV_verified';
+        $action = 'Incoming-TEV_verified';
+
+        // Notification to focal person
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => $status,
+            'action'         => $action,
+            'remarks'        => $request->remarks ?? 'TEV DV Request verified and forwarded to Budget Officer.',
+        ]);
+
+        if ($dvRequest->focalperson_id) {
+            $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => $status,
+                'remarks'       => 'Request approved by Incoming for TEV processing',
+                'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+        }
+        
+        // Pusher to Incoming-TEV dashboard
+        $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-verified', [
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
-            'isRejected'    => false,
-            'remarks'       => $remarks,
-            'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'action_performer_id' => $currentUserId,
+            'verified_by_user_id' => $currentUserId,
+            'attachments_checked' => $attachmentSummary,
         ]);
+
+        // Save verification history
+        $this->saveIncomingTEVVerificationHistory(
+            $dvRequest,
+            'verify',
+            $remarksWithAttachments,
+            [
+                'action' => 'verified',
+                'status_before' => $statusBefore,
+                'status_after'  => 'Incoming-TEV_verified',
+                'attachments_checked' => $attachmentData,
+                'attachments_summary' => $attachmentSummary,
+                'checked_count' => $checkedCount,
+                'total_count' => $totalCount,
+                'verified_by' => $currentUserId,
+                'verified_at' => $verifiedAt->toISOString()
+            ]
+        );
+
+        // Log action
+        $this->logAction(
+            $dvRequest->id,
+            'Incoming',
+            'Incoming-TEV_verified',
+            $remarksWithAttachments
+        );
+
+        $this->triggerDashboardUpdate();
+        
+        return redirect()->route('Incoming.TEV.index')
+            ->with('success', 'TEV DV Request Approved.');
     }
 
-    $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-verified', [
-        'dv_request_id' => $dvRequest->id,
-        'status'        => $status,
-        'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        'action_performer_id' => $currentUserId, // ADD THIS
-        'verified_by_user_id' => $currentUserId, // ADD THIS
-    ]);
-
-    $this->triggerDashboardUpdate();
-
-    return redirect()->route('Incoming.TEV.index')
-        ->with('success', 'DV Request Approved.');
-}
 
     public function reject(Request $request, $id)
     {
@@ -532,8 +646,8 @@ class TEVDvRequestProcessingController extends Controller
                $this->triggerDashboardUpdate();
 
             $responseMessage = $emailSent ?? false
-                ? 'DV request has been rejected and notification sent.' 
-                : 'DV request has been rejected but email notification failed.';
+                ? 'DV request has been rejected'
+                : 'DV request has been rejected';
 
 
             // ✅ Always return JSON
@@ -731,48 +845,54 @@ class TEVDvRequestProcessingController extends Controller
         return response()->json(['success' => true, 'locked_at' => $dvRequest->locked_at]);
     }
 
-        public function history(Request $request)
+       public function history(Request $request)
         {
             $query = IncomingTEVVerificationHistory::with([
-                'dvRequest.program',
-                'dvRequest.focalPerson',
-                'dvRequest.respocenter',
-                'verifier'
-            ])
-            ->where('verified_by', auth()->id());
-
-            // Search by DV Number
+                'dvRequest.program:id,prcode',
+                'dvRequest.focalPerson:id,fname,lname',
+                'dvRequest.respocenter:id,rccode,description'
+            ]);
+        
+            // Search by Control Number
             if ($request->has('search') && $request->search) {
                 $query->whereHas('dvRequest', function($q) use ($request) {
-                    $q->where('dv_number', 'like', '%' . $request->search . '%');
+                    $q->where('accounting_control_number', 'like', '%' . $request->search . '%')
+                      ->orWhere('dv_number', 'like', '%' . $request->search . '%');
                 });
             }
-
+        
             // Filter by Program
             if ($request->has('program') && $request->program) {
                 $query->whereHas('dvRequest.program', function($q) use ($request) {
                     $q->where('prcode', $request->program);
                 });
             }
-
+        
+            // Filter by Modality
+            if ($request->has('modality') && $request->modality) {
+                $query->whereHas('dvRequest', function($q) use ($request) {
+                    $q->where('tev_modality', $request->modality);
+                });
+            }
+        
             // Filter by Verification Step
             if ($request->has('step') && $request->step) {
                 $query->where('verification_step', $request->step);
             }
-
+        
             // Date range filter
             if ($request->has('date_from') && $request->date_from) {
                 $query->whereDate('verified_at', '>=', $request->date_from);
             }
-
+        
             if ($request->has('date_to') && $request->date_to) {
                 $query->whereDate('verified_at', '<=', $request->date_to);
             }
-
+        
             $verificationHistory = $query->orderBy('verified_at', 'desc')
                                         ->paginate(20)
                                         ->appends($request->all());
-
+        
             return view('Incoming.TEV.loghistory', compact('verificationHistory'));
         }
 

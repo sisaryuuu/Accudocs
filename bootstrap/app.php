@@ -17,7 +17,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'auth.focal' => \App\Http\Middleware\AuthenticateFocal::class,
-            'signed.focal' => \App\Http\Middleware\ValidateFocalSignature::class, // ✅ Add this
+            'signed.focal' => \App\Http\Middleware\ValidateFocalSignature::class,
+            'session.timeout' => \App\Http\Middleware\CheckSessionTimeout::class, // ✅ Add this
+        ]);
+        
+        // Add to web middleware group globally
+        $middleware->web(append: [
+            \App\Http\Middleware\CheckSessionTimeout::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

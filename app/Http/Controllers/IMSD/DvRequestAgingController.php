@@ -61,7 +61,7 @@ class DvRequestAgingController extends Controller
 
             Log::info('Aging documents fetched successfully', ['count' => $agingRequests->count()]);
 
-            return response()->json([
+            return response()->json([   
                 'success' => true,
                 'aging_count' => $agingRequests->count(),
                 'documents' => $agingRequests,

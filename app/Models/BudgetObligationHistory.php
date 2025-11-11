@@ -15,6 +15,7 @@ class BudgetObligationHistory extends Model
         'verification_step',
         'status_before',
         'status_after',
+        'obligated_amount',
         'verification_data',
         'remarks',
         'verified_at'

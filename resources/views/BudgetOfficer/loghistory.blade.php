@@ -85,24 +85,15 @@
                     <h1 class="text-2xl font-bold text-gray-900">📜 Budget Officer - Verification History</h1>
                     <p class="text-sm text-gray-600 mt-1">Showing your personal verification records with detailed ORS information</p>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <div class="text-right">
-                        <p class="text-sm font-medium text-gray-700">Budget Officer</p>
-                        <p class="text-xs text-gray-500">{{ auth()->user()->name ?? 'User' }}</p>
-                    </div>
-                    <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                        <span class="text-indigo-800 font-medium">{{ substr(auth()->user()->name ?? 'BO', 0, 2) }}</span>
-                    </div>
-                </div>
             </div>
 
             <!-- Search and Filter Section -->
-            <form method="GET" action="{{ route('BudgetOfficer.dvrequests.loghistory') }}" class="mb-6">
+                    <form method="GET" action="{{ route('BudgetOfficer.dvrequests.loghistory') }}" class="mb-6">
                 <div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Search DV #</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Search Control #</label>
                         <input type="text" name="search" value="{{ request('search') }}" 
-                               placeholder="Search by DV Number..." 
+                               placeholder="e.g., 0123, CN #-2024-0123, or 2024-0123" 
                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     </div>
                     <div>
@@ -121,18 +112,9 @@
                         <select name="step" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <option value="">All Steps</option>
                             <option value="receive" {{ request('step') == 'receive' ? 'selected' : '' }}>Receive</option>
-                            <option value="process" {{ request('step') == 'process' ? 'selected' : '' }}>Process</option>
                             <option value="obligate" {{ request('step') == 'obligate' ? 'selected' : '' }}>Obligate</option>
-                            <option value="onhold" {{ request('step') == 'onhold' ? 'selected' : '' }}>On Hold</option>
-                            <option value="revise" {{ request('step') == 'revise' ? 'selected' : '' }}>Revise</option>
                             <option value="reject" {{ request('step') == 'reject' ? 'selected' : '' }}>Reject</option>
                         </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">ORS Number</label>
-                        <input type="text" name="ors_search" value="{{ request('ors_search') }}" 
-                               placeholder="Search by ORS Number..." 
-                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Date From</label>
@@ -170,19 +152,6 @@
                         </div>
                     </div>
                 </div>
-                <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <p class="text-sm text-yellow-600 font-medium">In Process</p>
-                            <p class="text-2xl font-bold text-yellow-800">
-                                {{ $verificationHistory->where('verification_step', 'process')->count() }}
-                            </p>
-                        </div>
-                        <div class="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                            <i class="fas fa-sync-alt text-yellow-600"></i>
-                        </div>
-                    </div>
-                </div>
                 <div class="bg-green-50 p-4 rounded-lg border border-green-100">
                     <div class="flex justify-between items-center">
                         <div>
@@ -196,7 +165,19 @@
                         </div>
                     </div>
                 </div>
-
+                <div class="bg-red-50 p-4 rounded-lg border border-red-100">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-sm text-red-600 font-medium">Rejected</p>
+                            <p class="text-2xl font-bold text-red-800">
+                                {{ $verificationHistory->where('verification_step', 'reject')->count() }}
+                            </p>
+                        </div>
+                        <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                            <i class="fas fa-times-circle text-red-600"></i>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Table Section -->
@@ -211,9 +192,9 @@
                             <th class="table-cell">Status After</th>
                             <th class="table-cell">Program</th>
                             <th class="table-cell">Payee</th>
+                             <th class="table-cell">Amount</th>
                             <th class="table-cell">Date & Time</th>
                             <th class="table-cell details-column">ORS Details</th>
-                            <th class="table-cell remarks-column">Remarks</th>
                             <th class="table-cell">Action</th>
                         </tr>
                     </thead>
@@ -222,8 +203,13 @@
                             <tr class="hover:bg-gray-50">
                                 <!-- Control Number -->
                                 <td class="table-cell font-medium text-gray-900">
-                                    #{{ $history->dvRequest->accounting_control_number }}
+                                    @if($history->dvRequest && $history->dvRequest->accounting_control_number)
+                                        CN #-{{ now()->year }}-{{ str_pad($history->dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) }}
+                                    @else
+                                        <span class="text-gray-400">Pending</span>
+                                    @endif
                                 </td>
+                                
                                 <!-- ORS Number -->
                                 <td class="table-cell text-gray-700">
                                     @if($history->orsRequest && $history->orsRequest->ors_number)
@@ -274,7 +260,7 @@
                                         $statusColor = $statusColors[$history->status_after] ?? 'bg-gray-100 text-gray-800';
                                     @endphp
                                     <span class="px-2 py-1 text-xs font-medium rounded-full {{ $statusColor }}">
-                                         {{$history->status_after ?? 'N/A' }}
+                                        {{ ucwords(str_replace('_', ' ', $history->status_after ?? 'N/A')) }}
                                     </span>
                                 </td>
                                 
@@ -298,6 +284,34 @@
                                     @endif
                                 </td>
                                 
+                                <!-- Around line 244 in the table, replace the Amount <td> -->
+                                <td class="table-cell">
+                                    @if($history->obligated_amount)
+                                        {{-- Show the preserved obligation amount --}}
+                                        <div class="font-semibold text-green-600">
+                                            ₱{{ number_format($history->obligated_amount, 2) }}
+                                        </div>
+                                        @if($history->verification_step === 'amount_updated' && isset($history->verification_data['old_amount']))
+                                            <div class="text-xs text-gray-500">
+                                                Updated from: ₱{{ number_format($history->verification_data['old_amount'], 2) }}
+                                            </div>
+                                        @endif
+                                    @elseif($history->verification_step === 'amount_updated' && isset($history->verification_data['new_amount']))
+                                        {{-- For amount update records, show the new amount --}}
+                                        <div class="font-semibold text-blue-600">
+                                            ₱{{ number_format($history->verification_data['new_amount'], 2) }}
+                                        </div>
+                                        <div class="text-xs text-gray-500">
+                                            Previous: ₱{{ number_format($history->verification_data['old_amount'] ?? 0, 2) }}
+                                        </div>
+                                    @else
+                                        {{-- Fallback to current DV amount --}}
+                                        <div class="text-gray-600">
+                                            ₱{{ number_format($history->dvRequest->amount ?? ($history->verification_data['amount'] ?? 0), 2) }}
+                                        </div>
+                                    @endif
+                                </td>
+                                                                
                                 <!-- Date & Time -->
                                 <td class="table-cell text-gray-600">
                                     <div class="font-medium">{{ $history->verified_at->format('M d, Y') }}</div>
@@ -315,13 +329,13 @@
                                                         <i class="fas fa-list-ol text-blue-500 mr-1"></i> UACS Codes ({{ $history->orsRequest->uacsCodes->count() }})
                                                     </div>
                                                     <div class="flex flex-wrap gap-1">
-                                                        @foreach($history->orsRequest->uacsCodes->take(5) as $uacs)
+                                                        @foreach($history->orsRequest->uacsCodes->take(3) as $uacs)
                                                             <span class="detail-badge bg-blue-50 text-blue-700 border border-blue-200">
-                                                                {{ $uacs->uacscode }} {{$uacs->description}}
+                                                                {{ $uacs->uacscode ?? 'N/A' }}
                                                             </span>
                                                         @endforeach
-                                                        @if($history->orsRequest->uacsCodes->count() > 5)
-                                                            <span class="detail-badge bg-blue-100 text-blue-800">+{{ $history->orsRequest->uacsCodes->count() - 5 }} more</span>
+                                                        @if($history->orsRequest->uacsCodes->count() > 3)
+                                                            <span class="detail-badge bg-blue-100 text-blue-800">+{{ $history->orsRequest->uacsCodes->count() - 3 }} more</span>
                                                         @endif
                                                     </div>
                                                 </div>
@@ -334,13 +348,13 @@
                                                         <i class="fas fa-code text-green-500 mr-1"></i> ADL Codes ({{ $history->orsRequest->adlCodes->count() }})
                                                     </div>
                                                     <div class="flex flex-wrap gap-1">
-                                                        @foreach($history->orsRequest->adlCodes->take(4) as $adl)
+                                                        @foreach($history->orsRequest->adlCodes->take(3) as $adl)
                                                             <span class="detail-badge bg-green-50 text-green-700 border border-green-200">
-                                                                {{ $adl->adlcode }} {{$adl->description}}
+                                                                {{ $adl->adlcode ?? 'N/A' }}
                                                             </span>
                                                         @endforeach
-                                                        @if($history->orsRequest->adlCodes->count() > 4)
-                                                            <span class="detail-badge bg-green-100 text-green-800">+{{ $history->orsRequest->adlCodes->count() - 4 }} more</span>
+                                                        @if($history->orsRequest->adlCodes->count() > 3)
+                                                            <span class="detail-badge bg-green-100 text-green-800">+{{ $history->orsRequest->adlCodes->count() - 3 }} more</span>
                                                         @endif
                                                     </div>
                                                 </div>
@@ -355,9 +369,6 @@
                                                     <div class="flex flex-wrap gap-1">
                                                         <span class="detail-badge bg-purple-50 text-purple-700 border border-purple-200">
                                                             {{ $history->orsRequest->Mfopap->mfocode ?? 'N/A' }}
-                                                        </span>
-                                                        <span class="detail-badge bg-purple-50 text-purple-700 border border-purple-200">
-                                                            {{ $history->orsRequest->Mfopap->mfodescription ?? '' }}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -375,46 +386,16 @@
                                                 </div>
                                             @endif
 
-                                            <!-- Amount Information -->
-                                            @if($history->orsRequest->amount)
-                                                <div class="detail-section">
-                                                    <div class="font-semibold text-gray-700 mb-1">
-                                                        <i class="fas fa-money-bill-wave text-teal-500 mr-1"></i> Amount
-                                                    </div>
-                                                    <span class="detail-badge bg-teal-50 text-teal-700 border border-teal-200 font-bold">
-                                                        ₱{{ number_format($history->orsRequest->amount, 2) }}
-                                                    </span>
-                                                </div>
-                                            @endif
-                                        </div>
-                                    @elseif($history->verification_data)
-                                        <div class="text-xs text-gray-600 space-y-2">
-                                            @if(isset($history->verification_data['ors_number']))
-                                                <div class="font-semibold">ORS #: {{ $history->verification_data['ors_number'] }}</div>
-                                            @endif
-                                            @if(isset($history->verification_data['uacs_count']))
-                                                <div>UACS Codes: {{ $history->verification_data['uacs_count'] }}</div>
-                                            @endif
-                                            @if(isset($history->verification_data['amount']))
-                                                <div class="font-bold">Amount: ₱{{ number_format($history->verification_data['amount'], 2) }}</div>
-                                            @endif
                                         </div>
                                     @else
                                         <span class="text-xs text-gray-400">No ORS data available</span>
                                     @endif
                                 </td>
-                                
-                                <!-- Remarks -->
-                                <td class="table-cell remarks-column text-gray-700">
-                                    <div class="max-h-24 overflow-y-auto">
-                                        {{ $history->remarks ?? '—' }}
-                                    </div>
-                                </td>
-                                
+                        
                                 <!-- Action Column - ORS Preview -->
                                 <td class="table-cell">
-                                      @if($history->status_after === 'ORS_obligated' && $history->orsRequest)
-                                        <a href="{{ route('BudgetOfficer.dvrequests.previewOrs', $history->dvRequest->id) }}" 
+                                    @if($history->status_after === 'ORS_obligated' && $history->orsRequest)
+                                        <a href="{{ route('BudgetOfficer.dvrequests.previewOrs', $history->dv_request_id) }}" 
                                            target="_blank"
                                            class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition duration-200 action-btn"
                                            title="Preview ORS Document">
@@ -490,14 +471,6 @@
                 const submitButton = this.querySelector('button[type="submit"]');
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Applying Filters...';
                 submitButton.disabled = true;
-            });
-
-            // Add confirmation for ORS preview
-            const previewButtons = document.querySelectorAll('a[href*="preview-ors"]');
-            previewButtons.forEach(button => {
-                button.addEventListener('click', function(e) {
-                    console.log('Opening ORS preview...');
-                });
             });
         });
     </script>

@@ -25,6 +25,7 @@ use App\Http\Controllers\Admin\AccountingUnitController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\FocalPerson\NotificationController;
 use App\Http\Controllers\AccountingUnitProfileController;
@@ -121,6 +122,15 @@ Route::middleware(['auth:web', 'verified', 'role:Admin'])->group(function () {
     Route::post('admin/settings', [SettingsController::class, 'update'])
         ->name('admin.settings.update');
 });
+
+Route::middleware(['auth', 'role:Admin'])->prefix('admin')->group(function () {
+    Route::get('/document-tracking', [AdminController::class, 'documentTracking'])->name('admin.document-tracking');
+    Route::get('/document-tracking/{dvRequest}', [AdminController::class, 'documentTrackingShow'])->name('admin.document-tracking.show');
+    Route::get('/document-tracking/{dvRequest}/logs', [AdminController::class, 'getRequestLogs'])->name('admin.document-tracking.logs');
+    Route::get('/document-tracking/{dvRequest}/latest-step', [AdminController::class, 'getLatestStep'])->name('admin.document-tracking.latest-step');
+});
+
+
 
 Route::middleware(['auth:web'])->group(function () {
     Route::get('/accountingunit/email/verify', function () {

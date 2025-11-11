@@ -30,8 +30,8 @@ class DvRequest extends Model
         'status',
         'tupad_modality',
         'tev_modality',
-         'confirmed_by_focal_person',
-    'confirmed_at',
+        'confirmed_by_focal_person',
+        'confirmed_at',
         'locked_at',
         'locked_by',
     ];
@@ -56,13 +56,131 @@ class DvRequest extends Model
     }
     public function tupadAttachments()
     {
-        return $this->hasMany(TupadAttachment::class, 'dv_request_id');
+        return $this->hasMany(TUPADAttachment::class, 'dv_request_id');
     }
+    public function getTupadAttachmentsForModality($modality)
+    {
+        return $this->tupadAttachments()
+            ->where('modality', $modality)
+            ->orderBy('sort_order')
+            ->get();
+    }
+
+    /**
+     * Check if all TUPAD attachments are present for current modality
+     */
+    public function allTupadAttachmentsPresent()
+    {
+        if (!$this->tupad_modality) {
+            return false;
+        }
+    
+        $attachments = $this->tupadAttachments()
+            ->where('modality', $this->tupad_modality)
+            ->get();
+    
+        if ($attachments->isEmpty()) {
+            return false;
+        }
+    
+        return $attachments->every(fn($attachment) => $attachment->is_present);
+    }
+    
+    /**
+     * Get count of present TUPAD attachments
+     */
+    public function presentTupadAttachmentsCount()
+    {
+        if (!$this->tupad_modality) {
+            return 0;
+        }
+    
+        return $this->tupadAttachments()
+            ->where('modality', $this->tupad_modality)
+            ->where('is_present', true)
+            ->count();
+    }
+    
     public function tevAttachments()
     {
         return $this->hasMany(TEVAttachment::class, 'dv_request_id');
     }
 
+        /**
+     * Get TEV attachments for a specific modality
+     */
+    public function getTevAttachmentsForModality($modality)
+    {
+        return $this->tevAttachments()
+            ->where('modality', $modality)
+            ->orderBy('sort_order')
+            ->get();
+    }
+    
+    /**
+     * Check if all TEV attachments are present for current modality
+     */
+    public function allTevAttachmentsPresent()
+    {
+        if (!$this->tev_modality) {
+            return false;
+        }
+    
+        $attachments = $this->tevAttachments()
+            ->where('modality', $this->tev_modality)
+            ->get();
+    
+        if ($attachments->isEmpty()) {
+            return false;
+        }
+    
+        return $attachments->every(fn($attachment) => $attachment->is_present);
+    }
+    
+    /**
+     * Get count of present TEV attachments
+     */
+    public function presentTevAttachmentsCount()
+    {
+        if (!$this->tev_modality) {
+            return 0;
+        }
+    
+        return $this->tevAttachments()
+            ->where('modality', $this->tev_modality)
+            ->where('is_present', true)
+            ->count();
+    }
+    
+    /**
+     * Get total count of required TEV attachments for current modality
+     */
+    public function totalTevAttachmentsCount()
+    {
+        if (!$this->tev_modality) {
+            return 0;
+        }
+    
+        return $this->tevAttachments()
+            ->where('modality', $this->tev_modality)
+            ->count();
+    }
+    
+    /**
+     * Get TEV attachment completion percentage
+     */
+    public function tevAttachmentCompletionPercentage()
+    {
+        $total = $this->totalTevAttachmentsCount();
+        
+        if ($total === 0) {
+            return 0;
+        }
+    
+        $present = $this->presentTevAttachmentsCount();
+        
+        return round(($present / $total) * 100, 2);
+    }
     public function focalperson()
     {
         return $this->belongsTo(FocalPerson::class, 'focalperson_id');

@@ -62,167 +62,272 @@ class TupadDvRequestProcessingController extends Controller
         $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
         return view('Incoming.TUPAD.index', compact('dvRequests'));
     }
- public function show($id)
-{
-    $dvRequest = DvRequest::with([
-      'accountingUnit',
-        'program',
-        'focalPerson',
-        'respocenter',
-        'modeOfPayments',
-        'paymentDetails', // This will use your hasManyThrough relationship
-        'tupadAttachments',
-        'logs'
-    ])
-    ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
-    ->findOrFail($id);
-    
-    $lockDuration = now()->subMinutes(10);
-    $currentUserId = auth()->id();
+    // ... your existing methods ...
 
-    if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
-        return redirect()->route('Incoming.TUPAD.index')
-            ->with('error', 'This DV Request is currently being processed by another user.');
-    }
-
-    if (!$dvRequest->locked_by || $dvRequest->locked_at <= $lockDuration) {
-        $dvRequest->update([
-            'locked_by' => $currentUserId,
-            'locked_at' => now(),
-        ]);
-    }
-    
-    // Get attachments for the selected modality only
-    $selectedModality = $dvRequest->tupad_modality;
-    
-   $attachments = collect();
-    if ($selectedModality) {
-        $attachments = $dvRequest->tupadAttachments()
-            ->where('modality', $selectedModality)
-            ->orderBy('sort_order')
-            ->get();
-    }
-
-    $lastLog = $dvRequest->logs()->latest()->first();
-    $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
-
-    return view('Incoming.TUPAD.verifytupaddv', compact(
-        'dvRequest', 
-        'lastStep', 
-        'attachments',
-        'selectedModality'
-    ));
-}
-
-
-public function receive(Request $request, $id)
+/**
+ * Get or create TUPAD attachments for a DV request based on modality
+ */
+protected function getOrCreateAttachmentsForDvRequest(DvRequest $dvRequest, string $modality)
 {
     try {
-        $dvRequest = DvRequest::findOrFail($id);
-        $statusBefore = $dvRequest->status;
-        $receivedAt = now();
-        $currentUserId = auth()->id();
+        // Get existing attachments for this DV request and modality
+        $existingAttachments = $dvRequest->tupadAttachments()
+            ->where('modality', $modality)
+            ->get();
 
-         
-        if ($dvRequest->status !== 'IMSD_verified') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This request has already been received.'  
-            ], 422);
-        }
-
-        $controlNumber = $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) : 'Unknown';
-        $userName = auth()->user()->name ?? 'TUPAD User';
-
-        // Update the DV request status first
-        $dvRequest->update([
-            'status'           => 'Incoming-TUPAD_received',
-            'accountingunit_id'=> $currentUserId,
-            'received_by'      => $currentUserId,
-            'received_at'      => $receivedAt,
-            'locked_by'        => $currentUserId,
-            'locked_at'        => $receivedAt,
-        ]);
-
-// Save history and send notifications
-        $this->saveIncomingTUPADVerificationHistory(
-            $dvRequest,
-            'receive',
-            'Request officially received by Incoming-TUPAD',
-            [
-                'status_before' => $statusBefore,
-                'status_after' => 'Incoming-TUPAD_received',
-                'received_by' => $currentUserId,
-                'received_at' => $receivedAt->toISOString(),
-            ]
-        );
-
-        $this->logAction(
-            $dvRequest->id,
-            'Incoming',
-            'Incoming-TUPAD_received',
-            'Request officially received by Incoming-TUPAD'
-        );
-
-        $focalId = $dvRequest->focalperson_id;
-        Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => 'Incoming-TUPAD_received',
-            'action'         => 'Received',
-            'remarks'        => 'Request officially received by Incoming-TUPAD',
-        ]);
-
-        // Pusher notifications
-        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => 'Incoming-TUPAD_received',
-            'remarks'       => 'Request officially received by Incoming-TUPAD',
-            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
-
-        // ✅ FIX: Broadcast to TUPAD channel with proper acknowledged count
-        $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-received', [
-            'dv_request_id' => $dvRequest->id,
-            'status'        => 'Incoming-TUPAD_received',
-            'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-            'received_by'   => $userName,
-            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            'action_performer_id' => $currentUserId, // ADD THIS
-            'received_by_user_id' => $currentUserId, // ADD THIS
-        ]);
-
-        $this->triggerDashboardUpdate();
-
-        // JSON response for AJAX
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Document has been received by Incoming-TUPAD.',
-                'data' => [
-                    'id' => $dvRequest->id,
-                    'status' => 'Incoming-TUPAD_received',
-                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                ]
+        // If attachments already exist, return them
+        if ($existingAttachments->isNotEmpty()) {
+            \Log::info('Existing attachments found', [
+                'dv_request_id' => $dvRequest->id,
+                'modality' => $modality,
+                'count' => $existingAttachments->count()
             ]);
+            return $existingAttachments;
         }
 
-        return redirect()->route('Incoming.TUPAD.index')
-            ->with('success', 'Document has been received by Incoming-TUPAD.');
+        // Get master template attachments for this modality
+        $masterAttachments = TUPADAttachment::whereNull('dv_request_id')
+            ->where('modality', $modality)
+            ->get();
+
+        if ($masterAttachments->isEmpty()) {
+            \Log::warning('No master attachments found for modality', [
+                'modality' => $modality,
+                'dv_request_id' => $dvRequest->id
+            ]);
+            return collect();
+        }
+
+        // Create copies of master attachments for this DV request
+        $createdAttachments = [];
+        foreach ($masterAttachments as $master) {
+            $attachment = TUPADAttachment::create([
+                'dv_request_id' => $dvRequest->id,
+                'name' => $master->name,
+                'modality' => $master->modality,
+                'is_present' => false, // Default to not present
+                'is_required' => $master->is_required,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $createdAttachments[] = $attachment;
+        }
+
+        \Log::info('Created new attachments from master templates', [
+            'dv_request_id' => $dvRequest->id,
+            'modality' => $modality,
+            'count' => count($createdAttachments)
+        ]);
+
+        return collect($createdAttachments);
 
     } catch (\Exception $e) {
-        \Log::error('Error receiving DV request: ' . $e->getMessage());
-
-        if ($request->expectsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'An error occurred while processing the request.'
-            ], 500);
-        }
-
-        return redirect()->back()->with('error', 'An error occurred while processing the request.');
+        \Log::error('Error in getOrCreateAttachmentsForDvRequest', [
+            'dv_request_id' => $dvRequest->id,
+            'modality' => $modality,
+            'error' => $e->getMessage()
+        ]);
+        return collect();
     }
 }
+
+    public function show($id)
+    {
+        $dvRequest = DvRequest::with([
+            'accountingUnit',
+            'program',
+            'focalPerson',
+            'respocenter',
+            'modeOfPayments',
+            'paymentDetails',
+            'tupadAttachments',
+            'logs'
+        ])
+        ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
+        ->findOrFail($id);
+        
+        $lockDuration = now()->subMinutes(10);
+        $currentUserId = auth()->id();
+    
+        if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
+            return redirect()->route('Incoming.TUPAD.index')
+                ->with('error', 'This DV Request is currently being processed by another user.');
+        }
+    
+        // ✅ AUTO-SET DEFAULT MODALITY IF NOT SET
+        if (!$dvRequest->tupad_modality) {
+            $dvRequest->update([
+                'tupad_modality' => 'rpmt',
+                'locked_by' => $currentUserId,
+                'locked_at' => now(),
+            ]);
+            $dvRequest->refresh();
+        } else {
+            if (!$dvRequest->locked_by || $dvRequest->locked_at <= $lockDuration) {
+                $dvRequest->update([
+                    'locked_by' => $currentUserId,
+                    'locked_at' => now(),
+                ]);
+            }
+        }
+        
+        $selectedModality = $dvRequest->tupad_modality;
+        
+        // ✅ DEBUG: Log everything
+        \Log::info('=== TUPAD ATTACHMENTS DEBUG ===', [
+            'dv_request_id' => $dvRequest->id,
+            'selected_modality' => $selectedModality,
+            'tupad_modality_from_db' => $dvRequest->getRawOriginal('tupad_modality'),
+        ]);
+        
+        // Get or create attachments
+        $attachments = $this->getOrCreateAttachmentsForDvRequest($dvRequest, $selectedModality);
+        
+        // ✅ DEBUG: Log attachment results
+        \Log::info('Attachments fetched', [
+            'count' => $attachments->count(),
+            'names' => $attachments->pluck('name')->toArray(),
+            'is_present' => $attachments->pluck('is_present', 'name')->toArray(),
+        ]);
+    
+        // Check if master templates exist
+        $masterCount = TUPADAttachment::whereNull('dv_request_id')
+            ->where('modality', $selectedModality)
+            ->count();
+        
+        \Log::info('Master templates check', [
+            'modality' => $selectedModality,
+            'master_count' => $masterCount,
+        ]);
+    
+        if ($attachments->isEmpty()) {
+            \Log::error('NO ATTACHMENTS FOUND!', [
+                'dv_request_id' => $dvRequest->id,
+                'modality' => $selectedModality,
+                'master_templates_exist' => $masterCount > 0,
+            ]);
+        }
+    
+        $lastLog = $dvRequest->logs()->latest()->first();
+        $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
+    
+        return view('Incoming.TUPAD.verifytupaddv', compact(
+            'dvRequest', 
+            'lastStep', 
+            'attachments',
+            'selectedModality'
+        ));
+    }
+
+    
+    public function receive(Request $request, $id)
+    {
+        try {
+            $dvRequest = DvRequest::findOrFail($id);
+            $statusBefore = $dvRequest->status;
+            $receivedAt = now();
+            $currentUserId = auth()->id();
+    
+             
+            if ($dvRequest->status !== 'IMSD_verified') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This request has already been received.'  
+                ], 422);
+            }
+    
+            $controlNumber = $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) : 'Unknown';
+            $userName = auth()->user()->name ?? 'TUPAD User';
+    
+            // Update the DV request status first
+            $dvRequest->update([
+                'status'           => 'Incoming-TUPAD_received',
+                'accountingunit_id'=> $currentUserId,
+                'received_by'      => $currentUserId,
+                'received_at'      => $receivedAt,
+                'locked_by'        => $currentUserId,
+                'locked_at'        => $receivedAt,
+            ]);
+    
+    // Save history and send notifications
+            $this->saveIncomingTUPADVerificationHistory(
+                $dvRequest,
+                'receive',
+                'Request officially received by Incoming-TUPAD',
+                [
+                    'status_before' => $statusBefore,
+                    'status_after' => 'Incoming-TUPAD_received',
+                    'received_by' => $currentUserId,
+                    'received_at' => $receivedAt->toISOString(),
+                ]
+            );
+    
+            $this->logAction(
+                $dvRequest->id,
+                'Incoming',
+                'Incoming-TUPAD_received',
+                'Request officially received by Incoming-TUPAD'
+            );
+    
+            $focalId = $dvRequest->focalperson_id;
+            Notification::create([
+                'focalperson_id' => $focalId,
+                'dv_request_id'  => $dvRequest->id,
+                'status'         => 'Incoming-TUPAD_received',
+                'action'         => 'Received',
+                'remarks'        => 'Request officially received by Incoming-TUPAD',
+            ]);
+    
+            // Pusher notifications
+            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Incoming-TUPAD_received',
+                'remarks'       => 'Request officially received by Incoming-TUPAD',
+                'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
+    
+            // ✅ FIX: Broadcast to TUPAD channel with proper acknowledged count
+            $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-received', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => 'Incoming-TUPAD_received',
+                'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                'received_by'   => $userName,
+                'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'action_performer_id' => $currentUserId, // ADD THIS
+                'received_by_user_id' => $currentUserId, // ADD THIS
+            ]);
+    
+            $this->triggerDashboardUpdate();
+    
+            // JSON response for AJAX
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Document has been received by Incoming-TUPAD.',
+                    'data' => [
+                        'id' => $dvRequest->id,
+                        'status' => 'Incoming-TUPAD_received',
+                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    ]
+                ]);
+            }
+    
+            return redirect()->route('Incoming.TUPAD.index')
+                ->with('success', 'Document has been received by Incoming-TUPAD.');
+    
+        } catch (\Exception $e) {
+            \Log::error('Error receiving DV request: ' . $e->getMessage());
+    
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while processing the request.'
+                ], 500);
+            }
+    
+            return redirect()->back()->with('error', 'An error occurred while processing the request.');
+        }
+    }
 
  public function fetchtupadRecent()
  
@@ -323,41 +428,65 @@ public function receive(Request $request, $id)
     $request->validate([
         'remarks' => 'nullable|string|max:1000',
         'attachments' => 'array',
+        'tupad_modality' => 'sometimes|string',
     ]);
 
     $dvRequest = DvRequest::with('tupadAttachments')
         ->whereHas('program', fn($q) => $q->where('prcode', 'TUPAD')) 
         ->findOrFail($id);
+    
     $statusBefore = $dvRequest->status;
     $verifiedAt = now();
     $currentUserId = auth()->id();
     $attachmentData = [];
     
-    // Update TUPAD attachments if any were checked/unchecked
-    if ($request->has('attachments') && $dvRequest->tupad_modality) {
-        // Mark submitted attachments as present
-        foreach ($request->attachments as $attachmentId => $value) {
-            $attachment = $dvRequest->tupadAttachments()->find($attachmentId);
-            if ($attachment) {
-                $isPresent = (bool)$value; // Fix: define $isPresent
-                $attachment->update(['is_present' => $isPresent]);
-
-                $attachmentData[] = [
-                    'id' => $attachment->id,
-                    'name' => $attachment->name,
-                    'is_present' => $isPresent,
-                    'modality' => $attachment->modality,
-                    'type' => 'tupad'
-                ];
-            }
-        }
+    // ✅ UPDATE MODALITY IF CHANGED
+    if ($request->has('tupad_modality') && $request->tupad_modality !== $dvRequest->tupad_modality) {
+        $dvRequest->update(['tupad_modality' => $request->tupad_modality]);
+        $dvRequest->refresh();
         
-        // Uncheck attachments that weren't submitted
-        $submittedIds = array_keys($request->attachments);
-        $dvRequest->tupadAttachments()
+        // Ensure attachments exist for new modality
+        $this->getOrCreateAttachmentsForDvRequest($dvRequest, $request->tupad_modality);
+        $dvRequest->refresh(); // Refresh relationships
+    }
+    
+    // ✅ FIXED: Update TUPAD attachments correctly
+    if ($dvRequest->tupad_modality && $request->has('attachments')) {
+        // Get all attachments for current modality
+        $allAttachments = $dvRequest->tupadAttachments()
             ->where('modality', $dvRequest->tupad_modality)
-            ->whereNotIn('id', $submittedIds)
-            ->update(['is_present' => false]);
+            ->get();
+
+        foreach ($allAttachments as $attachment) {
+            // ✅ FIX: Check if this attachment name exists in the request
+            // The form sends attachment names as keys, not IDs
+            $isPresent = false;
+            
+            // Check both possible formats: by name and by ID
+            foreach ($request->attachments as $key => $value) {
+                if ($key == $attachment->id || $key == $attachment->name) {
+                    $isPresent = true;
+                    break;
+                }
+            }
+            
+            $attachment->update(['is_present' => $isPresent]);
+
+            $attachmentData[] = [
+                'id' => $attachment->id,
+                'name' => $attachment->name,
+                'is_present' => $isPresent,
+                'modality' => $attachment->modality,
+                'type' => 'tupad'
+            ];
+            
+            \Log::info('TUPAD Attachment updated', [
+                'attachment_id' => $attachment->id,
+                'attachment_name' => $attachment->name,
+                'is_present' => $isPresent,
+                'request_attachments' => $request->attachments
+            ]);
+        }
     }
 
     // Update status
@@ -367,19 +496,21 @@ public function receive(Request $request, $id)
         'locked_at'  => null,
     ]);
     
-     $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
+    // Pusher notification to Budget Officer
+    $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
         'dv_request_id' => $dvRequest->id,
         'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
         'program'       => $dvRequest->program->prcode ?? 'N/A',
         'status'        => 'Incoming-TUPAD_verified',
         'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
     ]);
-    $attachmentData = [];
+    
     $focalId = $dvRequest->focalperson_id;
     $status = 'Incoming-TUPAD_verified';
-    $action = 'Approved';
+    $action = 'Incoming-TUPAD_verified';
     $remarks = $request->remarks ?? 'DV Request approved forwarded to Budget Officer.';
 
+    // Notification to focal person
     Notification::create([
         'focalperson_id' => $focalId,
         'dv_request_id'  => $dvRequest->id,
@@ -397,37 +528,41 @@ public function receive(Request $request, $id)
         ]);
     }
     
+    // Pusher to Incoming-TUPAD dashboard
     $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-verified', [
         'dv_request_id' => $dvRequest->id,
         'status'        => $status,
         'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        'action_performer_id' => $currentUserId, // ADD THIS
-        'verified_by_user_id' => $currentUserId, // ADD THIS
+        'action_performer_id' => $currentUserId,
+        'verified_by_user_id' => $currentUserId,
     ]);
-  $attachmentData = [];
 
-   $this->saveIncomingTUPADVerificationHistory(
-            $dvRequest,
-            'verify',
-            $request->remarks ?? 'Request verified by Incoming-TUPAD',
-            [
-                'action' => 'verified',
-                'status_before' => $statusBefore,
-                'status_after'  => 'Incoming-TUPAD_verified',
-                'attachments_checked' => $attachmentData,
-                'verified_by' => $currentUserId,
-                'verified_at' => $verifiedAt->toISOString()
-            ]
-        );
+      // ✅ FIX: Make sure attachments_checked is properly saved
+    $this->saveIncomingTUPADVerificationHistory(
+        $dvRequest,
+        'verify',
+        $request->remarks ?? 'Request verified by Incoming-TUPAD',
+        [
+            'action' => 'verified',
+            'status_before' => $statusBefore,
+            'status_after'  => 'Incoming-TUPAD_verified',
+            'attachments_checked' => $attachmentData, // ✅ This should now contain the correct data
+            'verified_by' => $currentUserId,
+            'verified_at' => $verifiedAt->toISOString(),
+            'modality' => $dvRequest->tupad_modality // ✅ Also save modality for reference
+        ]
+    );
 
+    // Log action
     $this->logAction(
         $dvRequest->id,
-        'Incoming',
-        'Approved',
+        'Incoming-TUPAD_verified',
+        'Incoming-TUPAD_verified',
         $request->remarks ?? 'DV Request approved forwarded to Budget Officer.'
     );
 
     $this->triggerDashboardUpdate();
+    
     return redirect()->route('Incoming.TUPAD.index')
         ->with('success', 'DV Request Approved.');
 }
@@ -464,7 +599,7 @@ public function reject(Request $request, $id)
             'locked_by'  => null,
             'locked_at'  => null,
         ]);
-    $this->saveIncomingTUPADVerificationHistory(
+        $this->saveIncomingTUPADVerificationHistory(
                     $dvRequest,
                     'reject',
                     $remarks,
@@ -517,10 +652,8 @@ public function reject(Request $request, $id)
             $this->triggerDashboardUpdate();
 
             $responseMessage = $emailSent ?? false
-                ? 'DV request has been rejected and notification sent.' 
-                : 'DV request has been rejected but email notification failed.';
-
-
+                ? 'DV request has been rejected'
+                : 'DV request has been rejected';
 
         // ✅ Always return JSON
         return response()->json([
