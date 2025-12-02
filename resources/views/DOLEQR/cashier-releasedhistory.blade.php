@@ -23,6 +23,20 @@
         .table-hover tbody tr:hover {
             background-color: #f8fafc;
         }
+        
+        .qr-code-container {
+            max-width: 200px;
+            margin: 0 auto;
+        }
+        
+        .token-display {
+            font-family: monospace;
+            background-color: #f3f4f6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            word-break: break-all;
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -64,15 +78,13 @@
                             <option value="rejected" {{ request('step') == 'rejected' ? 'selected' : '' }}>Rejected</option>
                         </select>
                     </div>
-                    <div>
+                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Program</label>
                         <select name="program" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <option value="">All Programs</option>
-                            @foreach($programs ?? [] as $program)
-                                <option value="{{ $program->prcode }}" {{ request('program') == $program->prcode ? 'selected' : '' }}>
-                                    {{ $program->prcode }}
-                                </option>
-                            @endforeach
+                            <option value="GIP" {{ request('program') == 'GIP' ? 'selected' : '' }}>GIP</option>
+                            <option value="TUPAD" {{ request('program') == 'TUPAD' ? 'selected' : '' }}>TUPAD</option>
+                            <option value="TEV" {{ request('program') == 'TEV' ? 'selected' : '' }}>TEV</option>
                         </select>
                     </div>
                     <div>
@@ -116,7 +128,7 @@
                         <div>
                             <p class="text-sm text-green-600 font-medium">Released</p>
                             <p class="text-2xl font-bold text-green-800">
-                                {{ $releaseHistory->where('release_step', 'completed')->count() }}
+                                {{ $releaseHistory->where('release_step', 'released')->count() }}
                             </p>
                         </div>
                         <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -127,9 +139,9 @@
                 <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
                     <div class="flex justify-between items-center">
                         <div>
-                            <p class="text-sm text-yellow-600 font-medium">In Process</p>
+                            <p class="text-sm text-yellow-600 font-medium">Received</p>
                             <p class="text-2xl font-bold text-yellow-800">
-                                {{ $releaseHistory->where('transaction_step', 'processed')->count() }}
+                                {{ $releaseHistory->where('release_step', 'received')->count() }}
                             </p>
                         </div>
                         <div class="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
@@ -189,47 +201,45 @@
                                     {{ $history->dvRequest->program->prcode ?? 'N/A' }}
                                 </td>
                                 
-                                <!-- Transaction Step -->
-                                <!-- Transaction Step (FIXED) -->
-            <td class="px-4 py-3">
-                @if($history->release_step == 'received')
-                    <span class="px-2 py-1 text-xs font-medium rounded-full status-received">
-                        <i class="fas fa-inbox mr-1"></i> Received
-                    </span>
-                @elseif($history->release_step == 'processed')
-                    <span class="px-2 py-1 text-xs font-medium rounded-full status-processed">
-                        <i class="fas fa-cog mr-1"></i> Processed
-                    </span>
-                @elseif($history->release_step == 'released')
-                    <span class="px-2 py-1 text-xs font-medium rounded-full status-completed">
-                        <i class="fas fa-check-circle mr-1"></i> Released
-                    </span>
-                @else
-                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
-                        {{ ucfirst($history->release_step) }}
-                    </span>
-                @endif
-            </td>
-                                <!-- Status Change -->
+                                 <!-- Transaction Step (FIXED) -->
+                            <td class="px-4 py-3">
+                                @if($history->release_step == 'received')
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full status-received">
+                                        <i class="fas fa-inbox mr-1"></i> Received
+                                    </span>
+                                @elseif($history->release_step == 'processed')
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full status-processed">
+                                        <i class="fas fa-cog mr-1"></i> Processed
+                                    </span>
+                                @elseif($history->release_step == 'released')
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full status-completed">
+                                        <i class="fas fa-check-circle mr-1"></i> Released
+                                    </span>
+                                @else
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                                        {{ ucfirst($history->release_step) }}
+                                    </span>
+                                @endif
+                            </td>
+                            
+                                  <!-- Status Change -->
                                 <td class="px-4 py-3">
                                     <div class="flex items-center text-xs">
                                         <span class="px-2 py-1 bg-gray-100 text-gray-600 rounded">
                                             {{ $history->status_before }}
                                         </span>
-                                  
-                                        <span class="px-2 py-1 bg-green-100 text-green-700 rounded font-medium">
-                                            {{ $history->status_after }}
-                                        </span>
+                                         <i class="fas fa-arrow-right mx-2 text-gray-400"></i>
                                     </div>
                                 </td>
                                   <td class="px-4 py-3">
-                                    <div class="flex items-center text-xs">
-                                     
+                                    
+                                       
                                         <span class="px-2 py-1 bg-green-100 text-green-700 rounded font-medium">
                                             {{ $history->status_after }}
                                         </span>
-                                    </div>
+                                    
                                 </td>
+                                
                                 <!-- Remarks -->
                                 <td class="px-4 py-3 text-gray-700 max-w-xs">
                                     {{ Str::limit($history->remarks, 50) ?: '—' }}
@@ -286,7 +296,7 @@
     <!-- Details Modals -->
     @foreach($releaseHistory as $history)
     <div id="detailsModal{{ $history->id }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
-        <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
             <div class="mt-3">
                 <div class="flex justify-between items-center pb-3 border-b">
                     <h3 class="text-xl font-bold text-gray-900">Transaction Details</h3>
@@ -329,21 +339,13 @@
                         <div>
                             <p class="text-sm font-medium text-gray-500">Transaction Step</p>
                             <p class="text-base">
-                                @if($history->transaction_step == 'received')
+                                @if($history->release_step == 'received')
                                     <span class="px-2 py-1 text-xs font-medium rounded-full status-received">
                                         Received
                                     </span>
-                                @elseif($history->transaction_step == 'processed')
-                                    <span class="px-2 py-1 text-xs font-medium rounded-full status-processed">
-                                        Processed
-                                    </span>
-                                @elseif($history->transaction_step == 'completed')
+                                @elseif($history->release_step == 'released')
                                     <span class="px-2 py-1 text-xs font-medium rounded-full status-completed">
                                         Completed
-                                    </span>
-                                @elseif($history->transaction_step == 'rejected')
-                                    <span class="px-2 py-1 text-xs font-medium rounded-full status-rejected">
-                                        Rejected
                                     </span>
                                 @endif
                             </p>
@@ -360,6 +362,62 @@
                             <span class="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-sm font-medium">
                                 {{ $history->status_after }}
                             </span>
+                        </div>
+                    </div>
+
+                    <!-- QR Code and Token Section -->
+                    <div class="border-t pt-4 mt-4">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-3">QR Code Information</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- QR Code Display -->
+                            <div class="text-center">
+                                <p class="text-sm font-medium text-gray-500 mb-2">QR Code</p>
+                                <div class="qr-code-container">
+                                    @if($history->dvRequest->qr_code_data)
+                                        <img src="{{ $history->dvRequest->qr_code_data }}" 
+                                             alt="QR Code for DV {{ $history->dvRequest->dv_number }}" 
+                                             class="w-full h-auto border rounded-lg shadow-sm">
+                                    @else
+                                        <div class="bg-gray-100 rounded-lg p-8 text-center">
+                                            <i class="fas fa-qrcode text-gray-400 text-4xl mb-2"></i>
+                                            <p class="text-sm text-gray-500">QR Code not available</p>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                            
+                            <!-- Token Information -->
+                            <div>
+                                <p class="text-sm font-medium text-gray-500 mb-2">QR Token</p>
+                                <div class="token-display">
+                                    {{ $history->dvRequest->qr_code_token ?? 'No token available' }}
+                                </div>
+                                
+                                @if($history->dvRequest->qr_code_token)
+                                    <div class="mt-3 space-y-2">
+                                        <p class="text-xs text-gray-600">
+                                            <i class="fas fa-info-circle mr-1"></i>
+                                            Token Status: 
+                                            <span class="font-medium {{ $history->dvRequest->qr_status == 'active' ? 'text-green-600' : 'text-red-600' }}">
+                                                {{ ucfirst($history->dvRequest->qr_status ?? 'inactive') }}
+                                            </span>
+                                        </p>
+                                        
+                                        @if($history->dvRequest->qr_code_generated_at)
+                                            <p class="text-xs text-gray-600">
+                                                <i class="fas fa-calendar mr-1"></i>
+                                                Generated: {{ $history->dvRequest->qr_code_generated_at->timezone('Asia/Manila')->format('M d, Y h:i A') }}
+                                            </p>
+                                        @endif
+                                        
+                                     <button type="button" 
+                                            onclick="copyToken('{{ $history->dvRequest->qr_code_token }}', event)"
+                                            class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded hover:bg-indigo-200 transition duration-200 flex items-center">
+                                        <i class="fas fa-copy mr-1"></i> Copy Token
+                                    </button>
+                                    </div>
+                                @endif
+                            </div>
                         </div>
                     </div>
                     
@@ -413,6 +471,34 @@
 
         function closeDetailsModal(id) {
             document.getElementById('detailsModal' + id).classList.add('hidden');
+        }
+
+       // Copy token to clipboard - ALTERNATIVE VERSION (more robust)
+        function copyToken(token) {
+            navigator.clipboard.writeText(token).then(function() {
+                // Find the button that was clicked
+                const buttons = document.querySelectorAll('button');
+                const clickedButton = Array.from(buttons).find(btn => 
+                    btn.textContent.includes('Copy Token') || 
+                    btn.innerHTML.includes('fa-copy')
+                );
+                
+                if (clickedButton) {
+                    const originalText = clickedButton.innerHTML;
+                    clickedButton.innerHTML = '<i class="fas fa-check mr-1"></i> Copied!';
+                    clickedButton.classList.remove('bg-indigo-100', 'text-indigo-700');
+                    clickedButton.classList.add('bg-green-100', 'text-green-700');
+                    
+                    setTimeout(() => {
+                        clickedButton.innerHTML = originalText;
+                        clickedButton.classList.remove('bg-green-100', 'text-green-700');
+                        clickedButton.classList.add('bg-indigo-100', 'text-indigo-700');
+                    }, 2000);
+                }
+            }).catch(function(err) {
+                console.error('Failed to copy token: ', err);
+                alert('Failed to copy token to clipboard');
+            });
         }
 
         // Close modal when clicking outside

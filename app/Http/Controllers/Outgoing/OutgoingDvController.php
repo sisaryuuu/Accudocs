@@ -11,6 +11,7 @@ use App\Models\Mfopap;
 use App\Models\DvRequest;
 use App\Services\PusherService;
 use App\Services\SendPulseServices; // ADD SENDPULSE SERVICE
+use App\Services\IprogSmsService;
 use App\Models\GIPAttachment;
 use App\Models\TUPADAttachment;
 use App\Models\TEVAttachment;
@@ -25,11 +26,13 @@ use App\Traits\TriggersDashboardUpdate; // ADD DASHBOARD UPDATE TRAIT
 class OutgoingDvController extends Controller
 {
     protected PusherService $pusher;
+    protected IprogSmsService $smsService;
     use TriggersDashboardUpdate; // USE THE TRAIT
 
-    public function __construct(PusherService $pusher)
+    public function __construct(PusherService $pusher, IprogSmsService $smsService)
     {
         $this->pusher = $pusher;
+        $this->smsService = $smsService;
     }
 
     public function index()
@@ -37,17 +40,53 @@ class OutgoingDvController extends Controller
         return view('Outgoing.index');
     }
 
-    public function fetchDvRequests()
+    public function fetchDvRequests(Request $request)
     {
         $currentUserId = auth()->id();
         $lockDuration  = now()->subMinutes(10);
+        
+        // Get search parameter from request
+        $searchTerm = $request->input('search', '');
+
         $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'orsRequest'])
             ->whereIn('status', ['ORS_obligated','Outgoing_received']) // REMOVED: Outgoing_in_process
             ->where(function ($q) use ($currentUserId, $lockDuration) {
-            $q->whereNull('locked_by')              
-              ->orWhere('locked_by', $currentUserId)  
-              ->orWhere('locked_at', '<=', $lockDuration); 
-        })
+                $q->whereNull('locked_by')              
+                ->orWhere('locked_by', $currentUserId)  
+                ->orWhere('locked_at', '<=', $lockDuration); 
+            })
+            ->when($searchTerm, function ($query) use ($searchTerm) {
+                $query->where(function ($q) use ($searchTerm) {
+                    // Search in control number
+                    $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
+                    // Search in focal person name
+                    ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
+                        $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
+                                    ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
+                    })
+                    // Search in program code
+                    ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
+                        $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
+                    })
+                    // Search in respocenter
+                    ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
+                        $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
+                                    ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+                    })
+                    // Search in particulars
+                    ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
+                    // Search in amount (handle numeric search)
+                    ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
+                    // Search in status
+                    ->orWhere('status', 'LIKE', "%{$searchTerm}%")
+                    // Search in ORS number
+                    ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
+                        $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
+                    })
+                    // Search in DV number
+                    ->orWhere('dv_number', 'LIKE', "%{$searchTerm}%");
+                });
+            })
             ->latest()
             ->get();
 
@@ -58,6 +97,7 @@ class OutgoingDvController extends Controller
                 'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
                 'program'      => $req->program->prcode ?? 'N/A',
                 'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                'particulars'  => $req->particulars,
                 'amount'       => number_format($req->amount, 2),
                 'status'       => $req->status,
                 'date'         => $req->created_at->format('M d, Y'),
@@ -651,122 +691,220 @@ class OutgoingDvController extends Controller
         }
     }
 
-
-
-
-
-    public function reject(Request $request, $id)
+       public function reject(Request $request, $id)
     {
         $request->validate([
             'remarks' => 'required|string|max:1000',
         ]);
-
+    
         try {
             $dvRequest = DvRequest::findOrFail($id);
             $statusBefore = $dvRequest->status;
-
+    
             // ✅ Only allow rejection if status is currently in Outgoing stage
-            // UPDATED: Removed Outgoing_in_process from allowed statuses
             if (!in_array($dvRequest->status, ['Outgoing_received'])) {
                 return response()->json([
                     'success' => false,
                     'message' => 'This DV request cannot be rejected at its current stage.'
                 ], 422);
             }
-
+    
             $rejectedAt = now();
             $focalId = $dvRequest->focalperson_id;
             $remarks = trim($request->remarks);
-
-            // ✅ Update DV request
-            $dvRequest->update([
-                'status'     => 'Outgoing_rejected',
-                'locked_by'  => null,
-                'locked_at'  => null,
-            ]);
-
-            // ✅ SEND REJECTION EMAIL USING SENDPULSE
-            $this->sendRejectionEmail($dvRequest, $remarks);
-
-            // ✅ SAVE FINALIZATION HISTORY
-            $this->saveOutgoingFinalizationHistory(
-                $dvRequest,
-                'reject',
+    
+            // ✅ Initialize notification variables
+            $emailSent = false;
+            $smsSent = false;
+    
+            DB::transaction(function () use (
+                $dvRequest, 
+                $statusBefore, 
+                $rejectedAt, 
+                $request, 
+                $focalId,
                 $remarks,
-                [
-                    'status_before' => $statusBefore,
-                    'status_after' => 'Outgoing_rejected',
-                    'rejected_by' => auth()->id(),
-                    'rejected_at' => $rejectedAt->toISOString(),
-                    'rejection_reason' => $remarks
-                ]
-            );
-
-            // ✅ Log rejection
-            $this->logAction(
-                $dvRequest->id,
-                'Outgoing',
-                'Outgoing_rejected',
-                $remarks
-            );
-
-            // ✅ Notify focal person
-            Notification::create([
-                'focalperson_id' => $focalId,
-                'dv_request_id'  => $dvRequest->id,
-                'status'         => 'Outgoing_rejected',
-                'action'         => 'Rejected',
-                'remarks'        => $remarks,
-            ]);
-
-            // ✅ Real-time push to focal person
-            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => 'Outgoing_rejected',
-                'remarks'       => $remarks,
-                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-
-            // ✅ Real-time push to Outgoing dashboard
-            $this->pusher->trigger('dv-requests-outgoing', 'dv-request-rejected', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => 'Outgoing_rejected',
-                'action_performer_id' => auth()->id(), // ✅ ADD THIS
-                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
-
+                &$emailSent,
+                &$smsSent
+            ) {
+                // ✅ Update DV request
+                $dvRequest->update([
+                    'status'     => 'Outgoing_rejected',
+                    'locked_by'  => null,
+                    'locked_at'  => null,
+                ]);
+    
+                // ✅ SEND REJECTION EMAIL USING SENDPULSE
+                $emailSent = $this->sendRejectionEmail($dvRequest, $remarks);
+    
+                // ✅ NEW: SEND REJECTION SMS
+                $smsSent = $this->sendRejectionSMS($dvRequest, $remarks);
+    
+                // ✅ SAVE FINALIZATION HISTORY
+                $this->saveOutgoingFinalizationHistory(
+                    $dvRequest,
+                    'reject',
+                    $remarks,
+                    [
+                        'status_before' => $statusBefore,
+                        'status_after' => 'Outgoing_rejected',
+                        'rejected_by' => auth()->id(),
+                        'rejected_at' => $rejectedAt->toISOString(),
+                        'rejection_reason' => $remarks,
+                        'email_sent' => $emailSent,
+                        'sms_sent' => $smsSent
+                    ]
+                );
+    
+                // ✅ Log rejection
+                $this->logAction(
+                    $dvRequest->id,
+                    'Outgoing',
+                    'Outgoing_rejected',
+                    $remarks
+                );
+    
+                // ✅ Notify focal person
+                Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => 'Outgoing_rejected',
+                    'action'         => 'Rejected',
+                    'remarks'        => $remarks,
+                ]);
+    
+                // ✅ Real-time push to focal person
+                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                    'dv_request_id' => $dvRequest->id,
+                    'status'        => 'Outgoing_rejected',
+                    'remarks'       => $remarks,
+                    'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                ]);
+    
+                // ✅ Real-time push to Outgoing dashboard
+                $this->pusher->trigger('dv-requests-outgoing', 'dv-request-rejected', [
+                    'dv_request_id' => $dvRequest->id,
+                    'status'        => 'Outgoing_rejected',
+                    'action_performer_id' => auth()->id(),
+                    'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                ]);
+            });
+    
             $this->triggerDashboardUpdate(); // TRIGGER DASHBOARD UPDATE
-
+    
+            // ✅ UPDATE RESPONSE MESSAGE TO INCLUDE NOTIFICATION STATUS
+            $responseMessage = 'DV request has been rejected';
+            
+            if ($emailSent && $smsSent) {
+                $responseMessage .= ' and notifications sent.';
+            } elseif ($emailSent) {
+                $responseMessage .= ' (email sent, SMS failed).';
+            } elseif ($smsSent) {
+                $responseMessage .= ' (SMS sent, email failed).';
+            } else {
+                $responseMessage .= ' (both notifications failed).';
+            }
+    
             // ✅ Return JSON if AJAX
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'DV request has been rejected successfully.',
+                    'message' => $responseMessage,
                     'data' => [
                         'id'         => $dvRequest->id,
                         'status'     => 'Outgoing_rejected',
                         'remarks'    => $remarks,
+                        'email_sent' => $emailSent,
+                        'sms_sent'   => $smsSent
                     ]
                 ]);
             }
-
+    
             // ✅ Fallback redirect
             return redirect()->route('Outgoing.dvrequests.index')
-                             ->with('error', 'DV request has been rejected.');
-
+                             ->with('success', $responseMessage);
+    
         } catch (\Exception $e) {
             \Log::error('Error rejecting DV request: ' . $e->getMessage());
-
+    
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'An error occurred while rejecting the DV request.'
                 ], 500);
             }
-
+    
             return redirect()->back()->with('error', 'An error occurred while rejecting the DV request.');
         }
     }
+    
+    
+    /**
+ * ✅ SEND REJECTION SMS - For Outgoing rejections
+ */
+    protected function sendRejectionSMS($dvRequest, $rejectionRemarks)
+    {
+        try {
+            $focalPerson = $dvRequest->focalPerson;
+            
+            // Use 'contactnumber' instead of 'phone'
+            if (!$focalPerson || empty($focalPerson->contactnumber)) {
+                \Log::warning('Cannot send rejection SMS: focal person or contact number missing', [
+                    'dv_request_id' => $dvRequest->id,
+                    'focal_person_id' => $focalPerson->id ?? 'null',
+                    'has_contactnumber' => !empty($focalPerson->contactnumber)
+                ]);
+                return false;
+            }
+    
+            $phoneNumber = $focalPerson->contactnumber;
+            
+            // Truncate remarks for SMS (SMS has character limits)
+            $truncatedRemarks = strlen($rejectionRemarks) > 50 
+                ? substr($rejectionRemarks, 0, 47) . '...' 
+                : $rejectionRemarks;
+    
+            // ✅ Use user_sequence instead of id
+            $userSequence = $dvRequest->user_sequence ?? 'N/A';
+            $message = "Hi {$focalPerson->fname}, your DV Request #{$userSequence} has been rejected by Outgoing. Reason: {$truncatedRemarks}.";
+    
+            \Log::info('Sending Outgoing rejection SMS via iProg', [
+                'phone' => $phoneNumber,
+                'dv_request_id' => $dvRequest->id,
+                'user_sequence' => $userSequence,
+                'message_length' => strlen($message)
+            ]);
+    
+            $result = $this->smsService->sendSMS($phoneNumber, $message);
+            
+            if ($result['success']) {
+                \Log::info('Outgoing rejection SMS sent successfully', [
+                    'dv_request_id' => $dvRequest->id,
+                    'user_sequence' => $userSequence,
+                    'phone' => $phoneNumber,
+                    'message_id' => $result['message_id'] ?? 'N/A'
+                ]);
+                return true;
+            } else {
+                \Log::error('Failed to send Outgoing rejection SMS', [
+                    'dv_request_id' => $dvRequest->id,
+                    'user_sequence' => $userSequence,
+                    'phone' => $phoneNumber,
+                    'error' => $result['error'] ?? 'Unknown error'
+                ]);
+                return false;
+            }
+            
+        } catch (\Exception $e) {
+            \Log::error('Outgoing SMS rejection notification failed: ' . $e->getMessage(), [
+                'dv_request_id' => $dvRequest->id,
+                'user_sequence' => $dvRequest->user_sequence ?? 'N/A',
+                'exception' => $e->getTraceAsString()
+            ]);
+            return false;
+        }
+    }
+    
 
     public function printOfficialDv($id)
     {
@@ -874,142 +1012,187 @@ public function previewDv($id)
         }
     }
     public function generatePdf($id)
-    {
-        // Increase execution time for PDF generation
-        set_time_limit(120);
-        ini_set('memory_limit', '256M');
+{
+    try {
+        \Log::info('=== DV PDF Generation Started ===', ['id' => $id]);
+        
+        $dvRequest = DvRequest::with([
+            'program',
+            'focalPerson', 
+            'respocenter',
+            'modeOfPayments',
+            'orsRequest.uacsCodes',
+            'orsRequest.Mfopap',
+            'orsRequest.allotmentClass',
+            'orsRequest.continuingOrCurrent'
+        ])->findOrFail($id);
 
-        try {
-            \Log::info('=== DV PDF Generation Started ===', ['id' => $id]);
-            
-            $dvRequest = DvRequest::with([
-                'program',
-                'focalPerson', 
-                'respocenter',
-                'modeOfPayments',
-                'orsRequest.uacsCodes', // Make sure this relationship is correct
-                'orsRequest.AdlCode',
-                'orsRequest.Mfopap',
-                'orsRequest.allotmentClass',
-                'orsRequest.continuingOrCurrent'
-            ])->findOrFail($id);
-
-            // Add DEBUG logging for UACS codes
-            \Log::info('UACS Codes Debug', [
-                'ors_request_exists' => !is_null($dvRequest->orsRequest),
-                'ors_id' => $dvRequest->orsRequest->id ?? 'N/A',
-                'uacs_codes_loaded' => $dvRequest->orsRequest && $dvRequest->orsRequest->relationLoaded('uacsCodes'),
-                'uacs_codes_count' => $dvRequest->orsRequest && $dvRequest->orsRequest->uacsCodes ? $dvRequest->orsRequest->uacsCodes->count() : 0,
-                'uacs_codes_sample' => $dvRequest->orsRequest && $dvRequest->orsRequest->uacsCodes ? $dvRequest->orsRequest->uacsCodes->take(2)->toArray() : 'No UACS codes'
-            ]);
-
-            if ($dvRequest->status !== 'Outgoing_finalized') {
-                return redirect()->back()->with('error', 'This DV has not been finalized yet.');
-            }
-
-            if (!$dvRequest->dv_number) {
-                return redirect()->back()->with('error', 'DV Number has not been assigned yet.');
-            }
-
-            // Get payment details
-            $modeOfPayment = $dvRequest->modeOfPayments->first();
-            $paymentDetail = null;
-            
-            if (method_exists($dvRequest, 'paymentDetail')) {
-                $paymentDetail = $dvRequest->paymentDetail;
-            } elseif ($modeOfPayment && method_exists($modeOfPayment->pivot, 'paymentDetail')) {
-                $paymentDetail = $modeOfPayment->pivot->paymentDetail;
-            }
-
-            $orsRequest = $dvRequest->orsRequest;
-            
-            // Get UACS codes from ORS request (not from DV request)
-            $uacsCodes = $orsRequest && $orsRequest->uacsCodes ? $orsRequest->uacsCodes : collect();    
-
-            // ✅ EFFICIENT QR CODE HANDLING
-            $qrCode = $dvRequest->qr_code_data;
-            
-            if (!$qrCode) {
-                \Log::info('Generating QR code for DV', ['dv_no' => $dvRequest->dv_number]);
-                
-                // Generate QR code with minimal settings for performance
-                $qrCode = $this->generateDvQrCode($dvRequest->id, $dvRequest->dv_number, false); // Pass false for simple generation
-                
-                // Save for future use (but don't block PDF generation)
-                $dvRequest->update(['qr_code_data' => $qrCode]);
-                \Log::info('QR code generated and saved');
-            }
-
-            // ✅ PREPARE DATA FOR PDF
-            $data = [
-                'date' => $dvRequest->created_at->format('F d, Y'),
-                'dv_no' => $dvRequest->dv_number,
-                'mode_of_payment' => $modeOfPayment?->mopname ?? 'Not specified',
-                'payee' => $this->formatFullName(
-                    $dvRequest->focalPerson->fname ?? '',
-                    $dvRequest->focalPerson->mi ?? '',
-                    $dvRequest->focalPerson->lname ?? ''
-                ),
-                'tin' => $dvRequest->focalPerson->TIN_number ?? '___________',
-                'ors_number' => $orsRequest->ors_number ?? '___________',
-                'address' => $dvRequest->focalPerson->Address ?? 'DAVAO CITY',
-                'particulars' => $dvRequest->particulars ?? 'N/A',
-                'amount' => number_format($dvRequest->amount, 2),
-                'respocenter_code' => $dvRequest->respocenter->rccode ?? '',
-                'respocenter_desc' => $dvRequest->respocenter->description ?? '',
-                'mfocode' => $orsRequest->Mfopap->mfocode ?? '',
-                'mfodescription' => $orsRequest->Mfopap->mfodescription ?? '',
-                'bank_name' => $paymentDetail?->bank_name ?? '',
-                'bank_accnum' => $paymentDetail?->bank_accnum ?? '',
-                'bank_address' => $paymentDetail?->bank_address ?? '',
-            ];
-
-            // ✅ GET SETTINGS
-            $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
-            $accountant_name = \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT');
-            $regional_director = \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR');
-
-            \Log::info('DV PDF Data Prepared', [
-                'dv_no' => $data['dv_no'],
-                'payee' => $data['payee'],
-                'amount' => $data['amount'],
-                'uacs_count' => $uacsCodes->count(),
-                'uacs_data' => $uacsCodes->isNotEmpty() ? $uacsCodes->pluck('uacscode', 'description')->toArray() : 'No UACS data',
-                'has_qr_code' => !empty($qrCode)
-            ]);
-
-            // ✅ USE COMPACT WITH OPTIMIZED PDF OPTIONS - ADD $uacsCodes HERE
-            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.finaldv', compact(
-                'data', 
-                'imsd_head',
-                'accountant_name',
-                'regional_director',
-                'qrCode',
-                'uacsCodes' // ← ADD THIS LINE - You were missing this!
-            ))
-            ->setPaper('legal', 'portrait')
-            ->setOption('isHtml5ParserEnabled', true)
-            ->setOption('isRemoteEnabled', true) // ✅ Enable remote for QR code images
-            ->setOption('defaultFont', 'Times New Roman')
-            ->setOption('isFontSubsettingEnabled', true)
-            ->setOption('isPhpEnabled', false)
-            ->setOption('dpi', 96)
-            ->setOption('chroot', base_path());
-
-            $filename = 'DV_' . str_replace('-', '_', $dvRequest->dv_number) . '_' . now()->format('Ymd_His') . '.pdf';
-            
-            \Log::info('DV PDF Generated Successfully', ['filename' => $filename]);
-            
-            return $pdf->download($filename);
-
-        } catch (\Exception $e) {
-            \Log::error('PDF Generation Error: ' . $e->getMessage(), [
-                'dv_request_id' => $id,
-                'error' => $e->getTraceAsString()
-            ]);
-            return redirect()->back()->with('error', 'Error generating PDF: ' . $e->getMessage());
+        if ($dvRequest->status !== 'Outgoing_finalized') {
+            return redirect()->back()->with('error', 'This DV has not been finalized yet.');
         }
+
+        if (!$dvRequest->dv_number) {
+            return redirect()->back()->with('error', 'DV Number has not been assigned yet.');
+        }
+
+        // ✅ LOGO HANDLING - SAME AS YOUR ORS METHOD
+        $logo_url = null;
+        $logoPath = '/home/u203167746/domains/accudocs.accudocs.site/AccudocsProject/storage/app/public/logo/DOLE.png';
+        
+        if (file_exists($logoPath)) {
+            $imageData = file_get_contents($logoPath);
+            $base64 = base64_encode($imageData);
+            $logo_url = 'data:image/png;base64,' . $base64;
+            \Log::info('Logo loaded for DV PDF');
+        } else {
+            // Fallback SVG logo
+            $svg = '<svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+                <rect width="200" height="100" fill="#f8f9fa" stroke="#dee2e6"/>
+                <text x="100" y="50" text-anchor="middle" dy=".3em" font-family="Arial" font-size="12" fill="#6c757d">DOLE LOGO</text>
+            </svg>';
+            $logo_url = 'data:image/svg+xml;base64,' . base64_encode($svg);
+            \Log::info('Using SVG fallback logo for DV PDF');
+        }
+
+        // Get payment details
+        $modeOfPayment = $dvRequest->modeOfPayments->first();
+        $paymentDetail = null;
+        
+        if (method_exists($dvRequest, 'paymentDetail')) {
+            $paymentDetail = $dvRequest->paymentDetail;
+        } elseif ($modeOfPayment && method_exists($modeOfPayment->pivot, 'paymentDetail')) {
+            $paymentDetail = $modeOfPayment->pivot->paymentDetail;
+        }
+
+        $orsRequest = $dvRequest->orsRequest;
+        
+        // Get UACS codes from ORS request
+        $uacsCodes = $orsRequest && $orsRequest->uacsCodes ? $orsRequest->uacsCodes : collect();    
+
+        // ✅ QR CODE HANDLING
+        $qrCode = $dvRequest->qr_code_data;
+        
+        if (!$qrCode) {
+            \Log::info('Generating QR code for DV', ['dv_no' => $dvRequest->dv_number]);
+            $qrCode = $this->generateDvQrCode($dvRequest->id, $dvRequest->dv_number);
+            $dvRequest->update(['qr_code_data' => $qrCode]);
+            \Log::info('QR code generated and saved');
+        }
+
+        // ✅ PREPARE UACS DATA AS STRUCTURED ARRAY - SAME AS YOUR ORS METHOD
+        $uacsItems = [];
+        foreach ($uacsCodes as $uacs) {
+            $amount = $uacs->pivot->amount ?? 0;
+            $uacsItems[] = [
+                'code' => $uacs->uacscode ?? '',
+                'description' => $uacs->description ?? '',
+                'amount' => $amount
+            ];
+        }
+
+        // ✅ PREPARE DATA FOR PDF
+        $data = [
+            'date' => $dvRequest->created_at->format('F d, Y'),
+            'dv_no' => $dvRequest->dv_number,
+            'mode_of_payment' => $modeOfPayment?->mopname ?? 'Not specified',
+            'payee' => $this->formatFullName(
+                $dvRequest->focalPerson->fname ?? '',
+                $dvRequest->focalPerson->mi ?? '',
+                $dvRequest->focalPerson->lname ?? ''
+            ),
+            'tin' => $dvRequest->focalPerson->TIN_number ?? '___________',
+            'ors_number' => $orsRequest->ors_number ?? '___________',
+            'address' => $dvRequest->focalPerson->Address ?? 'DAVAO CITY',
+            'particulars' => $dvRequest->particulars ?? 'N/A',
+            'amount' => number_format($dvRequest->amount, 2),
+            'respocenter_code' => $dvRequest->respocenter->rccode ?? '',
+            'respocenter_desc' => $dvRequest->respocenter->description ?? '',
+            'mfocode' => $orsRequest->Mfopap->mfocode ?? '',
+            'mfodescription' => $orsRequest->Mfopap->mfodescription ?? '',
+            'bank_name' => $paymentDetail?->bank_name ?? '',
+            'bank_accnum' => $paymentDetail?->bank_accnum ?? '',
+            'bank_address' => $paymentDetail?->bank_address ?? '',
+            'responsibility_center' => $dvRequest->respocenter ? 
+                ($dvRequest->respocenter->rccode . ' - ' . $dvRequest->respocenter->description) : '',
+            'mfo' => $orsRequest->Mfopap ? 
+                ($orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription) : '',
+            'uacs_items' => $uacsItems, // ✅ STRUCTURED UACS DATA
+            'ors_no' => $dvRequest->orsRequest->ors_number ?? '____________',
+            'logo_url' => $logo_url // ✅ ADD LOGO URL TO DATA
+        ];
+
+        // ✅ GET SETTINGS
+        $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
+        $accountant_name = \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT');
+        $regional_director = \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR');
+        $budget_officer = \App\Models\Setting::get('budget_officer', 'BUDGET OFFICER\'S NAME');
+
+        // Prepare status data for the table
+        $status = [
+            [
+                'date' => $dvRequest->created_at->format('m/d/Y'),
+                'particulars' => $dvRequest->particulars ?? '',
+                'ref_no' => $dvRequest->orsRequest->ors_number ?? '____________',
+                'obligation' => number_format($dvRequest->amount, 2),
+                'payment' => '',
+                'due_status' => 'Not yet Due'
+            ]
+        ];
+
+        \Log::info('DV PDF Data Prepared', [
+            'dv_no' => $data['dv_no'],
+            'payee' => $data['payee'],
+            'amount' => $data['amount'],
+            'uacs_count' => count($data['uacs_items'])
+        ]);
+
+        // ✅ USE MANUAL DOMPDF INSTANCE LIKE YOUR ORS METHOD
+        $dompdf = new \Dompdf\Dompdf();
+        
+        // Set options directly
+        $options = new \Dompdf\Options();
+        $options->set('defaultFont', 'Times New Roman');
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', false); // ← CRITICAL: Set to false for base64 images
+        $options->set('isFontSubsettingEnabled', true);
+        $options->set('chroot', base_path());
+        $options->set('tempDir', sys_get_temp_dir());
+        $options->set('fontDir', storage_path('fonts'));
+        $options->set('fontCache', storage_path('fonts'));
+        
+        $dompdf->setOptions($options);
+        $dompdf->setPaper('Legal', 'portrait');
+
+        // Load HTML content - INCLUDE LOGO_URL IN COMPACT
+        $html = view('pdf.finaldv', compact(
+            'data', 
+            'imsd_head',
+            'accountant_name',
+            'regional_director',
+            'budget_officer',
+            'qrCode',
+            'status',
+            'uacsCodes',
+            'logo_url' // ✅ ADD THIS
+        ))->render();
+
+        $dompdf->loadHtml($html);
+        $dompdf->render();
+
+        $filename = 'DV_' . str_replace('-', '_', $dvRequest->dv_number) . '_' . now()->format('Ymd_His') . '.pdf';
+        
+        \Log::info('DV PDF Generated Successfully', ['filename' => $filename]);
+        
+        return $dompdf->stream($filename);
+
+    } catch (\Exception $e) {
+        \Log::error('PDF Generation Error: ' . $e->getMessage(), [
+            'dv_request_id' => $id,
+            'error' => $e->getTraceAsString()
+        ]);
+        return redirect()->back()->with('error', 'Error generating PDF: ' . $e->getMessage());
     }
+}
 
 // Keep your helper method
 private function formatFullName($fname, $mi, $lname)

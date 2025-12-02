@@ -9,19 +9,6 @@
         <p class="text-gray-600">Real-time monitoring of DV request activities</p>
     </div>
     <div class="flex space-x-3">
-        <!-- Date Filter -->
-        <div class="flex items-center space-x-2">
-            <input type="date" id="startDate" class="border rounded px-3 py-2 text-sm">
-            <span class="text-gray-500">to</span>
-            <input type="date" id="endDate" class="border rounded px-3 py-2 text-sm">
-            <button onclick="applyDateFilter()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">
-                Apply Filter
-            </button>
-            <button onclick="clearDateFilter()" class="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600">
-                Clear
-            </button>
-        </div>
-        
         <!-- Manual Refresh Button -->
         <button onclick="manualRefresh()" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 flex items-center space-x-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -40,76 +27,99 @@
     </div>
     <div class="flex-1 bg-white p-4 rounded-lg shadow text-center">
         <h2 class="text-lg font-semibold">Pending</h2>
-        <p class="text-2xl font-bold text-yellow-600" id="kpi-pending">{{ $pendingRequests }}</p>
+        <p class="text-2xl font-bold text-yellow-600" id="kpi-pending">{{ $pendingRequests ?? 0 }}</p>
     </div>
     <div class="flex-1 bg-white p-4 rounded-lg shadow text-center">
         <h2 class="text-lg font-semibold">Approved</h2>
-        <p class="text-2xl font-bold text-green-600" id="kpi-approved">{{ $approvedRequests }}</p>
+        <p class="text-2xl font-bold text-green-600" id="kpi-approved">{{ $approvedRequests ?? 0 }}</p>
     </div>
     <div class="flex-1 bg-white p-4 rounded-lg shadow text-center">
         <h2 class="text-lg font-semibold">Rejected</h2>
-        <p class="text-2xl font-bold text-red-600" id="kpi-rejected">{{ $rejectedRequests }}</p>
+        <p class="text-2xl font-bold text-red-600" id="kpi-rejected">{{ $rejectedRequests ?? 0 }}</p>
     </div>
     <div class="flex-1 bg-white p-4 rounded-lg shadow text-center">
-        <h2 class="text-lg font-semibold">Avg. Processing Time</h2>
-        <p class="text-2xl font-bold text-purple-600" id="kpi-avg-time">
-            @php
-                $minutes = round($averageProcessingTime);
-                $hours = floor($minutes / 60);
-                $mins = $minutes % 60;
-                echo $hours > 0 ? "{$hours}h {$mins}m" : "{$mins}m";
-            @endphp
-        </p>
+       <h3 class="text-sm font-medium text-purple-800">Average Processing Time</h3>
+                <p class="text-2xl font-bold text-purple-600" id="sla-avg-days">{{ round($slaAnalysis['avg_working_days'], 1) }} days</p>
     </div>
 </div>
+
 <!-- SLA Compliance Section -->
 <div class="bg-white p-4 rounded-lg shadow mt-6">
-    <h2 class="text-lg font-semibold mb-4">10-Working-Day SLA Compliance</h2>
+    <h2 class="text-lg font-semibold mb-4">10-Working-Day Processing Time Summary</h2>
     
     @if(isset($slaAnalysis) && $slaAnalysis['total_completed_requests'] > 0)
         <!-- SLA KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div class="bg-blue-50 p-4 rounded-lg border text-center">
                 <h3 class="text-sm font-medium text-blue-800">Total Completed</h3>
-                <p class="text-2xl font-bold text-blue-600">{{ $slaAnalysis['total_completed_requests'] }}</p>
+                <p class="text-2xl font-bold text-blue-600" id="sla-total">{{ $slaAnalysis['total_completed_requests'] }}</p>
             </div>
             
             <div class="bg-green-50 p-4 rounded-lg border text-center">
-                <h3 class="text-sm font-medium text-green-800">Within SLA</h3>
-                <p class="text-2xl font-bold text-green-600">{{ $slaAnalysis['within_sla'] }}</p>
+                <h3 class="text-sm font-medium text-green-800">Processed Within 10 Days</h3>
+                <p class="text-2xl font-bold text-green-600" id="sla-within">{{ $slaAnalysis['within_sla'] }}</p>
             </div>
             
             <div class="bg-red-50 p-4 rounded-lg border text-center">
-                <h3 class="text-sm font-medium text-red-800">SLA Violations</h3>
-                <p class="text-2xl font-bold text-red-600">{{ $slaAnalysis['sla_violations'] }}</p>
+                <h3 class="text-sm font-medium text-red-800">Exceeded 10 Days</h3>
+                <p class="text-2xl font-bold text-red-600" id="sla-violations">{{ $slaAnalysis['sla_violations'] }}</p>
             </div>
             
             <div class="bg-purple-50 p-4 rounded-lg border text-center">
-                <h3 class="text-sm font-medium text-purple-800">Avg. Processing</h3>
-                <p class="text-2xl font-bold text-purple-600">{{ $slaAnalysis['avg_working_days'] }} days</p>
+                <h3 class="text-sm font-medium text-purple-800">Average Processing Time</h3>
+                <p class="text-2xl font-bold text-purple-600" id="sla-avg-days">{{ round($slaAnalysis['avg_working_days'], 1) }} days</p>
             </div>
         </div>
 
         <!-- Compliance Rate -->
-        <div class="mb-6">
-            <div class="flex justify-between items-center mb-2">
-                <span class="text-sm font-medium text-gray-700">SLA Compliance Rate</span>
-                <span class="text-sm font-bold {{ $slaAnalysis['violation_rate_percent'] == 0 ? 'text-green-600' : ($slaAnalysis['violation_rate_percent'] <= 10 ? 'text-yellow-600' : 'text-red-600') }}">
-                    {{ 100 - $slaAnalysis['violation_rate_percent'] }}%
-                </span>
-            </div>
-            <div class="w-full bg-gray-200 rounded-full h-4">
-                <div class="h-4 rounded-full {{ $slaAnalysis['violation_rate_percent'] == 0 ? 'bg-green-500' : ($slaAnalysis['violation_rate_percent'] <= 10 ? 'bg-yellow-500' : 'bg-red-500') }}" 
-                     style="width: {{ 100 - $slaAnalysis['violation_rate_percent'] }}%">
-                </div>
-            </div>
-            <div class="flex justify-between text-xs text-gray-500 mt-1">
-                <span>0%</span>
-                <span>Target: 90%+</span>
-                <span>100%</span>
+       <!-- Replace the existing Compliance Rate section with this enhanced version -->
+<div class="mb-6">
+    <div class="flex justify-between items-center mb-2">
+        <span class="text-sm font-medium text-gray-700">On-Time Rate</span>
+        <div class="flex items-center space-x-2">
+            <span class="text-sm font-bold" id="sla-compliance-rate-text">
+                {{ 100 - $slaAnalysis['violation_rate_percent'] }}%
+            </span>
+            <span class="text-xs px-2 py-1 rounded-full" id="sla-compliance-status">
+                @php
+                    $complianceRate = 100 - $slaAnalysis['violation_rate_percent'];
+                    $status = $complianceRate >= 75 ? 'Target Met' : 'Below Target';
+                    $bgColor = $complianceRate >= 90 ? 'bg-green-100 text-green-800' : 
+                               ($complianceRate >= 75 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800');
+                @endphp
+                <span class="{{ $bgColor }}">{{ $status }}</span>
+            </span>
+        </div>
+    </div>
+    
+    <!-- Progress Bar Container -->
+    <div class="w-full bg-gray-200 rounded-full h-4 relative">
+        <!-- Target Line -->
+        <div class="absolute top-0 bottom-0 w-0.5 bg-gray-700" style="left: 75%; transform: translateX(-50%);">
+            <div class="absolute -top-6 text-xs text-gray-600 font-medium whitespace-nowrap" style="left: 50%; transform: translateX(-50%);">
+                Target
             </div>
         </div>
-
+        
+        <!-- Progress Bar -->
+        <div class="h-4 rounded-full transition-all duration-500 ease-in-out" 
+             id="sla-progress-bar"
+             style="width: {{ 100 - $slaAnalysis['violation_rate_percent'] }}%;
+                    @php
+                        $rate = 100 - $slaAnalysis['violation_rate_percent'];
+                        $color = $rate >= 90 ? '#10b981' : ($rate >= 75 ? '#3b82f6' : '#ef4444');
+                    @endphp
+                    background-color: {{ $color }};">
+        </div>
+    </div>
+    
+    <!-- Progress Labels -->
+    <div class="flex justify-between text-xs text-gray-500 mt-1">
+        <span>0%</span>
+        <span class="text-gray-700 font-medium">Target: 75%</span>
+        <span>100%</span>
+    </div>
+</div>
         <!-- Worst Performers -->
         @if($slaAnalysis['worst_performer'] > 10)
             <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -135,6 +145,7 @@
         </div>
     @endif
 </div>
+
 <!-- Charts Section -->
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
     <!-- Requests per Program -->
@@ -168,29 +179,44 @@
             <canvas id="monthlyRequestsChart"></canvas>
         </div>
     </div>
+</div>
+
+<!-- Staff Performance Chart -->
+<div class="bg-white p-4 rounded-lg shadow mb-8">
+    <h2 class="text-lg font-semibold mb-4">Accounting Staff Performance Trends</h2>
     
-    <!-- Staff Performance -->
-    <div class="bg-white p-4 rounded-lg shadow">
-        <h2 class="text-lg font-semibold mb-4">Accounting Staff Performance</h2>
-        <div class="chart-container" style="height: 300px;">
-            <canvas id="staffPerformanceChart"></canvas>
-        </div>
+    <!-- Add toggle for different views -->
+    <div class="flex space-x-2 mb-4">
+        <button onclick="toggleStaffView('productivity')" id="btn-productivity" class="px-3 py-1 text-sm bg-blue-600 text-white rounded">
+            Productivity
+        </button>
+        <button onclick="toggleStaffView('efficiency')" id="btn-efficiency" class="px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded">
+            Efficiency
+        </button>
+        <button onclick="toggleStaffView('workload')" id="btn-workload" class="px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded">
+            Workload Distribution
+        </button>
     </div>
     
-  <!-- Bottleneck Chart - Complete Roles -->
-<div class="bg-white p-4 rounded-lg shadow">
+    <div class="chart-container" style="height: 300px;">
+        <canvas id="staffPerformanceChart"></canvas>
+    </div>
+</div>
+
+<!-- Bottleneck Chart -->
+<div class="bg-white p-4 rounded-lg shadow mb-8">
     <h2 class="text-lg font-semibold mb-4">Workflow Bottlenecks by Role (Processing Time)</h2>
-    
     <div class="chart-container" style="height: 300px;">
         <canvas id="bottleneckChart"></canvas>
     </div>
+</div>
 
 <!-- Insights -->
 <div class="bg-white p-4 rounded-lg shadow mt-6">
     <h2 class="text-lg font-semibold mb-2">Insights & Highlights</h2>
     <ul class="list-disc list-inside text-gray-700" id="insights-list">
         @foreach($insights as $insight)
-            <li>{{ $insight }}</li>
+            <li>{!! $insight !!}</li>
         @endforeach
     </ul>
 </div>
@@ -255,8 +281,12 @@ const DashboardConfig = {
     refreshInterval: 30000, // 30 seconds fallback
 };
 
-// Chart instances
 let charts = {};
+let staffCharts = {
+    productivity: null,
+    efficiency: null,
+    workload: null
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeDashboard();
@@ -294,37 +324,100 @@ function initializeCharts() {
         }
     };
 
-    // Requests per Program Chart
-    const requestsPerProgramCtx = document.getElementById('requestsPerProgram').getContext('2d');
-    charts.requestsPerProgram = new Chart(requestsPerProgramCtx, {
+    // Initialize all main charts
+    initRequestsPerProgramChart();
+    initBudgetPerProgramChart();
+    initDocumentsPerRoleChart();
+    initMonthlyRequestsChart();
+    initBottleneckChart();
+    initStaffPerformanceChart();
+
+    // Add window resize handler to maintain chart sizes
+    window.addEventListener('resize', function() {
+        Object.values(charts).forEach(chart => {
+            if (chart && typeof chart.resize === 'function') {
+                chart.resize();
+            }
+        });
+        if (staffCharts.productivity && typeof staffCharts.productivity.resize === 'function') {
+            staffCharts.productivity.resize();
+        }
+    });
+}
+function initRequestsPerProgramChart() {
+    const ctx = document.getElementById('requestsPerProgram');
+    if (!ctx) return;
+
+    const labels = @json($requestsPerProgram->keys());
+    const data = @json($requestsPerProgram->values());
+
+    charts.requestsPerProgram = new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: {
-            labels: @json($requestsPerProgram->keys()),
+            labels: labels,
             datasets: [{
                 label: 'Requests',
-                data: @json($requestsPerProgram->values()),
-                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16']
-            }]
-        },
-        options: commonChartOptions
-    });
-
-    // Budget per Program Chart
-    const budgetPerProgramCtx = document.getElementById('budgetPerProgram').getContext('2d');
-    charts.budgetPerProgram = new Chart(budgetPerProgramCtx, {
-        type: 'bar',
-        data: {
-            labels: @json($budgetPerProgram->keys()),
-            datasets: [{
-                label: 'Budget (₱)',
-                data: @json($budgetPerProgram->values()),
+                data: data,
                 backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16']
             }]
         },
         options: {
-            ...commonChartOptions,
+            responsive: true,
+            maintainAspectRatio: false,
             plugins: {
-                ...commonChartOptions.plugins,
+                legend: {
+                    position: 'top',
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Programs',   // X-axis label
+                        font: {
+                            size: 14,
+                        }
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Number of Requests', // Y-axis label
+                        font: {
+                            size: 14,
+                        }
+                    },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function initBudgetPerProgramChart() {
+    const ctx = document.getElementById('budgetPerProgram');
+    if (!ctx) return;
+    
+    const labels = @json($budgetPerProgram->keys());
+    const data = @json($budgetPerProgram->values());
+    
+    charts.budgetPerProgram = new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Budget (₱)',
+                data: data,
+                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
                 tooltip: {
                     callbacks: {
                         label: function(context) {
@@ -332,28 +425,68 @@ function initializeCharts() {
                         }
                     }
                 }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Program',
+                        font: {
+                            size: 14,
+
+                        },
+                        padding: {top: 10}
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 0
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Amount (₱)',
+                        font: {
+                            size: 14,
+                        },
+                        padding: {bottom: 10}
+                    },
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            if (value >= 1000000) {
+                                return '₱' + (value / 1000000).toFixed(1) + 'M';
+                            } else if (value >= 1000) {
+                                return '₱' + (value / 1000).toFixed(1) + 'K';
+                            }
+                            return '₱' + value;
+                        }
+                    }
+                }
             }
         }
     });
+}
 
-    // Documents per Role Chart
-    const documentsPerRoleCtx = document.getElementById('documentsPerRole').getContext('2d');
-    charts.documentsPerRole = new Chart(documentsPerRoleCtx, {
+function initDocumentsPerRoleChart() {
+    const ctx = document.getElementById('documentsPerRole');
+    if (!ctx) return;
+    
+    const labels = @json($documentsPerRole->keys());
+    const data = @json($documentsPerRole->values());
+    
+    charts.documentsPerRole = new Chart(ctx.getContext('2d'), {
         type: 'pie',
         data: {
-            labels: @json($documentsPerRole->keys()),
+            labels: labels,
             datasets: [{
-                data: @json($documentsPerRole->values()),
+                data: data,
                 backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16']
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: {
-                duration: 1000,
-                easing: 'easeInOutQuart'
-            },
             plugins: {
                 legend: {
                     position: 'bottom',
@@ -361,183 +494,398 @@ function initializeCharts() {
             }
         }
     });
+}
 
-    // Monthly Requests Chart
-    const monthlyRequestsCtx = document.getElementById('monthlyRequestsChart').getContext('2d');
-    charts.monthlyRequests = new Chart(monthlyRequestsCtx, {
+function initMonthlyRequestsChart() {
+    const ctx = document.getElementById('monthlyRequestsChart');
+    if (!ctx) return;
+    
+    const labels = @json($monthlyRequests->keys());
+    const data = @json($monthlyRequests->values());
+    
+    charts.monthlyRequests = new Chart(ctx.getContext('2d'), {
         type: 'line',
         data: {
-            labels: @json($monthlyRequests->keys()),
+            labels: labels,
             datasets: [{
                 label: 'Requests',
-                data: @json($monthlyRequests->values()),
+                data: data,
                 borderColor: '#3b82f6',
                 backgroundColor: 'rgba(59,130,246,0.2)',
                 fill: true,
                 tension: 0.4
             }]
         },
-        options: commonChartOptions
-    });
-
-    // Staff Performance Chart (Fixed)
-    const staffPerformanceCtx = document.getElementById('staffPerformanceChart').getContext('2d');
-    charts.staffPerformance = new Chart(staffPerformanceCtx, {
-        type: 'line',
-        data: {
-            labels: @json($staffPerformance->pluck('month_label')),
-            datasets: [{
-                label: 'Average Requests Handled per Month',
-                data: @json($staffPerformance->pluck('total_requests')),
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59,130,246,0.2)',
-                fill: true,
-                tension: 0.4,
-                pointRadius: 5,
-                pointHoverRadius: 7
-            }]
-        },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: {
-                duration: 1000,
-                easing: 'easeInOutQuart'
-            },
-            plugins: {
-                legend: { position: 'top' }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Number of Requests'
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Month'
-                    }
-                }
-            }
-        }
-    });
-
-    // Bottleneck Chart - Per Role (Fixed Initialization)
-const bottleneckCtx = document.getElementById('bottleneckChart').getContext('2d');
-
-// Handle the data safely
-const bottleneckLabels = {!! json_encode($bottlenecks->pluck('role_name')) !!};
-const bottleneckData = {!! json_encode($bottlenecks->pluck('avg_hours')) !!};
-const bottleneckProcessed = {!! json_encode($bottlenecks->pluck('total_processed')) !!};
-
-// Ensure we have valid data
-const hasBottleneckData = bottleneckLabels.length > 0 && bottleneckData.some(val => val > 0);
-
-if (hasBottleneckData) {
-    charts.bottleneck = new Chart(bottleneckCtx, {
-        type: 'bar',
-        data: {
-            labels: bottleneckLabels,
-            datasets: [{
-                label: 'Avg Processing Time (hours)',
-                data: bottleneckData,
-                backgroundColor: [
-                    '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16'
-                ],
-                borderColor: [
-                    '#dc2626', '#ea580c', '#d97706', '#ca8a04', '#65a30d'
-                ],
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: {
-                duration: 1000,
-                easing: 'easeInOutQuart'
-            },
             plugins: {
                 legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        afterLabel: function(context) {
-                            const index = context.dataIndex;
-                            return `Requests Processed: ${bottleneckProcessed[index]}`;
-                        }
-                    }
+                    position: 'top',
                 }
             },
             scales: {
-                y: {
-                    beginAtZero: true,
+                x: {
                     title: {
                         display: true,
-                        text: 'Hours'
-                    }
-                },
-                x: {
+                        text: 'Month',
+                        font: {
+                            size: 14,
+                        },
+                        padding: {top: 10}
+                    },
                     ticks: {
                         maxRotation: 45,
                         minRotation: 0
                     }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Requests',
+                        font: {
+                            size: 14,
+
+                        },
+                        padding: {bottom: 10}
+                    },
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0 // Only show whole numbers
+                    }
                 }
             }
         }
     });
-} else {
-    // Create empty chart with message
-    charts.bottleneck = new Chart(bottleneckCtx, {
-        type: 'bar',
-        data: {
-            labels: ['No data available'],
-            datasets: [{
-                label: 'Avg Processing Time (hours)',
-                data: [0],
-                backgroundColor: ['#6b7280'],
-                borderColor: ['#374151'],
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: { enabled: false }
-            },
-            scales: {
-                y: { beginAtZero: true },
-                x: { ticks: { maxRotation: 45, minRotation: 0 } }
-            }
-        }
-    });
-    
-    // Add a message to the canvas
-    setTimeout(() => {
-        bottleneckCtx.font = '16px Arial';
-        bottleneckCtx.fillStyle = '#6b7280';
-        bottleneckCtx.textAlign = 'center';
-        bottleneckCtx.fillText('Waiting for bottleneck data...', 
-            bottleneckCtx.canvas.width / 2, 
-            bottleneckCtx.canvas.height / 2
-        );
-    }, 100);
 }
 
-    // Add window resize handler to maintain chart sizes
-    window.addEventListener('resize', function() {
-        Object.values(charts).forEach(chart => {
-            if (chart) {
-                chart.resize();
+
+function initBottleneckChart() {
+    const ctx = document.getElementById('bottleneckChart');
+    if (!ctx) return;
+    
+    const bottlenecks = @json($bottlenecks ?? []);
+    
+    if (bottlenecks.length > 0) {
+        const labels = bottlenecks.map(b => b.role_name || b.staff_name);
+        const data = bottlenecks.map(b => b.avg_hours || 0);
+        
+        charts.bottleneck = new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Avg Processing Time (hours)',
+                    data: data,
+                    backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.parsed.y.toFixed(1)} hours`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Roles',
+                            font: {
+                                size: 14,
+
+                            },
+                            padding: {top: 10}
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 0
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Hours',
+                            font: {
+                                size: 14,
+                            },
+                            padding: {bottom: 10}
+                        },
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toFixed(1) + ' hrs';
+                            }
+                        }
+                    }
+                }
             }
         });
-    });
+    } else {
+        // Create empty state
+        ctx.getContext('2d').font = '16px Arial';
+        ctx.getContext('2d').fillStyle = '#6b7280';
+        ctx.getContext('2d').textAlign = 'center';
+        ctx.getContext('2d').fillText('No bottleneck data available', ctx.width / 2, ctx.height / 2);
+    }
+}
+
+function initStaffPerformanceChart() {
+    const ctx = document.getElementById('staffPerformanceChart');
+    if (!ctx) return;
+    
+    const staffData = @json($staffPerformance['individual_metrics'] ?? []);
+    const workloadData = @json($staffPerformance['workload_by_role'] ?? []);
+    
+    if (staffData.length > 0) {
+        updateStaffChartByView('productivity', staffData, workloadData);
+    } else {
+        // Create empty state
+        ctx.getContext('2d').font = '16px Arial';
+        ctx.getContext('2d').fillStyle = '#6b7280';
+        ctx.getContext('2d').textAlign = 'center';
+        ctx.getContext('2d').fillText('No staff performance data available', ctx.width / 2, ctx.height / 2);
+    }
+}
+
+// Staff View Functions
+function getActiveStaffView() {
+    if (document.getElementById('btn-productivity').classList.contains('bg-blue-600')) {
+        return 'productivity';
+    } else if (document.getElementById('btn-efficiency').classList.contains('bg-blue-600')) {
+        return 'efficiency';
+    } else if (document.getElementById('btn-workload').classList.contains('bg-blue-600')) {
+        return 'workload';
+    }
+    return 'productivity'; // default
+}
+
+function updateStaffChartByView(view, staffData, workloadData) {
+    const ctx = document.getElementById('staffPerformanceChart');
+    if (!ctx) return;
+    
+    // Destroy existing chart
+    if (staffCharts.productivity) {
+        staffCharts.productivity.destroy();
+    }
+    
+    if (view === 'productivity') {
+        // Productivity View
+        const labels = staffData.slice(0, 10).map(s => `${s.first_name} ${s.last_name}`);
+        const documentsData = staffData.slice(0, 10).map(s => s.documents_processed || 0);
+        
+        staffCharts.productivity = new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Documents Processed',
+                    data: documentsData,
+                    backgroundColor: '#3b82f6'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    title: { display: true, text: 'Top 10 Unit by Productivity' }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Accounting Unit',
+                            font: {
+                                size: 14,
+                            },
+                            padding: {top: 10}
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 0
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Documents Processed',
+                            font: {
+                                size: 14,
+
+                            },
+                            padding: {bottom: 10}
+                        },
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0 // Only show whole numbers
+                        }
+                    }
+                }
+            }
+        });
+        
+    } else if (view === 'efficiency') {
+        // Efficiency View
+        const efficientStaff = staffData
+            .filter(s => (s.avg_processing_hours || 0) > 0)
+            .sort((a, b) => (a.avg_processing_hours || 0) - (b.avg_processing_hours || 0))
+            .slice(0, 10);
+            
+        const labels = efficientStaff.map(s => `${s.first_name} ${s.last_name}`);
+        const efficiencyData = efficientStaff.map(s => s.avg_processing_hours || 0);
+        
+        staffCharts.productivity = new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Avg Processing Time (hours)',
+                    data: efficiencyData,
+                    backgroundColor: '#10b981'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    title: { display: true, text: 'Top 10 Most Efficient Unit' }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Accounting Unit',
+                            font: {
+                                size: 14,
+
+                            },
+                            padding: {top: 10}
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 0
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Hours',
+                            font: {
+                                size: 14,
+
+                            },
+                            padding: {bottom: 10}
+                        },
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toFixed(1) + ' hrs';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+    } else if (view === 'workload') {
+        // Workload Distribution View
+        const labels = workloadData.map(w => w.role || 'Unknown');
+        const workloadCounts = workloadData.map(w => w.total_documents || 0);
+        
+        staffCharts.productivity = new Chart(ctx.getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: workloadCounts,
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+                    borderWidth: 1,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    title: { 
+                        display: true, 
+                        text: 'Workload Distribution by Role',
+                        padding: {
+                            bottom: 20
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = Math.round((value / total) * 100);
+                                return `${label}: ${value} documents (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+function toggleStaffView(view) {
+    const ctx = document.getElementById('staffPerformanceChart');
+    if (!ctx) return;
+    
+    // Update button states
+    document.getElementById('btn-productivity').className = 
+        view === 'productivity' ? 'px-3 py-1 text-sm bg-blue-600 text-white rounded' : 'px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded';
+    document.getElementById('btn-efficiency').className = 
+        view === 'efficiency' ? 'px-3 py-1 text-sm bg-blue-600 text-white rounded' : 'px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded';
+    document.getElementById('btn-workload').className = 
+        view === 'workload' ? 'px-3 py-1 text-sm bg-blue-600 text-white rounded' : 'px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded';
+    
+    const staffData = @json($staffPerformance['individual_metrics'] ?? []);
+    const workloadData = @json($staffPerformance['workload_by_role'] ?? []);
+    
+    updateStaffChartByView(view, staffData, workloadData);
+}
+
+// Make toggle function available globally
+window.toggleStaffView = toggleStaffView;
+
+function updateStaffPerformanceCharts(data) {
+    if (data && data.staffPerformance) {
+        // Destroy existing staff chart if it exists
+        if (staffCharts.productivity) {
+            staffCharts.productivity.destroy();
+        }
+        
+        const staffData = data.staffPerformance.individual_metrics || [];
+        const workloadData = data.staffPerformance.workload_by_role || [];
+        const ctx = document.getElementById('staffPerformanceChart');
+        
+        if (!ctx || staffData.length === 0) return;
+        
+        // Get current active view
+        const activeView = getActiveStaffView();
+        updateStaffChartByView(activeView, staffData, workloadData);
+    }
 }
 
 function initializeRealTimeUpdates() {
@@ -621,214 +969,277 @@ function updateDashboard(data) {
         return;
     }
     
-    // Update KPI cards with animation
-    animateValue('kpi-total', data.totalRequests || 0);
-    animateValue('kpi-pending', data.pendingRequests || 0);
-    animateValue('kpi-approved', data.approvedRequests || 0);
-    animateValue('kpi-rejected', data.rejectedRequests || 0);
+    // Update KPI cards with animation - with null checks
+    safelyAnimateValue('kpi-total', data.totalRequests || 0);
+    safelyAnimateValue('kpi-pending', data.pendingRequests || 0);
+    safelyAnimateValue('kpi-approved', data.approvedRequests || 0);
+    safelyAnimateValue('kpi-rejected', data.rejectedRequests || 0);
 
-
-      updateSLACompliance(data.slaAnalysis || {});
-
-    // Update average processing time
-    const minutes = Math.round(data.averageProcessingTime || 0);
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    document.getElementById('kpi-avg-time').textContent = 
-        hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-
-    // Update basic charts safely
-    if (charts.requestsPerProgram && data.requestsPerProgram) {
-        updateChartData(charts.requestsPerProgram, 
-            Object.keys(data.requestsPerProgram), 
-            Object.values(data.requestsPerProgram)
-        );
+    // Update SLA compliance - check if SLA data exists
+   if (data.slaAnalysis) {
+        // Animate the rate percentage change using animateRateChange
+        const newRate = 100 - (data.slaAnalysis.violation_rate_percent || 0);
+        safelyAnimateValue('sla-compliance-rate-text', newRate);
+        
+        // Update all SLA elements
+        updateSLACompliance(data.slaAnalysis);
     }
 
-    if (charts.budgetPerProgram && data.budgetPerProgram) {
-        updateChartData(charts.budgetPerProgram, 
-            Object.keys(data.budgetPerProgram), 
-            Object.values(data.budgetPerProgram)
-        );
-    }
-
-    if (charts.documentsPerRole && data.documentsPerRole) {
-        updateChartData(charts.documentsPerRole, 
-            Object.keys(data.documentsPerRole), 
-            Object.values(data.documentsPerRole)
-        );
-    }
-
-    if (charts.monthlyRequests && data.monthlyRequests) {
-        updateChartData(charts.monthlyRequests, 
-            Object.keys(data.monthlyRequests), 
-            Object.values(data.monthlyRequests)
-        );
-    }
-
-    // Update staff performance chart safely
-    if (charts.staffPerformance && data.staffPerformance) {
-        try {
-            charts.staffPerformance.data.labels = data.staffPerformance.map(d => d.month_label || d.staff_name);
-            charts.staffPerformance.data.datasets[0].data = data.staffPerformance.map(d => d.total_requests || d.total_processed || 0);
-            charts.staffPerformance.update('none');
-        } catch (error) {
-            console.error('Error updating staff performance chart:', error);
+    try {
+        if (charts.requestsPerProgram && data.requestsPerProgram) {
+            updateChartData(charts.requestsPerProgram, 
+                Object.keys(data.requestsPerProgram), 
+                Object.values(data.requestsPerProgram)
+            );
         }
-    }
 
-    // FIXED: Update bottleneck chart safely - handle both role_name and staff_name
-    if (charts.bottleneck && data.bottlenecks) {
-        try {
-            // Handle both role_name (new) and staff_name (old) for compatibility
-            const labels = data.bottlenecks.map(d => d.role_name || d.staff_name);
-            const hoursData = data.bottlenecks.map(d => d.avg_hours || 0);
-            
-            charts.bottleneck.data.labels = labels;
-            charts.bottleneck.data.datasets[0].data = hoursData;
-            charts.bottleneck.update('none');
-            
-            console.log('✅ Bottleneck chart updated:', { labels, hoursData });
-        } catch (error) {
-            console.error('Error updating bottleneck chart:', error);
-            // If update fails, reinitialize the chart
-            reinitializeBottleneckChart(data.bottlenecks);
+        if (charts.budgetPerProgram && data.budgetPerProgram) {
+            updateChartData(charts.budgetPerProgram, 
+                Object.keys(data.budgetPerProgram), 
+                Object.values(data.budgetPerProgram)
+            );
         }
-    }
 
-    // Update insights
-    updateInsights(data.insights || []);
+        if (charts.documentsPerRole && data.documentsPerRole) {
+            updateChartData(charts.documentsPerRole, 
+                Object.keys(data.documentsPerRole), 
+                Object.values(data.documentsPerRole)
+            );
+        }
+
+        if (charts.monthlyRequests && data.monthlyRequests) {
+            updateChartData(charts.monthlyRequests, 
+                Object.keys(data.monthlyRequests), 
+                Object.values(data.monthlyRequests)
+            );
+        }
+
+        // Update staff performance chart safely
+        if (data.staffPerformance) {
+            updateStaffPerformanceCharts(data);
+        }
+
+        // Update bottleneck chart safely
+        if (charts.bottleneck && data.bottlenecks) {
+            try {
+                const labels = data.bottlenecks.map(d => d.role_name || d.staff_name);
+                const hoursData = data.bottlenecks.map(d => d.avg_hours || 0);
+                
+                charts.bottleneck.data.labels = labels;
+                charts.bottleneck.data.datasets[0].data = hoursData;
+                charts.bottleneck.update('none');
+            } catch (error) {
+                console.error('Error updating bottleneck chart:', error);
+            }
+        }
+
+
+        // Update insights
+        updateInsights(data.insights || []);
+        
+    } catch (error) {
+        console.error('Error updating charts:', error);
+    }
     
     console.log('✅ Dashboard updated successfully');
 }
-function updateSLACompliance(slaData) {
-    if (!slaData || !slaData.total_completed_requests || slaData.total_completed_requests === 0) {
+
+// Helper function to safely animate values
+function safelyAnimateValue(elementId, newValue) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+        console.warn(`Element with ID ${elementId} not found`);
         return;
     }
-    
-    // Update SLA KPIs if elements exist
-    const elements = {
-        'sla-total': slaData.total_completed_requests,
-        'sla-within': slaData.within_sla,
-        'sla-violations': slaData.sla_violations,
-        'sla-avg-days': slaData.avg_working_days,
-        'sla-compliance-rate': 100 - slaData.violation_rate_percent
-    };
-    
-    Object.entries(elements).forEach(([id, value]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            if (id === 'sla-compliance-rate') {
-                element.textContent = `${value}%`;
-            } else if (id === 'sla-avg-days') {
-                element.textContent = `${value} days`;
-            } else {
-                element.textContent = value;
-            }
+    animateValue(elementId, newValue);
+}
+
+// Also add this helper function at the top level
+function safeUpdateElement(id, value, isHTML = false) {
+    const element = document.getElementById(id);
+    if (element) {
+        if (isHTML) {
+            element.innerHTML = value;
+        } else {
+            element.textContent = value;
         }
-    });
-    
-    // Update progress bar
-    const progressBar = document.querySelector('.h-4.rounded-full');
-    const complianceRate = 100 - slaData.violation_rate_percent;
-    
-    if (progressBar) {
-        progressBar.style.width = `${complianceRate}%`;
-        
-        // Update color based on compliance
-        progressBar.className = 'h-4 rounded-full ' + (
-            complianceRate >= 90 ? 'bg-green-500' :
-            complianceRate >= 80 ? 'bg-yellow-500' :
-            'bg-red-500'
-        );
-    }
-    
-    // Update worst performer alert
-    const worstPerformerAlert = document.querySelector('.bg-yellow-50');
-    if (worstPerformerAlert && slaData.worst_performer > 10) {
-        const span = worstPerformerAlert.querySelector('span');
-        if (span) {
-            span.textContent = `Worst case: ${slaData.worst_performer} working days`;
-        }
+    } else {
+        console.warn(`Element ${id} not found`);
     }
 }
 
-// Add this function to handle chart reinitialization if needed
-function reinitializeBottleneckChart(bottlenecksData) {
-    try {
-        const bottleneckCtx = document.getElementById('bottleneckChart').getContext('2d');
+function updateSLACompliance(slaData) {
+    if (!slaData || !slaData.total_completed_requests || slaData.total_completed_requests === 0) {
+        console.warn('No SLA data available');
+        return;
+    }
+    
+    // Calculate on-time rate
+    const onTimeRate = 100 - (slaData.violation_rate_percent || 0);
+    const targetRate = 75;
+    
+    // Update basic elements
+    const elements = {
+        'sla-total': { value: slaData.total_completed_requests, isHTML: false },
+        'sla-within': { value: slaData.within_sla, isHTML: false },
+        'sla-violations': { value: slaData.sla_violations, isHTML: false },
+        'sla-avg-days': { value: `${parseFloat(slaData.avg_working_days).toFixed(1)} days`, isHTML: false },
+        'sla-compliance-rate-text': { value: `${onTimeRate.toFixed(1)}%`, isHTML: false }
+    };
+    
+    Object.entries(elements).forEach(([id, config]) => {
+        safeUpdateElement(id, config.value, config.isHTML);
+    });
+    
+    // Update progress bar
+    const progressBar = document.getElementById('sla-progress-bar');
+    if (progressBar) {
+        // Get previous width
+        const prevWidth = parseFloat(progressBar.style.width) || 0;
         
-        // Destroy existing chart if it exists
-        if (charts.bottleneck) {
-            charts.bottleneck.destroy();
+        // Update with animation
+        progressBar.style.width = `${onTimeRate}%`;
+        
+        // Update color based on compliance
+        let bgColor;
+        let textColor;
+        
+        if (onTimeRate >= 90) {
+            bgColor = '#10b981'; // Green
+            textColor = 'rate-excellent';
+        } else if (onTimeRate >= targetRate) {
+            bgColor = '#3b82f6'; // Blue
+            textColor = 'rate-good';
+        } else if (onTimeRate >= 60) {
+            bgColor = '#f59e0b'; // Orange
+            textColor = 'rate-warning';
+        } else {
+            bgColor = '#ef4444'; // Red
+            textColor = 'rate-poor';
         }
         
-        // Handle both role_name (new) and staff_name (old) for compatibility
-        const labels = bottlenecksData.map(d => d.role_name || d.staff_name);
-        const hoursData = bottlenecksData.map(d => d.avg_hours || 0);
-        const processedData = bottlenecksData.map(d => d.total_processed || 0);
+        progressBar.style.backgroundColor = bgColor;
         
-        charts.bottleneck = new Chart(bottleneckCtx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Avg Processing Time (hours)',
-                    data: hoursData,
-                    backgroundColor: [
-                        '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16'
-                    ],
-                    borderColor: [
-                        '#dc2626', '#ea580c', '#d97706', '#ca8a04', '#65a30d'
-                    ],
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: {
-                    duration: 1000,
-                    easing: 'easeInOutQuart'
-                },
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        callbacks: {
-                            afterLabel: function(context) {
-                                const index = context.dataIndex;
-                                return `Requests Processed: ${processedData[index]}`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Hours'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            maxRotation: 45,
-                            minRotation: 0
-                        }
-                    }
-                }
+        // Add animation class
+        progressBar.classList.add('progress-update');
+        setTimeout(() => {
+            progressBar.classList.remove('progress-update');
+        }, 1000);
+        
+        // Add visual feedback for improvement/decline
+        if (onTimeRate > prevWidth) {
+            showRateChange('improvement', onTimeRate - prevWidth);
+        } else if (onTimeRate < prevWidth) {
+            showRateChange('decline', prevWidth - onTimeRate);
+        }
+    }
+    
+    // Update compliance status badge
+    updateComplianceStatusBadge(onTimeRate, targetRate);
+    
+    // Update worst performer if exists
+    if (slaData.worst_performer > 10) {
+        updateWorstPerformer(slaData.worst_performer);
+    }
+}
+
+function updateComplianceStatusBadge(onTimeRate, targetRate) {
+    const statusElement = document.getElementById('sla-compliance-status');
+    if (!statusElement) return;
+    
+    let statusText, bgClass, textClass;
+    
+    if (onTimeRate >= 90) {
+        statusText = 'Excellent';
+        bgClass = 'bg-green-100';
+        textClass = 'text-green-800';
+    } else if (onTimeRate >= targetRate) {
+        statusText = 'Target Met';
+        bgClass = 'bg-blue-100';
+        textClass = 'text-blue-800';
+    } else if (onTimeRate >= 60) {
+        statusText = 'Needs Improvement';
+        bgClass = 'bg-yellow-100';
+        textClass = 'text-yellow-800';
+    } else {
+        statusText = 'Below Target';
+        bgClass = 'bg-red-100';
+        textClass = 'text-red-800';
+    }
+    
+    // Add change animation
+    statusElement.classList.add('status-change');
+    
+    statusElement.innerHTML = `
+        <span class="${bgClass} ${textClass} px-2 py-1 rounded-full text-xs font-medium">
+            ${statusText}
+        </span>
+    `;
+    
+    // Remove animation class after animation completes
+    setTimeout(() => {
+        statusElement.classList.remove('status-change');
+    }, 500);
+}
+
+function showRateChange(type, amount) {
+    if (Math.abs(amount) < 0.1) return; // Ignore very small changes
+    
+    const progressBar = document.getElementById('sla-progress-bar');
+    if (!progressBar) return;
+    
+    // Create change indicator
+    const changeIndicator = document.createElement('div');
+    changeIndicator.className = `absolute -top-8 text-xs font-bold whitespace-nowrap ${
+        type === 'improvement' ? 'text-green-600' : 'text-red-600'
+    }`;
+    changeIndicator.innerHTML = `${type === 'improvement' ? '↑' : '↓'} ${Math.abs(amount).toFixed(1)}%`;
+    changeIndicator.style.left = '50%';
+    changeIndicator.style.transform = 'translateX(-50%)';
+    
+    progressBar.parentElement.style.position = 'relative';
+    progressBar.parentElement.appendChild(changeIndicator);
+    
+    // Animate and remove
+    setTimeout(() => {
+        changeIndicator.style.transition = 'all 0.5s ease-out';
+        changeIndicator.style.opacity = '0';
+        changeIndicator.style.transform = 'translateX(-50%) translateY(-10px)';
+        
+        setTimeout(() => {
+            if (changeIndicator.parentNode) {
+                changeIndicator.parentNode.removeChild(changeIndicator);
             }
-        });
-        
-        console.log('✅ Bottleneck chart reinitialized');
-    }  catch (error) {
-        console.error('❌ Failed to fetch latest data:', error);
-        showNotification('Failed to refresh data', 'error');
-        
-        // Don't stop real-time updates on single failure
-        console.log('🔄 Continuing real-time updates despite error...');
+        }, 500);
+    }, 1500);
+}
+
+function updateWorstPerformer(days) {
+    const worstCaseContainer = document.querySelector('.bg-yellow-50');
+    if (!worstCaseContainer) {
+        // Create warning container if it doesn't exist
+        const slaContainer = document.querySelector('.bg-white.p-4.rounded-lg.shadow.mt-6');
+        if (slaContainer && days > 10) {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-4';
+            warningDiv.innerHTML = `
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-yellow-800 font-medium">
+                        Attention: Worst case processing time is ${days} working days
+                    </span>
+                </div>
+            `;
+            slaContainer.appendChild(warningDiv);
+        }
+    } else if (days > 10) {
+        // Update existing warning
+        const span = worstCaseContainer.querySelector('span');
+        if (span) {
+            span.textContent = `Attention: Worst case processing time is ${days} working days`;
+        }
     }
 }
 
@@ -843,7 +1254,6 @@ function updateChartData(chart, labels, data) {
         }
     }
 }
-
 function updateInsights(insights) {
     const insightList = document.getElementById('insights-list');
     if (insightList && insights) {
@@ -851,13 +1261,48 @@ function updateInsights(insights) {
         
         insights.forEach(text => {
             const li = document.createElement('li');
-            li.textContent = text;
+            li.innerHTML = text; // Use innerHTML instead of textContent
             li.className = 'fade-in';
             insightList.appendChild(li);
         });
     }
 }
 
+function animateRateChange(elementId, newValue) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    // Extract current value from element text
+    const currentText = element.textContent.trim();
+    const currentValue = parseFloat(currentText.replace('%', '')) || 0;
+    
+    const duration = 800;
+    const startTime = performance.now();
+    
+    function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Easing function for smooth animation
+        let easeOut;
+        if (progress < 0.5) {
+            easeOut = 2 * progress * progress;
+        } else {
+            easeOut = -1 + (4 - 2 * progress) * progress;
+        }
+        
+        const value = currentValue + (newValue - currentValue) * easeOut;
+        element.textContent = value.toFixed(1) + '%';
+        
+        if (progress < 1) {
+            requestAnimationFrame(update);
+        } else {
+            element.textContent = newValue.toFixed(1) + '%';
+        }
+    }
+    
+    requestAnimationFrame(update);
+}
 function animateValue(elementId, newValue) {
     const element = document.getElementById(elementId);
     if (!element) return;
@@ -931,63 +1376,19 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-// Manual refresh function - FIXED
+// Manual refresh function
 async function manualRefresh() {
     try {
         showNotification('Refreshing dashboard data...', 'info');
-        
-        // Option 1: Full page reload (simplest)
         location.reload();
-        
     } catch (error) {
         console.error('❌ Manual refresh failed:', error);
         showNotification('Refresh failed. Please try again.', 'error');
     }
 }
 
-async function applyDateFilter() {
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
-    
-    if (!startDate || !endDate) {
-        showNotification('Please select both start and end dates', 'warning');
-        return;
-    }
-    
-    try {
-        showNotification('Applying date filter...', 'info');
-        
-        const response = await fetch(`{{ route('admin.dashboard.filter') }}?start_date=${startDate}&end_date=${endDate}`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            updateDashboard(result.data);
-            showNotification('Date filter applied successfully', 'success');
-        } else {
-            throw new Error(result.message || 'Failed to apply filter');
-        }
-    } catch (error) {
-        console.error('❌ Filter application failed:', error);
-        showNotification('Filter failed to apply', 'error');
-    }
-}
-
-function clearDateFilter() {
-    document.getElementById('startDate').value = '';
-    document.getElementById('endDate').value = '';
-    fetchLatestData();
-    showNotification('Filters cleared', 'info');
-}
-
 // Export functions for global access
 window.manualRefresh = manualRefresh;
-window.applyDateFilter = applyDateFilter;
-window.clearDateFilter = clearDateFilter;
 
 console.log('🚀 Dashboard initialized');
 </script>

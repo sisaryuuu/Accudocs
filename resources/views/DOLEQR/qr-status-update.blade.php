@@ -645,6 +645,48 @@
                                 <div class="status-message info" style="margin-top: 15px;">
                                     <p><strong>Note:</strong> This is your second scan to complete the transaction</p>
                                 </div>
+                            @elseif($dvRequest->status === 'Cashier_released')
+                                <!-- Transaction Complete State -->
+                                <div class="status-message success">
+                                    <div style="text-align: center; margin-bottom: 20px;">
+                                        <h4 style="color: #155724; margin-bottom: 15px; font-size: 24px;">Transaction Complete!</h4>
+                                    </div>
+                                    <p style="text-align: center; font-size: 16px; margin-bottom: 20px;">
+                                        Payment has been successfully released. The disbursement voucher process is now complete.
+                                    </p>
+                                    
+                                    <div style="background: rgba(255,255,255,0.7); padding: 15px; border-radius: 10px; margin: 15px 0;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                            <span style="font-weight: 600; color: #2c3e50;">DV Number:</span>
+                                            <span style="font-weight: 700; color: #2c3e50;">{{ $dvRequest->dv_number }}</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                            <span style="font-weight: 600; color: #2c3e50;">Payee:</span>
+                                            <span style="font-weight: 700; color: #2c3e50;">{{ $dvRequest->focalPerson->fname ?? 'N/A' }} {{ $dvRequest->focalPerson->lname ?? 'N/A' }}</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                            <span style="font-weight: 600; color: #2c3e50;">Amount Released:</span>
+                                            <span style="font-weight: 700; color: #28a745; font-size: 18px;">₱{{ number_format($dvRequest->amount, 2) }}</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between;">
+                                            <span style="font-weight: 600; color: #2c3e50;">Program:</span>
+                                            <span style="font-weight: 700; color: #2c3e50; text-align: right;">{{ $dvRequest->program->prcode ?? 'N/A' }} - {{ $dvRequest->program->description ?? 'N/A' }}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <p style="text-align: center; color: #28a745; font-weight: 600; margin-top: 15px;">
+                                        ✅ This transaction has been fully processed and completed
+                                    </p>
+                                    
+                                    <div class="action-buttons" style="margin-top: 20px;">
+                                        <button class="btn btn-scan" onclick="scanAnotherQR()">
+                                            <span>📷 Scan Another QR Code</span>
+                                        </button>
+                                        <button class="btn btn-receive" onclick="goToDashboard()">
+                                            <span>📊 Go to Dashboard</span>
+                                        </button>
+                                    </div>
+                                </div>
                             @else
                                 <div class="status-message info">
                                     <h4>⏳ Waiting for Regional Director</h4>

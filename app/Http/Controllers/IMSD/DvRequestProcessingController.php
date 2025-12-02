@@ -7,12 +7,11 @@ use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
+use App\Services\IprogSmsService;
 use App\Notifications\DvRequestRejected;
-use App\Models\TUPADAttachment;
 use App\Models\DocumentAgingAlert;
 use App\Models\IMSDVerificationHistory;
 use App\Models\DvRequestHistory;
-use App\Models\TEVAttachment;
 use App\Models\Notification;
 use App\Traits\TriggersDashboardUpdate;
 use Illuminate\Http\Request;
@@ -22,15 +21,20 @@ use Illuminate\Support\Facades\DB;
 class DvRequestProcessingController extends Controller
 {
     protected PusherService $pusher;
+    protected IprogSmsService $smsService;
+    
+    
+    
     use TriggersDashboardUpdate;
     
-    public function __construct(PusherService $pusher)
+    public function __construct(PusherService $pusher, IprogSmsService $smsService)
     {
         $this->pusher = $pusher;
+        $this->smsService = $smsService;
     }
 
-        // Index method: list all DV requests pending IMSD processing
-        public function index(Request $request)
+    // Index method: list all DV requests pending IMSD processing
+    public function index(Request $request)
     {
         $currentUserId = auth()->id();
         $lockDuration = now()->subMinutes(10);
@@ -57,8 +61,7 @@ class DvRequestProcessingController extends Controller
             });
         }
 
-        // Changed from desc to asc to show newest at bottom
-        $dvRequests = $query->orderBy('created_at', 'asc')->paginate(10);
+        $dvRequests = $query->orderBy('created_at', 'desc')->paginate(10);
 
         return view('RegionalOffices.IMSD.index', compact('dvRequests'));
     }
@@ -91,14 +94,13 @@ class DvRequestProcessingController extends Controller
             });
         }
 
-        // Changed from latest() to oldest() or orderBy asc
-        $dvRequests = $query->orderBy('created_at', 'asc')->get();
+        $dvRequests = $query->latest()->get();
 
         $result = $dvRequests->map(function ($request) {
             $base = [
                 'id'             => $request->id,
                 'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT): '—', 
-                'submitted_by'   => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+                'submitted_by'   => trim(($request->payee_fname ?? $request->focalPerson->fname) . ' ' . ($request->payee_lname ?? $request->focalPerson->lname)),
                 'submitted_to'   => auth()->id(),
                 'program'        => $request->program->prcode ?? 'N/A',
                 'respocenter'    => $request->respocenter->rccode ?? 'N/A',
@@ -123,9 +125,6 @@ class DvRequestProcessingController extends Controller
             'accountingUnit',
             'program',
             'focalPerson',
-            'gipAttachments',
-            'tupadAttachments',
-            'tevAttachments',
             'logs'
         ])
         ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD', 'TEV']))
@@ -146,305 +145,546 @@ class DvRequestProcessingController extends Controller
             ]);
         }
 
-        $checklistItems = [];
-
-        if ($dvRequest->program->prcode === 'GIP') {
-            $checklistItems = [
-                'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
-                'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
-                'Birth Certificate', 'Internship Agreement', 'Evaluation Form-GIP',
-            ];
-
-            foreach ($checklistItems as $item) {
-                $dvRequest->gipAttachments()->firstOrCreate(['name' => $item], ['is_present' => false]);
-            }
-        }
-
-        $tupadAttachments = collect();
-        if ($dvRequest->program->prcode === 'TUPAD' && $dvRequest->tupad_modality) {
-            $tupadAttachments = $dvRequest->tupadAttachments()
-                ->where('modality', $dvRequest->tupad_modality)
-                ->orderBy('sort_order')
-                ->get();
-        }
-
-        $tevAttachments = collect();
-        if ($dvRequest->program->prcode === 'TEV' && $dvRequest->tev_modality) {
-            $tevAttachments = $dvRequest->tevAttachments()
-                ->where('modality', $dvRequest->tev_modality)
-                ->orderBy('sort_order')
-                ->get();
-        }
-
         $lastLog = $dvRequest->logs()->latest()->first();
         $lastStep = $lastLog ? $lastLog->action : 'Submitted';
 
         return view('RegionalOffices.IMSD.verifydv', compact(
             'dvRequest',
-            'checklistItems',
-            'tupadAttachments',
-            'tevAttachments',
             'lastStep'
         ));
     }
+    
+public function bulkReceive(Request $request)
+{
+    try {
+        $request->validate([
+            'dv_request_ids' => 'required|array|min:1',
+            'dv_request_ids.*' => 'required|integer|exists:dv_requests,id'
+        ]);
 
-    public function receive(Request $request, $id)
-    {
+        $dvRequestIds = $request->dv_request_ids;
+        $currentUserId = auth()->id();
+        $receivedAt = now();
+        
+        $results = [
+            'success' => [],
+            'failed' => [],
+            'skipped' => []
+        ];
+
+        DB::beginTransaction();
+
         try {
-            if ($request->expectsJson() || $request->ajax()) {
-                if (!$request->isMethod('POST')) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Method not allowed.'
-                    ], 405);
+            $dvRequests = DvRequest::whereIn('id', $dvRequestIds)->get();
+
+            foreach ($dvRequests as $dvRequest) {
+                // Check if already processed
+                if ($dvRequest->status !== 'submitted') {
+                    $results['skipped'][] = [
+                        'id' => $dvRequest->id,
+                        'control_number' => $dvRequest->accounting_control_number 
+                            ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                            : 'Pending-CN',
+                        'reason' => 'Already processed (Status: ' . $dvRequest->status . ')'
+                    ];
+                    continue;
                 }
-            }
 
-            $dvRequest = DvRequest::findOrFail($id);
-            $statusBefore = $dvRequest->status;
-            $receivedAt = now();
-            
-            if ($dvRequest->status !== 'submitted') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This request cannot be received in its current status: ' . $dvRequest->status
-                ], 422);
-            }
-            
-            $controlNumber = $dvRequest->accounting_control_number 
-                ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
-                : 'Pending-CN';
-            
-            $userName = auth()->user()->name ?? 'IMSD User';
-            $currentUserId = auth()->id();
-            
-            DB::beginTransaction();
-            
-            try {
-                // Status changed directly to IMSD_received (ready for verification)
-                $dvRequest->update([
-                    'status'            => 'IMSD_received',
-                    'accountingunit_id' => $currentUserId,
-                    'received_by'       => $currentUserId,
-                    'received_at'       => $receivedAt,
-                    'locked_by'         => $currentUserId,
-                    'locked_at'         => $receivedAt,
-                ]);
-                
-                $this->saveVerificationHistory(
-                    $dvRequest,
-                    'receive',
-                    'Request officially received by IMSD',
-                    [
-                        'status_before' => $statusBefore,
-                        'status_after'  => 'IMSD_received',
-                        'received_by'   => $currentUserId,
-                        'received_at'   => $receivedAt->toISOString(),
-                    ]
-                );
-
-                $this->logAction(
-                    $dvRequest->id,
-                    'IMSD',
-                    'IMSD_received',
-                    'Request officially received by IMSD'
-                );
-                
-                $focalId = $dvRequest->focalperson_id;
-                if ($focalId) {
-                    Notification::create([
-                        'focalperson_id' => $focalId,
-                        'dv_request_id'  => $dvRequest->id,
-                        'status'         => 'IMSD_received',
-                        'action'         => 'Received',
-                        'remarks'        => 'Request officially received by IMSD',
-                    ]);
+                try {
+                    $statusBefore = $dvRequest->status;
                     
-                    try {
-                        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                    // Update to IMSD_received
+                    $dvRequest->update([
+                        'status' => 'IMSD_received',
+                        'accountingunit_id' => $currentUserId,
+                        'received_by' => $currentUserId,
+                        'received_at' => $receivedAt,
+                        'locked_by' => $currentUserId,
+                        'locked_at' => $receivedAt,
+                    ]);
+
+                    // Log action
+                    $this->logAction(
+                        $dvRequest->id,
+                        'IMSD',
+                        'IMSD_received',
+                        'Request officially received by IMSD'
+                    );
+
+                    // Save verification history
+                    $this->saveVerificationHistory(
+                        $dvRequest,
+                        'receive',
+                        'Bulk received by IMSD',
+                        [
+                            'status_before' => $statusBefore,
+                            'status_after'  => 'IMSD_received',
+                            'received_by'   => $currentUserId,
+                            'received_at'   => $receivedAt->toISOString(),
+                            'is_bulk'       => true,
+                        ]
+                    );
+
+                    // Notify focal person
+                    $focalId = $dvRequest->focalperson_id;
+                    if ($focalId) {
+                        Notification::create([
+                            'focalperson_id' => $focalId,
                             'dv_request_id' => $dvRequest->id,
-                            'status'        => 'IMSD_received',
-                            'isRejected'    => false,
-                            'remarks'       => 'Request officially received by IMSD',
-                            'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                            'status' => 'IMSD_received',
+                            'action' => 'Received',
+                            'remarks' => 'Bulk received by IMSD',
+                        ]);
+
+                        // Pusher notification to focal person
+                        try {
+                            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                                'dv_request_id' => $dvRequest->id,
+                                'status' => 'IMSD_received',
+                                'isRejected' => false,
+                                'remarks' => 'Bulk received by IMSD',
+                                'timestamp' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                            ]);
+                        } catch (\Exception $pusherError) {
+                            \Log::warning('Pusher notification failed for DV #' . $dvRequest->id);
+                        }
+                    }
+
+                    // 🔥 BROADCAST TO IMSD CHANNEL - This makes it disappear for other users immediately
+                    try {
+                        $this->pusher->trigger('dv-requests-imsd', 'dv-request-received', [
+                            'dv_request_id' => $dvRequest->id,
+                            'control_number' => $dvRequest->accounting_control_number 
+                                ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                                : 'Pending-CN',
+                            'received_by' => auth()->user()->name ?? 'IMSD User',
+                            'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                            'locked_by' => $currentUserId,
+                            'locked_at' => $receivedAt->toISOString(),
                         ]);
                     } catch (\Exception $pusherError) {
-                        \Log::warning('Pusher focal notification failed: ' . $pusherError->getMessage());
+                        \Log::warning('Pusher IMSD broadcast failed for DV #' . $dvRequest->id);
                     }
+
+                    $results['success'][] = [
+                        'id' => $dvRequest->id,
+                        'control_number' => $dvRequest->accounting_control_number 
+                            ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                            : 'Pending-CN'
+                    ];
+
+                } catch (\Exception $e) {
+                    \Log::error('Failed to receive DV #' . $dvRequest->id . ': ' . $e->getMessage());
+                    $results['failed'][] = [
+                        'id' => $dvRequest->id,
+                        'control_number' => $dvRequest->accounting_control_number 
+                            ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                            : 'Pending-CN',
+                        'error' => $e->getMessage()
+                    ];
                 }
+            }
+
+            DB::commit();
+            $this->triggerDashboardUpdate();
+
+            // Broadcast bulk update to IMSD channel
+            try {
+                $this->pusher->trigger('dv-requests-imsd', 'bulk-operation-completed', [
+                    'operation' => 'bulk_receive',
+                    'success_count' => count($results['success']),
+                    'failed_count' => count($results['failed']),
+                    'skipped_count' => count($results['skipped']),
+                    'timestamp' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'processed_ids' => array_column($results['success'], 'id'),
+                    'performed_by' => $currentUserId, // 🔥 Add this line
+                ]);
+            } catch (\Exception $pusherError) {
+                \Log::warning('Pusher bulk notification failed: ' . $pusherError->getMessage());
+            }
+
+            $message = sprintf(
+                'Bulk receive completed: %d succeeded, %d failed, %d skipped',
+                count($results['success']),
+                count($results['failed']),
+                count($results['skipped'])
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'results' => $results
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed: ' . implode(', ', array_flatten($e->errors()))
+        ], 422);
+
+    } catch (\Exception $e) {
+        \Log::error('Bulk receive error: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred during bulk receive: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+  public function bulkVerify(Request $request)
+{
+    try {
+        $request->validate([
+            'dv_request_ids' => 'required|array|min:1',
+            'dv_request_ids.*' => 'required|integer|exists:dv_requests,id',
+            'remarks' => 'nullable|string|max:1000'
+        ]);
+
+        $dvRequestIds = $request->dv_request_ids;
+        $remarks = $request->remarks ?? 'Request verified by IMSD';
+        $verifiedAt = now();
+        $currentUserId = auth()->id();
+        
+        $results = [
+            'success' => [],
+            'failed' => [],
+            'skipped' => []
+        ];
+
+        DB::beginTransaction();
+
+        try {
+            $dvRequests = DvRequest::whereIn('id', $dvRequestIds)->get();
+
+            foreach ($dvRequests as $dvRequest) {
+                // Check if can be verified
+                if (!in_array($dvRequest->status, ['IMSD_received', 'IMSD_in_process'])) {
+                    $results['skipped'][] = [
+                        'id' => $dvRequest->id,
+                        'control_number' => $dvRequest->accounting_control_number 
+                            ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                            : 'Pending-CN',
+                        'reason' => 'Cannot verify (Status: ' . $dvRequest->status . ')'
+                    ];
+                    continue;
+                }
+
+                try {
+                    $statusBefore = $dvRequest->status;
+                    
+                    // Update to IMSD_verified
+                    $dvRequest->update([
+                        'status' => 'IMSD_verified',
+                        'locked_by' => null,
+                        'locked_at' => null,
+                    ]);
+
+                    // Log action
+                    $this->logAction(
+                        $dvRequest->id,
+                        'IMSD',
+                        'Approved',
+                        $remarks
+                    );
+
+                    // Save verification history
+                    $this->saveVerificationHistory(
+                        $dvRequest,
+                        'verify',
+                        $remarks,
+                        [
+                            'action'             => 'verified',
+                            'status_before'      => $statusBefore,
+                            'status_after'       => 'IMSD_verified',
+                            'verified_by'        => $currentUserId,
+                            'verified_at'        => $verifiedAt->toISOString(),
+                            'is_bulk'            => true,
+                        ]
+                    );
+
+                    // Notify focal person
+                    $focalId = $dvRequest->focalperson_id;
+                    if ($focalId) {
+                        Notification::create([
+                            'focalperson_id' => $focalId,
+                            'dv_request_id' => $dvRequest->id,
+                            'status' => 'IMSD_verified',
+                            'action' => 'Approved',
+                            'remarks' => $remarks,
+                        ]);
+
+                        // Pusher notification to focal person
+                        try {
+                            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                                'dv_request_id' => $dvRequest->id,
+                                'status' => 'IMSD_verified',
+                                'isRejected' => false,
+                                'remarks' => $remarks,
+                                'timestamp' => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                            ]);
+                        } catch (\Exception $pusherError) {
+                            \Log::warning('Pusher notification failed for DV #' . $dvRequest->id);
+                        }
+                    }
+
+                    // Notify program-specific channel
+                    $programCode = $dvRequest->program->prcode;
+                    $channelMap = [
+                        'GIP' => 'dv-requests-incoming-gip',
+                        'TEV' => 'dv-requests-incoming-tev',
+                        'TUPAD' => 'dv-requests-incoming-tupad',
+                    ];
+
+                    if (isset($channelMap[$programCode])) {
+                        try {
+                            $this->pusher->trigger($channelMap[$programCode], 'dv-request-submitted', [
+                                'dv_request_id' => $dvRequest->id,
+                                'status' => 'IMSD_verified',
+                                'submitted_by' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                                'program' => $programCode,
+                                'timestamp' => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                            ]);
+                        } catch (\Exception $pusherError) {
+                            \Log::warning('Program channel notification failed for DV #' . $dvRequest->id);
+                        }
+                    }
+
+                    $results['success'][] = [
+                        'id' => $dvRequest->id,
+                        'control_number' => $dvRequest->accounting_control_number 
+                            ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                            : 'Pending-CN'
+                    ];
+
+                } catch (\Exception $e) {
+                    \Log::error('Failed to verify DV #' . $dvRequest->id . ': ' . $e->getMessage());
+                    $results['failed'][] = [
+                        'id' => $dvRequest->id,
+                        'control_number' => $dvRequest->accounting_control_number 
+                            ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                            : 'Pending-CN',
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+
+            DB::commit();
+            $this->triggerDashboardUpdate();
+
+            // Broadcast bulk update to IMSD channel
+            try {
+                $this->pusher->trigger('dv-requests-imsd', 'bulk-operation-completed', [
+                    'operation' => 'bulk_verify',
+                    'success_count' => count($results['success']),
+                    'failed_count' => count($results['failed']),
+                    'skipped_count' => count($results['skipped']),
+                    'timestamp' => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'processed_ids' => array_column($results['success'], 'id'),
+                    'performed_by' => $currentUserId, // 🔥 Add this line
+                ]);
+            } catch (\Exception $pusherError) {
+                \Log::warning('Pusher bulk notification failed: ' . $pusherError->getMessage());
+            }
+
+            $message = sprintf(
+                'Bulk verify completed: %d succeeded, %d failed, %d skipped',
+                count($results['success']),
+                count($results['failed']),
+                count($results['skipped'])
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'results' => $results
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed: ' . implode(', ', array_flatten($e->errors()))
+        ], 422);
+
+    } catch (\Exception $e) {
+        \Log::error('Bulk verify error: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred during bulk verify: ' . $e->getMessage()
+        ], 500);
+    }
+}
+  public function receive(Request $request, $id)
+{
+    try {
+        if ($request->expectsJson() || $request->ajax()) {
+            if (!$request->isMethod('POST')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Method not allowed.'
+                ], 405);
+            }
+        }
+
+        $dvRequest = DvRequest::findOrFail($id);
+        $statusBefore = $dvRequest->status;
+        $receivedAt = now();
+        
+        if ($dvRequest->status !== 'submitted') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This request cannot be received in its current status: ' . $dvRequest->status
+            ], 422);
+        }
+        
+        $controlNumber = $dvRequest->accounting_control_number 
+            ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+            : 'Pending-CN'; 
+        
+        $userName = auth()->user()->name ?? 'IMSD User';
+        $currentUserId = auth()->id();
+        
+        DB::beginTransaction();
+        
+        try {
+            // Status changed directly to IMSD_received (ready for verification)
+            $dvRequest->update([
+                'status'            => 'IMSD_received',
+                'accountingunit_id' => $currentUserId,
+                'received_by'       => $currentUserId,
+                'received_at'       => $receivedAt,
+                'locked_by'         => $currentUserId,
+                'locked_at'         => $receivedAt,
+            ]);
+            
+            $this->saveVerificationHistory(
+                $dvRequest,
+                'receive',
+                'Request officially received by IMSD',
+                [
+                    'status_before' => $statusBefore,
+                    'status_after'  => 'IMSD_received',
+                    'received_by'   => $currentUserId,
+                    'received_at'   => $receivedAt->toISOString(),
+                ]
+            );
+
+            $this->logAction(
+                $dvRequest->id,
+                'IMSD',
+                'IMSD_received',
+                'Request officially received by IMSD'
+            );
+            
+            $focalId = $dvRequest->focalperson_id;
+            if ($focalId) {
+                Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => 'IMSD_received',
+                    'action'         => 'Received',
+                    'remarks'        => 'Request officially received by IMSD',
+                ]);
                 
                 try {
-                    $this->pusher->trigger('dv-requests-imsd', 'dv-request-received', [
+                    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                         'dv_request_id' => $dvRequest->id,
-                        'control_number' => $controlNumber,
-                        'received_by' => $userName,
-                        'received_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'status'        => 'IMSD_received',
+                        'isRejected'    => false,
+                        'remarks'       => 'Request officially received by IMSD',
+                        'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                     ]);
                 } catch (\Exception $pusherError) {
-                    \Log::warning('Pusher IMSD notification failed: ' . $pusherError->getMessage());
+                    \Log::warning('Pusher focal notification failed: ' . $pusherError->getMessage());
                 }
-                
-                DB::commit();
-                $this->triggerDashboardUpdate();
-
-                if ($request->expectsJson() || $request->ajax()) {
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Document has been received by IMSD and is ready for verification.',
-                        'data' => [
-                            'id' => $dvRequest->id,
-                            'status' => 'IMSD_received',
-                            'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                            'control_number' => $controlNumber
-                        ]
-                    ]);
-                }
-                
-                return redirect()->route('RegionalOffices.IMSD.index')
-                    ->with('success', 'Document has been received by IMSD and is ready for verification.');
-                    
-            } catch (\Exception $e) {
-                DB::rollBack();
-                throw $e;
             }
             
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            \Log::error('DV Request not found: ' . $e->getMessage());
+            try {
+                // 🔥 Make sure to include locked_by and locked_at
+                $this->pusher->trigger('dv-requests-imsd', 'dv-request-received', [
+                    'dv_request_id' => $dvRequest->id,
+                    'control_number' => $controlNumber,
+                    'received_by' => $userName,
+                    'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'locked_by' => $currentUserId, // 🔥 Add this
+                    'locked_at' => $receivedAt->toISOString(), // 🔥 Add this
+                ]);
+            } catch (\Exception $pusherError) {
+                \Log::warning('Pusher IMSD notification failed: ' . $pusherError->getMessage());
+            }
             
+            DB::commit();
+            $this->triggerDashboardUpdate();
+
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
-                    'success' => false,
-                    'message' => 'DV request not found.'
-                ], 404);
+                    'success' => true,
+                    'message' => 'Document has been received and is ready for verification.',
+                    'data' => [
+                        'id' => $dvRequest->id,
+                        'status' => 'IMSD_received',
+                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'control_number' => $controlNumber
+                    ]
+                ]);
             }
             
-            return redirect()->back()->with('error', 'DV request not found.');
-            
+            return redirect()->route('RegionalOffices.IMSD.index')
+                ->with('success', 'Document has been received and is ready for verification.');
+                
         } catch (\Exception $e) {
-            \Log::error('Error receiving DV request: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
-            
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An error occurred while processing the request: ' . $e->getMessage()
-                ], 500);
-            }
-            
-            return redirect()->back()->with('error', 'An error occurred while processing the request.');
+            DB::rollBack();
+            throw $e;
         }
+        
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        \Log::error('DV Request not found: ' . $e->getMessage());
+        
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'DV request not found.'
+            ], 404);
+        }
+        
+        return redirect()->back()->with('error', 'DV request not found.');
+        
+    } catch (\Exception $e) {
+        \Log::error('Error receiving DV request: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while processing the request: ' . $e->getMessage()
+            ], 500);
+        }
+        
+        return redirect()->back()->with('error', 'An error occurred while processing the request.');
     }
-
-   
+}
 
     public function verify(Request $request, $id)
     {
         $request->validate([
-            'remarks'         => 'nullable|string|max:1000',
-            'modality'        => 'nullable|string',
-            'tev_modality'    => 'nullable|string',
-            'attachments'     => 'array',
-            'tev_attachments' => 'array',
+            'remarks' => 'nullable|string|max:1000',
         ]);
 
-        $dvRequest = DvRequest::with(['gipAttachments', 'tupadAttachments', 'tevAttachments'])->findOrFail($id);
+        $dvRequest = DvRequest::findOrFail($id);
         $statusBefore = $dvRequest->status;
-
-        $attachmentData = [];
-        
-        // TUPAD ATTACHMENTS
-        if ($dvRequest->program->prcode === 'TUPAD' && $request->filled('modality')) {
-            $modality = $request->modality;
-            $dvRequest->update(['tupad_modality' => $modality]);
-
-            $existingCount = $dvRequest->tupadAttachments()->where('modality', $modality)->count();
-            if ($existingCount === 0) {
-                $templates = TUPADAttachment::whereNull('dv_request_id')
-                    ->where('modality', $modality)
-                    ->orderBy('sort_order')
-                    ->get();
-
-                foreach ($templates as $template) {
-                    TUPADAttachment::create([
-                        'dv_request_id' => $dvRequest->id,
-                        'name' => $template->name,
-                        'modality' => $template->modality,
-                        'sort_order' => $template->sort_order,
-                        'is_present' => false,
-                    ]);
-                }
-            }
-
-            foreach ($dvRequest->tupadAttachments()->where('modality', $modality)->get() as $attachment) {
-                $isPresent = isset($request->attachments[$attachment->name]);
-                $attachment->update(['is_present' => $isPresent]);
-
-                $attachmentData[] = [
-                    'name' => $attachment->name,
-                    'is_present' => $isPresent,
-                    'modality' => $modality,
-                    'type' => 'tupad'
-                ];
-            }
-        }
-
-        // TEV ATTACHMENTS
-        if ($dvRequest->program->prcode === 'TEV' && $request->filled('tev_modality')) {
-            $modality = $request->tev_modality;
-            $dvRequest->update(['tev_modality' => $modality]);
-
-            $existingCount = $dvRequest->tevAttachments()->where('modality', $modality)->count();
-            if ($existingCount === 0) {
-                $templates = TEVAttachment::whereNull('dv_request_id')
-                    ->where('modality', $modality)
-                    ->orderBy('sort_order')
-                    ->get();
-
-                foreach ($templates as $template) {
-                    TEVAttachment::create([
-                        'dv_request_id' => $dvRequest->id,
-                        'name' => $template->name,
-                        'modality' => $template->modality,
-                        'sort_order' => $template->sort_order,
-                        'is_present' => false,
-                    ]);
-                }
-            }
-
-            foreach ($dvRequest->tevAttachments()->where('modality', $modality)->get() as $attachment) {
-                $isPresent = isset($request->tev_attachments[$attachment->name]);
-                $attachment->update(['is_present' => $isPresent]);
-
-                $attachmentData[] = [
-                    'name' => $attachment->name,
-                    'is_present' => $isPresent,
-                    'modality' => $modality,
-                    'type' => 'tev'
-                ];
-            }
-        }
-
-        // GIP ATTACHMENTS
-        if ($dvRequest->program->prcode === 'GIP') {
-            $checklistItems = [
-                'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
-                'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
-                'Birth Certificate', 'Internship Agreement', 'Evaluation Form-GIP',
-            ];
-
-            foreach ($checklistItems as $item) {
-                $isPresent = isset($request->attachments[$item]);
-                $attachment = $dvRequest->gipAttachments()->firstOrCreate(['name' => $item]);
-                $attachment->update(['is_present' => $isPresent]);
-                
-                $attachmentData[] = [
-                    'name' => $item,
-                    'is_present' => $isPresent,
-                    'type' => 'gip'
-                ];
-            }
-        }
-
         $verifiedAt = now();
         
         $dvRequest->update([
@@ -499,8 +739,6 @@ class DvRequestProcessingController extends Controller
                 'action'             => 'verified',
                 'status_before'      => $statusBefore,
                 'status_after'       => 'IMSD_verified',
-                'attachments_checked'=> $attachmentData,
-                'modality'           => $request->modality ?? $request->tev_modality ?? null,
                 'verified_by'        => auth()->id(),
                 'verified_at'        => $verifiedAt->toISOString(),
             ]
@@ -518,7 +756,8 @@ class DvRequestProcessingController extends Controller
         return redirect()->route('RegionalOffices.IMSD.index')
             ->with('success', 'DV Request has been verified successfully.');
     }
-
+    
+    
     protected function sendRejectionEmail($dvRequest, $rejectionRemarks)
     {
         try {
@@ -600,6 +839,63 @@ class DvRequestProcessingController extends Controller
             return false;
         }
     }
+    
+        protected function sendRejectionSMS($dvRequest, $rejectionRemarks)
+    {
+        try {
+            $focalPerson = $dvRequest->focalPerson;
+            
+            // Use 'contactnumber' instead of 'phone'
+            if (!$focalPerson || empty($focalPerson->contactnumber)) {
+                \Log::warning('Cannot send rejection SMS: focal person or contact number missing', [ 
+                    'dv_request_id' => $dvRequest->id,
+                    'focal_person_id' => $focalPerson->id ?? 'null',
+                    'has_contactnumber' => !empty($focalPerson->contactnumber)
+                ]);
+                return false;
+            }
+    
+            $phoneNumber = $focalPerson->contactnumber;
+            
+            // Truncate remarks for SMS (SMS has character limits)
+            $truncatedRemarks = strlen($rejectionRemarks) > 50 
+                ? substr($rejectionRemarks, 0, 47) . '...' 
+                : $rejectionRemarks;
+    
+            $message = "Hi {$focalPerson->fname}, your DV Request #{$dvRequest->id} has been rejected. Reason: {$truncatedRemarks}.";
+    
+            \Log::info('Sending rejection SMS via iProg', [
+                'phone' => $phoneNumber,
+                'dv_request_id' => $dvRequest->id,
+                'message_length' => strlen($message)
+            ]);
+    
+            $result = $this->smsService->sendSMS($phoneNumber, $message);
+            
+            if ($result['success']) {
+                \Log::info('Rejection SMS sent successfully', [
+                    'dv_request_id' => $dvRequest->id,
+                    'phone' => $phoneNumber,
+                    'message_id' => $result['message_id'] ?? 'N/A'
+                ]);
+                return true;
+            } else {
+                \Log::error('Failed to send rejection SMS', [
+                    'dv_request_id' => $dvRequest->id,
+                    'phone' => $phoneNumber,
+                    'error' => $result['error'] ?? 'Unknown error'
+                ]);
+                return false;
+            }
+            
+        } catch (\Exception $e) {
+            \Log::error('SMS rejection notification failed: ' . $e->getMessage(), [
+                'dv_request_id' => $dvRequest->id,
+                'exception' => $e->getTraceAsString()
+            ]);
+            return false;
+        }
+    }
 
     public function reject(Request $request, $id)
     {
@@ -642,6 +938,8 @@ class DvRequestProcessingController extends Controller
                 );
 
                 $emailSent = $this->sendRejectionEmail($dvRequest, $remarks);
+                
+                $smsSent = $this->sendRejectionSMS($dvRequest, $remarks);
 
                 $this->saveVerificationHistory(
                     $dvRequest,
@@ -653,9 +951,15 @@ class DvRequestProcessingController extends Controller
                         'status_after' => 'IMSD_rejected',
                         'rejected_by' => auth()->id(),
                         'rejected_at' => $rejectedAt->toISOString(),
-                        'rejection_reason' => $remarks
+                        'rejection_reason' => $remarks,
                     ]
                 );
+                 $responseMessage = 'DV request has been rejected';
+                if ($smsSent) {
+                    $responseMessage .= ' and SMS notification sent to focal person.';
+                } else {
+                    $responseMessage .= ' but SMS notification failed.';
+                }    
 
                 Notification::create([
                     'focalperson_id' => $focalId,
@@ -695,7 +999,8 @@ class DvRequestProcessingController extends Controller
                         'id'         => $dvRequest->id,
                         'status'     => 'IMSD_rejected',
                         'remarks'    => $remarks,
-                        'email_sent' => $emailSent
+                        'email_sent' => $emailSent,
+                        'sms_sent'   => $smsSent
                     ]
                 ], 200);
 

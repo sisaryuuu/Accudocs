@@ -441,6 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DV Number</th>
                             <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ORS Number</th>
                             <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Particulars</th>
                             <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
                             <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                             <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -465,6 +466,7 @@ document.addEventListener('DOMContentLoaded', function() {
                          ${request.ors_number || '—'}
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${request.particulars}</td>
                     <td class="px-6 py-4 text-sm text-gray-600"><span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span></td>
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
                     <td class="px-6 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">

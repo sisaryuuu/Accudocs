@@ -10,6 +10,7 @@ use App\Services\PusherService;
 use App\Notifications\DocumentAgingNotification;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class GIPRequestAgingController extends Controller
 {
@@ -24,7 +25,7 @@ class GIPRequestAgingController extends Controller
      * Get aging documents for GIP dashboard
      * Documents aged 3+ days in 'IMSD_verified' or 'Incoming-GIP_received' status
      */
-   public function getAgingDocuments()
+    public function getAgingDocuments()
     {
         try {
             Log::info('Fetching GIP aging documents');
@@ -42,7 +43,9 @@ class GIPRequestAgingController extends Controller
                 ->orderBy('created_at', 'asc')
                 ->get()
                 ->map(function ($request) {
-                    $daysOld = now()->diffInDays($request->created_at);
+                    // FIX: Use proper days calculation with whole numbers
+                    $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
+                    $daysOld = abs((int) $daysOld);
                     
                     // Get the latest alert for this document
                     $latestAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
@@ -57,7 +60,7 @@ class GIPRequestAgingController extends Controller
                         'program' => $request->program->prcode ?? 'N/A',
                         'document_type' => 'GIP',
                         'status' => $request->status,
-                        'days_old' => $daysOld,
+                        'days_old' => $daysOld, // Now this will be a positive whole number
                         'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                         'urgency' => $this->getUrgencyLevel($daysOld),
                         'acknowledged' => $latestAlert ? $latestAlert->acknowledged : false,
@@ -84,11 +87,10 @@ class GIPRequestAgingController extends Controller
         }
     }
 
-
     /**
      * Get GIP aging statistics
      */
-  public function getAgingStatistics()
+    public function getAgingStatistics()
     {
         try {
             Log::info('Fetching GIP aging statistics');
@@ -135,17 +137,19 @@ class GIPRequestAgingController extends Controller
      */
     protected function getUrgencyLevel($daysOld)
     {
+        // FIX: Ensure we're working with positive whole numbers
+        $daysOld = abs((int) $daysOld);
+        
         if ($daysOld >= 10) return 'critical';
         if ($daysOld >= 7) return 'high';
         if ($daysOld >= 3) return 'medium';
         return 'low';
     }
 
-
     /**
      * Send aging alerts for GIP documents
      */
-      public function sendAgingAlerts()
+    public function sendAgingAlerts()
     {
         try {
             $agingThreshold = 3;
@@ -169,7 +173,9 @@ class GIPRequestAgingController extends Controller
 
             $alertedCount = 0;
             foreach ($agingRequests as $request) {
-                $daysOld = now()->diffInDays($request->created_at);
+                // FIX: Use proper days calculation with whole numbers
+                $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
+                $daysOld = abs((int) $daysOld);
 
                 // Check if alert already exists for today
                 $existingAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
@@ -193,7 +199,7 @@ class GIPRequestAgingController extends Controller
                         'program' => $request->program->prcode ?? 'N/A',
                         'document_type' => 'GIP',
                         'status' => $request->status,
-                        'days_old' => $daysOld,
+                        'days_old' => $daysOld, // Now this will be a positive whole number
                         'urgency' => $this->getUrgencyLevel($daysOld),
                         'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                         'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),

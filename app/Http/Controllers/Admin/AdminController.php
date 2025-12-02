@@ -50,7 +50,7 @@ class AdminController extends Controller
         $inProgressRequests = DvRequest::where('status', '!=', 'Cashier_released')->count();
         $rejectedRequests = DvRequest::where('status', 'like', '%rejected%')->count();
 
-        return view('admin.document-tracking.index', compact(
+        return view('Admin.Document-Tracking.index', compact(
             'dvRequests', 
             'totalRequests',
             'completedRequests',
@@ -63,17 +63,17 @@ class AdminController extends Controller
     {
         $logs = DvRequestLog::where('dv_request_id', $dvRequest->id)
             ->with(['focalPerson', 'accountingUnit'])
-            ->orderBy('created_at', 'asc')
+            ->orderBy('created_at', 'desc') // Changed to desc to show recent first
             ->get();
 
-        return view('admin.document-tracking.show', compact('dvRequest', 'logs'));
+        return view('Admin.Document-Tracking.show', compact('dvRequest', 'logs'));
     }
 
     public function getRequestLogs(DvRequest $dvRequest)
     {
         $logs = DvRequestLog::where('dv_request_id', $dvRequest->id)
             ->with(['focalPerson', 'accountingUnit'])
-            ->orderBy('created_at', 'asc')
+            ->orderBy('created_at', 'desc') // Changed to desc to show recent first
             ->get();
 
         if (request()->ajax()) {

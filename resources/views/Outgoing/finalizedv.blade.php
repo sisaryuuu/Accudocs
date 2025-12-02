@@ -59,62 +59,169 @@
                     <label class="block text-sm font-medium text-gray-700">Particulars</label>
                     <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
-            @if($dvRequest->program->prcode === 'GIP')
+
+                @if($dvRequest->program->prcode === 'GIP')
+                <!-- GIP Attachments Checklist -->
                 <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-3">GIP Attachments Checklist</h2>
-                    
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                        @foreach($dvRequest->gipAttachments as $attachment)
-                        <div class="flex items-center space-x-2">
-                            <input 
-                                type="checkbox" 
-                                name="gip_attachments[{{ $attachment->id }}]"
-                                id="gip_attachment_{{ $attachment->id }}"
-                                class="h-4 w-4 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                style="accent-color: #16a34a;"
-                                {{ $attachment->is_present ? 'checked' : '' }}>
-                            <label 
-                                for="gip_attachment_{{ $attachment->id }}"
-                                class="text-sm cursor-pointer {{ $attachment->is_present ? 'text-green-600 font-semibold' : 'text-gray-700' }}">
-                                {{ $attachment->name }}
-                            </label>
-                        </div>
-                        @endforeach
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">GIP Attachments Checklist</h3>
+                        
+                        <!-- Check All/Uncheck All Buttons -->
+                        @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0)
+                            <div class="flex items-center space-x-3">
+                                <button type="button" 
+                                        onclick="checkAllGIPAttachments()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    Check All
+                                </button>
+                                <button type="button" 
+                                        onclick="uncheckAllGIPAttachments()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                    Uncheck All
+                                </button>
+                            </div>
+                        @endif
                     </div>
-                    
+
+                    @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0)
+                        <ul class="space-y-2">
+                            @foreach($dvRequest->gipAttachments as $attachment)
+                                <li class="flex items-center p-3 rounded-lg transition-all duration-200 
+                                    {{ $attachment->is_present ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200' }}">
+                                    <input type="checkbox"
+                                        name="gip_attachments[{{ $attachment->id }}]"
+                                        id="gip_attachment_{{ $attachment->id }}"
+                                        value="1"
+                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3 attachment-checkbox"
+                                        {{ $attachment->is_present ? 'checked' : '' }}
+                                        {{ $dvRequest->status === 'Incoming-GIP_received' ? '' : 'disabled' }}>
+                                    <label for="gip_attachment_{{ $attachment->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
+                                        {{ $attachment->name }}
+                                    </label>
+                                    <span class="text-xs font-medium px-2 py-1 rounded-full 
+                                        {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                        {{ $attachment->is_present ? '✓ Present' : '✗ Missing' }}
+                                    </span>
+                                </li>
+                            @endforeach
+                        </ul>
+                        
+                        <!-- Summary -->
+                        <div class="mt-4 flex items-center justify-between text-sm">
+                            <div class="flex items-center space-x-4">
+                                <span class="flex items-center">
+                                    <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+                                    <span class="text-green-700" id="gip-present-count">Present: {{ $dvRequest->gipAttachments->where('is_present', true)->count() }}</span>
+                                </span>
+                                <span class="flex items-center">
+                                    <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                                    <span class="text-red-700" id="gip-missing-count">Missing: {{ $dvRequest->gipAttachments->where('is_present', false)->count() }}</span>
+                                </span>
+                            </div>
+                            <span class="text-gray-600" id="gip-total-count">Total: {{ $dvRequest->gipAttachments->count() }}</span>
+                        </div>
+                        
+                        <p class="text-xs text-gray-500 mt-4">
+                            <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
+                        </p>
+                    @else
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                </svg>
+                                <span class="text-yellow-800">No attachments available for this GIP request.</span>
+                            </div>
+                            <p class="text-sm text-yellow-700 mt-2">
+                                The attachments checklist should be initialized automatically. 
+                                @if($dvRequest->status === 'IMSD_verified')
+                                    Please receive this document first to initialize the checklist.
+                                @else
+                                    Please contact system administrator if this issue persists.
+                                @endif
+                            </p>
+                        </div>
+                    @endif
                 </div>
                 @endif
 
                 @if($dvRequest->program->prcode === 'TUPAD')
                 <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                        TUPAD Attachments Checklist
-                        @if($selectedModality)
-                            <span class="text-sm font-normal text-blue-600">
-                                (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
-                            </span>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            TUPAD Attachments Checklist
+                            @if($selectedModality)
+                                <span class="text-sm font-normal text-blue-600">
+                                    (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
+                                </span>
+                            @endif
+                        </h3>
+                        
+                        <!-- Check All/Uncheck All Buttons -->
+                        @if($selectedModality && $attachments && $attachments->count() > 0)
+                            <div class="flex items-center space-x-3">
+                                <button type="button" 
+                                        onclick="checkAllTUPADAttachments()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    Check All
+                                </button>
+                                <button type="button" 
+                                        onclick="uncheckAllTUPADAttachments()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                    Uncheck All
+                                </button>
+                            </div>
                         @endif
-                    </h3>
+                    </div>
                 
                     @if($selectedModality && $attachments && $attachments->count() > 0)
                         <ul class="space-y-2">
                             @foreach($attachments as $item)
-                                <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition">
+                                <li class="flex items-center p-3 rounded-lg transition-all duration-200 
+                                    {{ $item->is_present ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200' }}">
                                     <input type="checkbox" 
                                         name="attachments[{{ $item->id }}]" 
                                         value="1"
                                         id="attachment_{{ $item->id }}"
-                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3 attachment-checkbox"
                                         {{ $item->is_present ? 'checked' : '' }}>
                                     <label for="attachment_{{ $item->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
                                         {{ $item->name }}
                                     </label>
-                                    @if($item->is_present)
-                                        <span class="text-xs text-green-600 font-medium">✓ Present</span>
-                                    @endif
+                                    <span class="text-xs font-medium px-2 py-1 rounded-full 
+                                        {{ $item->is_present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                        {{ $item->is_present ? '✓ Present' : '✗ Missing' }}
+                                    </span>
                                 </li>
                             @endforeach
                         </ul>
+                        
+                        <!-- Summary -->
+                        <div class="mt-4 flex items-center justify-between text-sm">
+                            <div class="flex items-center space-x-4">
+                                <span class="flex items-center">
+                                    <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+                                    <span class="text-green-700" id="tupad-present-count">Present: {{ $attachments->where('is_present', true)->count() }}</span>
+                                </span>
+                                <span class="flex items-center">
+                                    <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                                    <span class="text-red-700" id="tupad-missing-count">Missing: {{ $attachments->where('is_present', false)->count() }}</span>
+                                </span>
+                            </div>
+                            <span class="text-gray-600" id="tupad-total-count">Total: {{ $attachments->count() }}</span>
+                        </div>
                 
                         <p class="text-xs text-gray-500 mt-4">
                             <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
@@ -127,36 +234,77 @@
                 </div>
                 @endif
 
-                        @if($dvRequest->program->prcode === 'TEV')
+                @if($dvRequest->program->prcode === 'TEV')
                 <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                        TEV Attachments Checklist
-                        @if($dvRequest->tev_modality)
-                            <span class="text-sm font-normal text-blue-600">
-                                (Modality: {{ ucfirst(str_replace('_', ' ', $dvRequest->tev_modality)) }})
-                            </span>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            TEV Attachments Checklist
+                            @if($dvRequest->tev_modality)
+                                <span class="text-sm font-normal text-blue-600">
+                                    (Modality: {{ ucfirst(str_replace('_', ' ', $dvRequest->tev_modality)) }})
+                                </span>
+                            @endif
+                        </h3>
+                        
+                        <!-- Check All/Uncheck All Buttons -->
+                        @if($dvRequest->tev_modality && $tevAttachments && $tevAttachments->count() > 0)
+                            <div class="flex items-center space-x-3">
+                                <button type="button" 
+                                        onclick="checkAllTEVAttachments()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    Check All
+                                </button>
+                                <button type="button" 
+                                        onclick="uncheckAllTEVAttachments()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                    Uncheck All
+                                </button>
+                            </div>
                         @endif
-                    </h3>
+                    </div>
 
                     @if($dvRequest->tev_modality && $tevAttachments && $tevAttachments->count() > 0)
                         <ul class="space-y-2">
                             @foreach($tevAttachments as $item)
-                                <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition">
+                                <li class="flex items-center p-3 rounded-lg transition-all duration-200 
+                                    {{ $item->is_present ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200' }}">
                                     <input type="checkbox" 
                                         name="tev_attachments[{{ $item->id }}]" 
                                         value="1"
                                         id="tev_attachment_{{ $item->id }}"
-                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3 attachment-checkbox"
                                         {{ $item->is_present ? 'checked' : '' }}>
                                     <label for="tev_attachment_{{ $item->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
                                         {{ $item->name }}
                                     </label>
-                                    @if($item->is_present)
-                                        <span class="text-xs text-green-600 font-medium">✓ Present</span>
-                                    @endif
+                                    <span class="text-xs font-medium px-2 py-1 rounded-full 
+                                        {{ $item->is_present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                        {{ $item->is_present ? '✓ Present' : '✗ Missing' }}
+                                    </span>
                                 </li>
                             @endforeach
                         </ul>
+                        
+                        <!-- Summary -->
+                        <div class="mt-4 flex items-center justify-between text-sm">
+                            <div class="flex items-center space-x-4">
+                                <span class="flex items-center">
+                                    <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+                                    <span class="text-green-700" id="tev-present-count">Present: {{ $tevAttachments->where('is_present', true)->count() }}</span>
+                                </span>
+                                <span class="flex items-center">
+                                    <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                                    <span class="text-red-700" id="tev-missing-count">Missing: {{ $tevAttachments->where('is_present', false)->count() }}</span>
+                                </span>
+                            </div>
+                            <span class="text-gray-600" id="tev-total-count">Total: {{ $tevAttachments->count() }}</span>
+                        </div>
 
                         <p class="text-xs text-gray-500 mt-4">
                             <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
@@ -171,7 +319,8 @@
                         </p>
                     @endif
                 </div>
-            @endif
+                @endif
+
                 <!-- Amount -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Amount</label>
@@ -389,6 +538,78 @@
 <script>
 let currentRejectId = null;
 
+// Check All GIP Attachments
+function checkAllGIPAttachments() {
+    const checkboxes = document.querySelectorAll('input[name^="gip_attachments["]');
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.checked) {
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All GIP attachments marked as present', 'success');
+}
+
+// Uncheck All GIP Attachments
+function uncheckAllGIPAttachments() {
+    const checkboxes = document.querySelectorAll('input[name^="gip_attachments["]');
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            checkbox.checked = false;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All GIP attachments marked as missing', 'success');
+}
+
+// Check All TUPAD Attachments
+function checkAllTUPADAttachments() {
+    const checkboxes = document.querySelectorAll('input[name^="attachments["]');
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.checked) {
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All TUPAD attachments marked as present', 'success');
+}
+
+// Uncheck All TUPAD Attachments
+function uncheckAllTUPADAttachments() {
+    const checkboxes = document.querySelectorAll('input[name^="attachments["]');
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            checkbox.checked = false;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All TUPAD attachments marked as missing', 'success');
+}
+
+// Check All TEV Attachments
+function checkAllTEVAttachments() {
+    const checkboxes = document.querySelectorAll('input[name^="tev_attachments["]');
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.checked) {
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All TEV attachments marked as present', 'success');
+}
+
+// Uncheck All TEV Attachments
+function uncheckAllTEVAttachments() {
+    const checkboxes = document.querySelectorAll('input[name^="tev_attachments["]');
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            checkbox.checked = false;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All TEV attachments marked as missing', 'success');
+}
+
 // Open reject modal with debugging
 function openRejectModal(dvRequestId) {
     console.log('🔴 openRejectModal called with ID:', dvRequestId);
@@ -531,6 +752,85 @@ document.addEventListener('DOMContentLoaded', () => {
             closeRejectModal();
         }
     });
+
+    // Handle attachment checkboxes - Update colors when changed
+    const attachmentCheckboxes = document.querySelectorAll('.attachment-checkbox');
+    attachmentCheckboxes.forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const listItem = e.target.closest('li');
+            const statusSpan = listItem.querySelector('span.text-xs');
+            
+            if (e.target.checked) {
+                // ✅ Present - Green
+                listItem.classList.remove('bg-red-50', 'border-red-200');
+                listItem.classList.add('bg-green-50', 'border-green-200');
+                statusSpan.textContent = '✓ Present';
+                statusSpan.classList.remove('bg-red-100', 'text-red-800');
+                statusSpan.classList.add('bg-green-100', 'text-green-800');
+            } else {
+                // ❌ Missing - Red
+                listItem.classList.remove('bg-green-50', 'border-green-200');
+                listItem.classList.add('bg-red-50', 'border-red-200');
+                statusSpan.textContent = '✗ Missing';
+                statusSpan.classList.remove('bg-green-100', 'text-green-800');
+                statusSpan.classList.add('bg-red-100', 'text-red-800');
+            }
+            
+            // Update summary counts based on program type
+            updateAttachmentSummary();
+        });
+    });
+    
+    // Function to update attachment summary
+    function updateAttachmentSummary() {
+        // GIP Summary
+        const gipCheckboxes = document.querySelectorAll('input[name^="gip_attachments["]');
+        if (gipCheckboxes.length > 0) {
+            const gipTotal = gipCheckboxes.length;
+            const gipPresent = Array.from(gipCheckboxes).filter(cb => cb.checked).length;
+            const gipMissing = gipTotal - gipPresent;
+            
+            const gipPresentSpan = document.getElementById('gip-present-count');
+            const gipMissingSpan = document.getElementById('gip-missing-count');
+            const gipTotalSpan = document.getElementById('gip-total-count');
+            
+            if (gipPresentSpan) gipPresentSpan.textContent = `Present: ${gipPresent}`;
+            if (gipMissingSpan) gipMissingSpan.textContent = `Missing: ${gipMissing}`;
+            if (gipTotalSpan) gipTotalSpan.textContent = `Total: ${gipTotal}`;
+        }
+        
+        // TUPAD Summary
+        const tupadCheckboxes = document.querySelectorAll('input[name^="attachments["]');
+        if (tupadCheckboxes.length > 0) {
+            const tupadTotal = tupadCheckboxes.length;
+            const tupadPresent = Array.from(tupadCheckboxes).filter(cb => cb.checked).length;
+            const tupadMissing = tupadTotal - tupadPresent;
+            
+            const tupadPresentSpan = document.getElementById('tupad-present-count');
+            const tupadMissingSpan = document.getElementById('tupad-missing-count');
+            const tupadTotalSpan = document.getElementById('tupad-total-count');
+            
+            if (tupadPresentSpan) tupadPresentSpan.textContent = `Present: ${tupadPresent}`;
+            if (tupadMissingSpan) tupadMissingSpan.textContent = `Missing: ${tupadMissing}`;
+            if (tupadTotalSpan) tupadTotalSpan.textContent = `Total: ${tupadTotal}`;
+        }
+        
+        // TEV Summary
+        const tevCheckboxes = document.querySelectorAll('input[name^="tev_attachments["]');
+        if (tevCheckboxes.length > 0) {
+            const tevTotal = tevCheckboxes.length;
+            const tevPresent = Array.from(tevCheckboxes).filter(cb => cb.checked).length;
+            const tevMissing = tevTotal - tevPresent;
+            
+            const tevPresentSpan = document.getElementById('tev-present-count');
+            const tevMissingSpan = document.getElementById('tev-missing-count');
+            const tevTotalSpan = document.getElementById('tev-total-count');
+            
+            if (tevPresentSpan) tevPresentSpan.textContent = `Present: ${tevPresent}`;
+            if (tevMissingSpan) tevMissingSpan.textContent = `Missing: ${tevMissing}`;
+            if (tevTotalSpan) tevTotalSpan.textContent = `Total: ${tevTotal}`;
+        }
+    }
 });
 
 // Function to show toast messages
@@ -558,34 +858,6 @@ function showMessage(message, type = 'success') {
         }, 300);
     }, 3000);
 }
-
-// TUPAD Attachments Checkbox Handler
-document.addEventListener('DOMContentLoaded', () => {
-    const tupadCheckboxes = document.querySelectorAll('input[name^="attachments["]');
-
-    tupadCheckboxes.forEach(cb => {
-        cb.addEventListener('change', (e) => {
-            const listItem = e.target.closest('li');
-            let statusSpan = listItem.querySelector('span.text-xs');
-
-            if (!statusSpan) {
-                statusSpan = document.createElement('span');
-                statusSpan.classList.add('text-xs', 'ml-2');
-                listItem.appendChild(statusSpan);
-            }
-
-            if (e.target.checked) {
-                statusSpan.textContent = '✓ Present';
-                statusSpan.classList.remove('text-gray-400');
-                statusSpan.classList.add('text-green-600', 'font-medium');
-            } else {
-                statusSpan.textContent = 'Missing';
-                statusSpan.classList.remove('text-green-600', 'font-medium');
-                statusSpan.classList.add('text-gray-400');
-            }
-        });
-    });
-});
 
 // Handle Receive Action
 async function handleReceiveAction(dvRequestId, buttonElement) {

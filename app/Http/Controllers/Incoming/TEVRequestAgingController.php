@@ -7,6 +7,7 @@ use App\Models\DvRequest;
 use App\Models\DocumentAgingAlert;
 use App\Services\PusherService;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class TEVRequestAgingController extends Controller
 {
@@ -17,7 +18,7 @@ class TEVRequestAgingController extends Controller
         $this->pusher = $pusher;
     }
 
-       public function getAgingDocuments()
+    public function getAgingDocuments()
     {
         try {
             Log::info('Fetching TEV aging documents');
@@ -34,7 +35,9 @@ class TEVRequestAgingController extends Controller
                 ->orderBy('created_at', 'asc')
                 ->get()
                 ->map(function ($request) {
-                    $daysOld = now()->diffInDays($request->created_at);
+                    // FIX: Use proper days calculation with whole numbers
+                    $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
+                    $daysOld = abs((int) $daysOld);
                     
                     return [
                         'id' => $request->id,
@@ -42,7 +45,7 @@ class TEVRequestAgingController extends Controller
                         'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
                         'program' => $request->program->prcode ?? 'N/A',
                         'status' => $request->status,
-                        'days_old' => $daysOld,
+                        'days_old' => $daysOld, // Now this will be a positive whole number
                         'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                         'urgency' => $this->getUrgencyLevel($daysOld),
                     ];
@@ -74,53 +77,57 @@ class TEVRequestAgingController extends Controller
      * Get TEV aging statistics
      */
     public function getAgingStatistics()
-{
-    try {
-        Log::info('Fetching TEV aging statistics');
-        
-        $tenDaysAgo = now()->subDays(10);
-        $sevenDaysAgo = now()->subDays(7);
-        $threeDaysAgo = now()->subDays(3);
-        
-        $baseQuery = function() {
-            return DvRequest::whereHas('program', function($query) {
-                $query->where('prcode', 'TEV'); // ONLY TEV PROGRAM
-            })->whereIn('status', ['IMSD_verified', 'Incoming-TEV_received', 'Incoming-TEV_in_process']);
-        };
-        
-        $statistics = [
-            'critical' => $baseQuery()->where('created_at', '<', $tenDaysAgo)->count(),
-            'high' => $baseQuery()->where('created_at', '>=', $tenDaysAgo)
-                ->where('created_at', '<', $sevenDaysAgo)->count(),
-            'medium' => $baseQuery()->where('created_at', '>=', $sevenDaysAgo)
-                ->where('created_at', '<', $threeDaysAgo)->count(),
-            'total_aging' => $baseQuery()->where('created_at', '<', $threeDaysAgo)->count(),
-        ];
+    {
+        try {
+            Log::info('Fetching TEV aging statistics');
+            
+            $tenDaysAgo = now()->subDays(10);
+            $sevenDaysAgo = now()->subDays(7);
+            $threeDaysAgo = now()->subDays(3);
+            
+            $baseQuery = function() {
+                return DvRequest::whereHas('program', function($query) {
+                    $query->where('prcode', 'TEV'); // ONLY TEV PROGRAM
+                })->whereIn('status', ['IMSD_verified', 'Incoming-TEV_received', 'Incoming-TEV_in_process']);
+            };
+            
+            $statistics = [
+                'critical' => $baseQuery()->where('created_at', '<', $tenDaysAgo)->count(),
+                'high' => $baseQuery()->where('created_at', '>=', $tenDaysAgo)
+                    ->where('created_at', '<', $sevenDaysAgo)->count(),
+                'medium' => $baseQuery()->where('created_at', '>=', $sevenDaysAgo)
+                    ->where('created_at', '<', $threeDaysAgo)->count(),
+                'total_aging' => $baseQuery()->where('created_at', '<', $threeDaysAgo)->count(),
+            ];
 
-        Log::info('TEV aging statistics fetched successfully', $statistics);
+            Log::info('TEV aging statistics fetched successfully', $statistics);
 
-        return response()->json([
-            'success' => true,
-            ...$statistics
-        ]);
+            return response()->json([
+                'success' => true,
+                ...$statistics
+            ]);
 
-    } catch (\Exception $e) {
-        Log::error('Error fetching TEV aging statistics: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString()
-        ]);
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to fetch aging statistics',
-            'error' => $e->getMessage()
-        ], 500);
+        } catch (\Exception $e) {
+            Log::error('Error fetching TEV aging statistics: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch aging statistics',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
+
     /**
      * Determine urgency level based on days old
      */
     protected function getUrgencyLevel($daysOld)
     {
+        // FIX: Ensure we're working with positive whole numbers
+        $daysOld = abs((int) $daysOld);
+        
         if ($daysOld >= 10) return 'critical';
         if ($daysOld >= 7) return 'high';
         if ($daysOld >= 3) return 'medium';
@@ -153,7 +160,9 @@ class TEVRequestAgingController extends Controller
 
             $alertedCount = 0;
             foreach ($agingRequests as $request) {
-                $daysOld = now()->diffInDays($request->created_at);
+                // FIX: Use proper days calculation with whole numbers
+                $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
+                $daysOld = abs((int) $daysOld);
 
                 // Check if alert already exists for today
                 $existingAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
@@ -177,7 +186,7 @@ class TEVRequestAgingController extends Controller
                         'program' => $request->program->prcode ?? 'N/A',
                         'document_type' => 'TEV',
                         'status' => $request->status,
-                        'days_old' => $daysOld,
+                        'days_old' => $daysOld, // Now this will be a positive whole number
                         'urgency' => $this->getUrgencyLevel($daysOld),
                         'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                         'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),

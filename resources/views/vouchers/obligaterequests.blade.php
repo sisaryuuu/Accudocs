@@ -228,14 +228,14 @@
                         <strong>HEAD, IMSD</strong>
                     </td>
                 </tr>
-                <tr>
-                    <td style="border: 1px solid #000; border-top: none; padding: 3px; text-align: center; vertical-align: middle;">
-                        Date
-                    </td>
-                    <td style="border: 1px solid #000; border-top: none; border-left: none; padding: 3px; text-align: center;">
-                       
-                    </td>
-                </tr>
+              <tr>
+    <td style="border: 1px solid #000; border-top: none; padding: 3px; text-align: center; vertical-align: middle;">
+        Date
+    </td>
+    <td style="border: 1px solid #000; border-top: none; border-left: none; padding: 3px; text-align: center;">
+        <strong>{{ $imsd_verified_date ?? $data['date'] }}</strong>
+    </td>
+</tr>
             </table>
         </td>
         <td style="border: 1px solid #000;"></td>

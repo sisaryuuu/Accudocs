@@ -21,4 +21,8 @@ return function (Schedule $schedule) {
       ->dailyAt('15:00')
       ->weekdays()
       ->timezone('Asia/Manila');
-};;
+      
+   $schedule->call(function () {
+        \App\Http\Controllers\Auth\LoginController::cleanupExpiredSessions();
+    })->hourly();  
+};

@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Logging Out...</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Logging Out - Accudocs</title>
     <style>
         body {
             margin: 0;
@@ -19,7 +22,7 @@
         .logout-container {
             text-align: center;
             background: white;
-            padding: 3rem 4rem;
+            padding: 3rem;
             border-radius: 1rem;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
@@ -56,36 +59,22 @@
     <div class="logout-container">
         <div class="spinner"></div>
         <h2>Logging Out</h2>
-        <p>Cleaning up session data...</p>
+        <p>Securing your session...</p>
     </div>
 
     <script>
-        (function() {
-            console.log('🧹 Cleaning up session storage...');
+        // Simple cleanup and redirect
+        setTimeout(function() {
+            // Clear any sensitive session storage
+            Object.keys(sessionStorage).forEach(key => {
+                if (key.startsWith('autoComplete_')) {
+                    sessionStorage.removeItem(key);
+                }
+            });
             
-            try {
-                // Clear all auto-complete session data
-                Object.keys(sessionStorage).forEach(key => {
-                    if (key.startsWith('autoComplete_')) {
-                        sessionStorage.removeItem(key);
-                        console.log('🗑️ Removed:', key);
-                    }
-                });
-                
-                // Optional: Clear all session storage if needed
-                // sessionStorage.clear();
-                
-                console.log('✅ Session cleanup complete');
-                
-            } catch (error) {
-                console.error('⚠️ Session cleanup error:', error);
-            }
-            
-            // Redirect after cleanup
-            setTimeout(function() {
-                window.location.href = '{{ $redirectUrl }}';
-            }, 500);
-        })();
+            // Redirect securely
+            window.location.replace('{{ $redirectUrl }}');
+        }, 1000);
     </script>
 </body>
 </html>

@@ -18,6 +18,10 @@ return new class extends Migration
             $table->string('phone',11)->nullable();
             $table->string('password');
             $table->string('profile_image')->default('default.png');
+            $table->timestamp('last_login_at')->nullable();
+            $table->string('last_login_ip')->nullable();
+            $table->timestamp('last_logout_at')->nullable();
+            $table->string('session_id')->nullable();
             $table->timestamps(); // Add this line for created_at and updated_at
          });
     }

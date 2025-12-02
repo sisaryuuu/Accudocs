@@ -39,7 +39,7 @@
                     </svg>
                     New DV Request
                 </a>
-                            <a href="{{ route('qr.scanner') }}" 
+                <a href="{{ route('qr.scanner') }}" 
                      class="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors duration-200">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
@@ -64,23 +64,34 @@
                        class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200">
                         Create Request
                     </a>
-                   
                 </div>
             @else
-                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h3 class="text-lg font-semibold text-gray-900">Request History</h3>
-                    <div class="relative">
-                        <input type="text" id="search" placeholder="Search Control No., Payee, Program..."
-                               class="w-72 pl-10 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                        <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M21 21l-4.35-4.35M16 10a6 6 0 11-12 0 6 6 0 0112 0z"/>
-                        </svg>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <div class="relative">
+                            <input type="text" id="search" placeholder="Search Control No., Payee, Program..."
+                                   class="w-72 pl-10 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                            <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                    d="M21 21l-4.35-4.35M16 10a6 6 0 11-12 0 6 6 0 0112 0z"/>
+                            </svg>
+                        </div>
+                        <!-- Items Per Page Selector -->
+                        <div class="flex items-center space-x-2">
+                            <label for="perPage" class="text-sm text-gray-600 whitespace-nowrap">Show:</label>
+                            <select id="perPage" class="text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
+                                <option value="25" {{ request('per_page', 10) == 25 ? 'selected' : '' }}>25</option>
+                                <option value="50" {{ request('per_page', 10) == 50 ? 'selected' : '' }}>50</option>
+                                <option value="100" {{ request('per_page', 10) == 100 ? 'selected' : '' }}>100</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
                 <div class="overflow-x-auto">
-                  <table class="w-full table-auto divide-y divide-gray-200" id="dvTable">
+                    <table class="w-full table-auto divide-y divide-gray-200" id="dvTable">
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request No.</th>
@@ -89,7 +100,6 @@
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TIN/Employee No.</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsibility Center</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request Purpose</th>
-                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Mode of Payment</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Particulars</th>
                                 <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Status</th>
@@ -103,7 +113,7 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                     #{{ $request->user_sequence }}
                                 </td>
-                               <td id="dv-{{ $request->id }}" class="px-6 py-4 whitespace-nowrap text-sm">
+                                <td id="dv-{{ $request->id }}" class="px-6 py-4 whitespace-nowrap text-sm">
                                     @if($request->dv_number)
                                         <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                                             {{ $request->dv_number }}
@@ -121,23 +131,13 @@
                                     {{ $request->focalperson->TIN_number ?? 'N/A' }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                    {{ $request->respocenter->rccode ?? 'N/A' }} - {{ $request->respocenter->description ?? 'N/A' }}
+                                    {{ $request->respocenter->description ?? 'N/A' }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                         {{ $request->program->prcode ?? 'N/A' }}
                                     </span>
                                 </td>
-                               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                    @if($request->modeOfPayments && $request->modeOfPayments->count() > 0)
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-1">
-                                            {{ $request->modeOfPayments->pluck('mopname')->join(', ') }}
-                                        </span>
-                                    @else
-                                        <span class="text-gray-400">N/A</span>
-                                    @endif
-                                </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                                     ₱{{ number_format($request->amount, 2) }}
                                 </td>
@@ -146,13 +146,13 @@
                                         {{ Str::limit($request->particulars ?? '', 50) }}
                                     </div>
                                 </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span id="status-{{ $request->id }}" 
-                                            data-status="{{ $request->status }}" 
-                                            class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-center">
-                                            <span class="status-label">{{ ucwords(str_replace('_', ' ', $request->status)) }}</span>
-                                        </span>
-                                    </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span id="status-{{ $request->id }}" 
+                                        data-status="{{ $request->status }}" 
+                                        class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-center">
+                                        <span class="status-label">{{ ucwords(str_replace('_', ' ', $request->status)) }}</span>
+                                    </span>
+                                </td>
                                 <td class="px-6 py-4 text-sm text-gray-500">
                                     {{ $request->created_at->format('M d, Y') }}
                                 </td>
@@ -171,7 +171,7 @@
                                            class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">
                                             Track
                                         </a>
-                                         <a href="{{ route('FocalPerson.dvrequest.preview', $request->id) }}" 
+                                        <a href="{{ route('FocalPerson.dvrequest.preview', $request->id) }}" 
                                         class="inline-flex items-center px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-medium rounded-md transition-colors duration-200">
                                             Preview
                                         </a>
@@ -199,10 +199,53 @@
                     </table>
                 </div>
 
+                <!-- Pagination Section -->
                 <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div class="text-sm text-gray-500">
-                            Showing {{ $dvRequests->count() }} of {{ $dvRequests->count() }} requests
+                            Showing {{ $dvRequests->firstItem() ?? 0 }} to {{ $dvRequests->lastItem() ?? 0 }} of {{ $dvRequests->total() }} requests
+                        </div>
+                        
+                        <div class="flex items-center space-x-2">
+                            <!-- Previous Page Link -->
+                            @if ($dvRequests->onFirstPage())
+                                <span class="px-3 py-1 text-sm text-gray-400 border border-gray-300 rounded-lg cursor-not-allowed">
+                                    Previous
+                                </span>
+                            @else
+                                <a href="{{ $dvRequests->previousPageUrl() }}{{ request('per_page') ? '&per_page=' . request('per_page') : '' }}" 
+                                   class="px-3 py-1 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+                                    Previous
+                                </a>
+                            @endif
+
+                            <!-- Page Numbers -->
+                            <div class="flex space-x-1">
+                                @foreach ($dvRequests->getUrlRange(1, $dvRequests->lastPage()) as $page => $url)
+                                    @if ($page == $dvRequests->currentPage())
+                                        <span class="px-3 py-1 text-sm text-white bg-blue-600 border border-blue-600 rounded-lg font-medium">
+                                            {{ $page }}
+                                        </span>
+                                    @else
+                                        <a href="{{ $url }}{{ request('per_page') ? '&per_page=' . request('per_page') : '' }}" 
+                                           class="px-3 py-1 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+                                            {{ $page }}
+                                        </a>
+                                    @endif
+                                @endforeach
+                            </div>
+
+                            <!-- Next Page Link -->
+                            @if ($dvRequests->hasMorePages())
+                                <a href="{{ $dvRequests->nextPageUrl() }}{{ request('per_page') ? '&per_page=' . request('per_page') : '' }}" 
+                                   class="px-3 py-1 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+                                    Next
+                                </a>
+                            @else
+                                <span class="px-3 py-1 text-sm text-gray-400 border border-gray-300 rounded-lg cursor-not-allowed">
+                                    Next
+                                </span>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -268,6 +311,14 @@ document.getElementById('search').addEventListener('keyup', function() {
     });
 });
 
+// Items per page change handler
+document.getElementById('perPage').addEventListener('change', function() {
+    const perPage = this.value;
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('per_page', perPage);
+    window.location.href = currentUrl.toString();
+});
+
 let currentQRData = null;
 
 async function showQRModal(dvId) {
@@ -304,33 +355,31 @@ async function showQRModal(dvId) {
         currentQRData = data;
         
         content.innerHTML = `
-                    <div class="space-y-6">
-                    <!-- QR Code Container -->
-                    <div class="flex justify-center">
-                        <div class="bg-white p-6 rounded-xl border-2 border-purple-200 shadow-inner 
-                                    w-full max-w-sm mx-auto overflow-hidden">
-                            
-                            <div class="qr-image-container flex justify-center items-center">
-                                <object 
-                                    id="qrImage" 
-                                    data="${data.qr_url}" 
-                                    type="image/png"
-                                    class="w-[85%] max-w-[300px] h-auto object-contain transition-all duration-300 ease-in-out"
+            <div class="space-y-6">
+                <!-- QR Code Container -->
+                <div class="flex justify-center">
+                    <div class="bg-white p-6 rounded-xl border-2 border-purple-200 shadow-inner 
+                                w-full max-w-sm mx-auto overflow-hidden">
+                        
+                        <div class="qr-image-container flex justify-center items-center">
+                            <object 
+                                id="qrImage" 
+                                data="${data.qr_url}" 
+                                type="image/png"
+                                class="w-[85%] max-w-[300px] h-auto object-contain transition-all duration-300 ease-in-out"
+                                style="max-height: 300px;">
+                                
+                                <!-- Fallback if <object> fails -->
+                                <img 
+                                    src="${data.qr_url}" 
+                                    alt="QR Code" 
+                                    class="w-[85%] max-w-[300px] h-auto object-contain transition-all duration-300 ease-in-out" 
                                     style="max-height: 300px;">
-                                    
-                                    <!-- Fallback if <object> fails -->
-                                    <img 
-                                        src="${data.qr_url}" 
-                                        alt="QR Code" 
-                                        class="w-[85%] max-w-[300px] h-auto object-contain transition-all duration-300 ease-in-out" 
-                                        style="max-height: 300px;">
-                                </object>
-                            </div>
-
+                            </object>
                         </div>
                     </div>
                 </div>
-                                
+                
                 <!-- Request Information -->
                 <div class="bg-gray-50 rounded-xl p-5 border border-gray-200">
                     <div class="grid grid-cols-1 gap-4 text-sm">
@@ -393,7 +442,7 @@ function downloadQR() {
     
     const link = document.createElement('a');
     link.href = currentQRData.qr_url;
-    link.download = `DV_QR_${currentQRData.reference_number}.svg`;
+    link.download = `DV_QR_${currentQRData.reference_number}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

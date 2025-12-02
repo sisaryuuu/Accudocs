@@ -85,6 +85,34 @@
             </div>
         </div>
 
+        <!-- Bulk Actions Bar -->
+        <div id="bulk-actions-bar" class="mb-4 hidden">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <span class="text-sm font-medium text-blue-900">
+                        <span id="selected-count">0</span> items selected
+                    </span>
+                    <button onclick="clearSelection()" class="text-sm text-blue-600 hover:text-blue-800 underline">
+                        Clear Selection
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button id="bulk-receive-btn" onclick="showBulkActionModal('receive')" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors duration-200">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Bulk Receive
+                    </button>
+                    <button id="bulk-verify-btn" onclick="showBulkActionModal('verify')" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors duration-200">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Bulk Verify
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Search and Pagination Info -->
         <div class="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div class="flex-1">
@@ -153,11 +181,64 @@
     </div>
 </div>
 
+<!-- Bulk Action Modal -->
+<div id="bulkActionModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+        <div class="flex justify-between items-center mb-6">
+            <h3 id="bulkActionModalTitle" class="text-2xl font-bold text-gray-900">Confirm Bulk Action</h3>
+            <button onclick="closeBulkActionModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="mb-6 flex-1 overflow-hidden">
+            <p id="bulkActionModalMessage" class="text-gray-700 mb-4">You are about to process the following DV Requests:</p>
+            <div id="bulkActionList" class="h-64 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <!-- Selected DVs will be listed here -->
+            </div>
+            <div id="bulkVerifyRemarks" class="mt-4 hidden">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Remarks (Optional)</label>
+                <textarea id="bulk-verify-remarks" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Add any remarks for verification..."></textarea>
+            </div>
+            <p class="text-sm text-gray-600 mt-4">
+                <span class="font-semibold">Note:</span> Only DVs with appropriate status will be processed. 
+                Grayed-out items are not eligible for this action.
+            </p>
+        </div>
+        <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+            <button onclick="closeBulkActionModal()" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors duration-200">
+                Cancel
+            </button>
+            <button id="confirmBulkActionBtn" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200">
+                Confirm Action
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+        <div class="flex justify-center mb-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+        </div>
+        <h3 class="text-xl font-bold text-gray-900 mb-2">Processing DVs</h3>
+        <p class="text-gray-600" id="loadingMessage">Please wait while we process your request...</p>
+    </div>
+</div>
+
 <!-- Toast Container -->
 <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
 @endsection
+
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
+// ============ GLOBAL STATE ============
+let selectedRequests = new Set();
+let allRequests = []; // Store all requests
+let filteredRequests = []; // Store filtered requests for display
+
 // ============ GLOBAL FUNCTIONS (MUST BE OUTSIDE DOMContentLoaded) ============
 window.dismissToast = function(toastId) {
     const toast = document.getElementById(toastId);
@@ -220,6 +301,379 @@ window.handleReceiveAction = async function(requestId, button) {
     }
 }
 
+window.toggleSelectRequest = function(requestId, status) {
+    // Check if already selected
+    const existing = Array.from(selectedRequests).find(req => req.id === requestId);
+    
+    if (existing) {
+        // Remove from set
+        selectedRequests.forEach(req => {
+            if (req.id === requestId) {
+                selectedRequests.delete(req);
+            }
+        });
+    } else {
+        // Add to set
+        selectedRequests.add({ id: requestId, status: status });
+    }
+    updateBulkActionsBar();
+}
+
+window.toggleSelectAll = function(checkbox) {
+    const checkboxes = document.querySelectorAll('.request-checkbox');
+    const currentPageData = window.getPaginatedData(); // Use window.getPaginatedData
+    
+    // Get all IDs from current page
+    const currentPageIds = currentPageData.map(item => item.id);
+    
+    if (checkbox.checked) {
+        // Add only visible items on current page
+        checkboxes.forEach(cb => {
+            const requestId = parseInt(cb.dataset.requestId);
+            const status = cb.dataset.status;
+            
+            // Only check and add if it's on current page
+            if (currentPageIds.includes(requestId)) {
+                cb.checked = true;
+                
+                // Check if not already in set
+                const exists = Array.from(selectedRequests).some(req => req.id === requestId);
+                if (!exists) {
+                    selectedRequests.add({ id: requestId, status: status });
+                }
+            }
+        });
+    } else {
+        // Remove only visible items on current page
+        checkboxes.forEach(cb => {
+            const requestId = parseInt(cb.dataset.requestId);
+            
+            // Only uncheck and remove if it's on current page
+            if (currentPageIds.includes(requestId)) {
+                cb.checked = false;
+                
+                // Remove from set
+                selectedRequests.forEach(req => {
+                    if (req.id === requestId) {
+                        selectedRequests.delete(req);
+                    }
+                });
+            }
+        });
+    }
+    updateBulkActionsBar();
+}
+
+window.clearSelection = function() {
+    selectedRequests.clear();
+    document.querySelectorAll('.request-checkbox').forEach(cb => cb.checked = false);
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    }
+    updateBulkActionsBar();
+}
+
+window.showBulkActionModal = function(actionType) {
+    const modal = document.getElementById('bulkActionModal');
+    const modalTitle = document.getElementById('bulkActionModalTitle');
+    const modalMessage = document.getElementById('bulkActionModalMessage');
+    const listContainer = document.getElementById('bulkActionList');
+    const confirmBtn = document.getElementById('confirmBulkActionBtn');
+    const remarksSection = document.getElementById('bulkVerifyRemarks');
+    
+    if (!modal || !modalTitle || !modalMessage || !listContainer || !confirmBtn) return;
+    
+    const isReceive = actionType === 'receive';
+    const actionText = isReceive ? 'receive' : 'verify';
+    const actionTextCapitalized = isReceive ? 'Receive' : 'Verify';
+    
+    modalTitle.textContent = `Confirm Bulk ${actionTextCapitalized}`;
+    modalMessage.textContent = `You are about to ${actionText} the following DV Requests:`;
+    
+    // Show/hide remarks section
+    if (remarksSection) {
+        if (actionType === 'verify') {
+            remarksSection.classList.remove('hidden');
+        } else {
+            remarksSection.classList.add('hidden');
+        }
+    }
+    
+    listContainer.innerHTML = '';
+    
+    let actionDVs = [];
+    let otherDVs = [];
+    
+    const selectedArray = Array.from(selectedRequests);
+    const eligibleRequests = isReceive 
+        ? selectedArray.filter(req => req.status === 'submitted')
+        : selectedArray.filter(req => req.status === 'IMSD_received' || req.status === 'IMSD_in_process');
+    
+    selectedArray.forEach(requestData => {
+        // Find the request in the complete dataset (allRequests)
+        const request = allRequests.find(req => req.id == requestData.id);
+        if (request) {
+            const isActionable = isReceive 
+                ? request.status === 'submitted'
+                : request.status === 'IMSD_received' || request.status === 'IMSD_in_process';
+            
+            const listItem = document.createElement('div');
+            listItem.className = `flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0 ${!isActionable ? 'opacity-50' : ''}`;
+            listItem.innerHTML = `
+                <div>
+                    <div class="font-medium text-gray-900">${request.accounting_control_number}</div>
+                    <div class="text-sm text-gray-600">${request.submitted_by}</div>
+                    <div class="text-xs text-gray-500 mt-1">Status: ${request.status.replace(/_/g, ' ')}</div>
+                </div>
+                <div class="text-right">
+                    <div class="font-semibold text-green-600">₱${request.amount}</div>
+                    ${!isActionable ? '<div class="text-xs text-red-500 mt-1">Not eligible</div>' : ''}
+                </div>
+            `;
+            
+            if (isActionable) {
+                actionDVs.push({ requestData, listItem });
+            } else {
+                otherDVs.push({ requestData, listItem });
+            }
+        }
+    });
+    
+    // Show actionable DVs first
+    actionDVs.forEach(item => listContainer.appendChild(item.listItem));
+    otherDVs.forEach(item => listContainer.appendChild(item.listItem));
+    
+    // Update confirm button
+    confirmBtn.textContent = `Confirm ${actionTextCapitalized}`;
+    confirmBtn.onclick = function() {
+        if (actionType === 'receive') {
+            processBulkReceive();
+        } else {
+            processBulkVerify();
+        }
+    };
+    
+    // Show/hide confirm button based on whether there are actionable DVs
+    confirmBtn.style.display = actionDVs.length > 0 ? 'block' : 'none';
+    
+    modal.classList.remove('hidden');
+}
+
+window.closeBulkActionModal = function() {
+    const modal = document.getElementById('bulkActionModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    // Clear remarks
+    const remarksTextarea = document.getElementById('bulk-verify-remarks');
+    if (remarksTextarea) {
+        remarksTextarea.value = '';
+    }
+}
+
+window.processBulkReceive = async function() {
+    const selectedArray = Array.from(selectedRequests);
+    const submittedRequests = selectedArray.filter(req => req.status === 'submitted');
+    
+    if (submittedRequests.length === 0) {
+        window.showToast('No submitted requests selected for bulk receive', 'warning');
+        return;
+    }
+
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingMessage = document.getElementById('loadingMessage');
+    
+    if (loadingOverlay) {
+        loadingOverlay.classList.remove('hidden');
+        loadingMessage.textContent = 'Processing bulk receive...';
+    }
+
+    try {
+        const response = await fetch('/RegionalOffices/IMSD/dvrequests/bulk-receive', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+                dv_request_ids: submittedRequests.map(req => req.id)
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            window.showToast(result.message, 'success');
+            
+            // Show detailed results
+            if (result.results && result.results.failed && result.results.failed.length > 0) {
+                result.results.failed.forEach(fail => {
+                    window.showToast(`Failed: ${fail.control_number} - ${fail.error}`, 'error');
+                });
+            }
+            
+            if (result.results && result.results.skipped && result.results.skipped.length > 0) {
+                result.results.skipped.forEach(skip => {
+                    window.showToast(`Skipped: ${skip.control_number} - ${skip.reason}`, 'warning');
+                });
+            }
+            
+            // Clear selection BEFORE fetching new data
+            clearSelection();
+            
+            // Refresh data with a slight delay to allow state to clear
+            setTimeout(() => {
+                if (window.fetchDvRequests) window.fetchDvRequests();
+                if (window.fetchAgingDocuments) window.fetchAgingDocuments();
+                if (window.updateStatistics) window.updateStatistics();
+            }, 100);
+            
+        } else {
+            window.showToast(result.message || 'Bulk receive failed', 'error');
+        }
+    } catch (error) {
+        console.error('Error in bulk receive:', error);
+        window.showToast('Network error occurred during bulk receive', 'error');
+    } finally {
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('hidden');
+        }
+        closeBulkActionModal();
+    }
+}
+
+window.processBulkVerify = async function() {
+    const selectedArray = Array.from(selectedRequests);
+    const receivedRequests = selectedArray.filter(req => 
+        req.status === 'IMSD_received' || req.status === 'IMSD_in_process'
+    );
+    
+    if (receivedRequests.length === 0) {
+        window.showToast('No received/in-process requests selected for bulk verify', 'warning');
+        return;
+    }
+
+    const remarks = document.getElementById('bulk-verify-remarks')?.value.trim() || 'Bulk verified by IMSD';
+    
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingMessage = document.getElementById('loadingMessage');
+    
+    if (loadingOverlay) {
+        loadingOverlay.classList.remove('hidden');
+        loadingMessage.textContent = 'Processing bulk verify...';
+    }
+
+    try {
+        const response = await fetch('/RegionalOffices/IMSD/dvrequests/bulk-verify', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+                dv_request_ids: receivedRequests.map(req => req.id),
+                remarks: remarks
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            window.showToast(result.message, 'success');
+            
+            // Show detailed results
+            if (result.results && result.results.failed && result.results.failed.length > 0) {
+                result.results.failed.forEach(fail => {
+                    window.showToast(`Failed: ${fail.control_number} - ${fail.error}`, 'error');
+                });
+            }
+            
+            if (result.results && result.results.skipped && result.results.skipped.length > 0) {
+                result.results.skipped.forEach(skip => {
+                    window.showToast(`Skipped: ${skip.control_number} - ${skip.reason}`, 'warning');
+                });
+            }
+            
+            clearSelection();
+            
+            if (window.fetchDvRequests) window.fetchDvRequests();
+            if (window.fetchAgingDocuments) window.fetchAgingDocuments();
+            if (window.updateStatistics) window.updateStatistics();
+            
+        } else {
+            window.showToast(result.message || 'Bulk verify failed', 'error');
+        }
+    } catch (error) {
+        console.error('Error in bulk verify:', error);
+        window.showToast('Network error occurred during bulk verify', 'error');
+    } finally {
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('hidden');
+        }
+        closeBulkActionModal();
+    }
+}
+
+function updateBulkActionsBar() {
+    const bulkActionsBar = document.getElementById('bulk-actions-bar');
+    const selectedCountSpan = document.getElementById('selected-count');
+    const bulkReceiveBtn = document.getElementById('bulk-receive-btn');
+    const bulkVerifyBtn = document.getElementById('bulk-verify-btn');
+    
+    const count = selectedRequests.size;
+    selectedCountSpan.textContent = count;
+    
+    if (count > 0) {
+        bulkActionsBar.classList.remove('hidden');
+        
+        // Check if any selected items can be received (status = 'submitted')
+        const selectedArray = Array.from(selectedRequests);
+        const hasSubmitted = selectedArray.some(req => req.status === 'submitted');
+        const hasReceived = selectedArray.some(req => 
+            req.status === 'IMSD_received' || req.status === 'IMSD_in_process'
+        );
+        
+        bulkReceiveBtn.disabled = !hasSubmitted;
+        bulkVerifyBtn.disabled = !hasReceived;
+    } else {
+        bulkActionsBar.classList.add('hidden');
+    }
+    
+    // Update the select all checkbox state
+    updateSelectAllCheckbox();
+}
+
+function updateSelectAllCheckbox() {
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    if (!selectAllCheckbox) return;
+    
+    const currentPageData = window.getPaginatedData(); // Use window.getPaginatedData
+    const currentPageIds = currentPageData.map(item => item.id);
+    
+    // Count how many items on current page are selected
+    const selectedOnPage = Array.from(selectedRequests).filter(req => 
+        currentPageIds.includes(req.id)
+    ).length;
+    
+    if (selectedOnPage === 0) {
+        // None selected
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    } else if (selectedOnPage === currentPageData.length) {
+        // All selected
+        selectAllCheckbox.checked = true;
+        selectAllCheckbox.indeterminate = false;
+    } else {
+        // Some selected
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = true;
+    }
+}
+
 window.refreshAllData = function() {
     const tableContainer = document.getElementById('dv-table-container');
     if (tableContainer) {
@@ -237,6 +691,8 @@ window.refreshAllData = function() {
     
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = '';
+    
+    clearSelection();
     
     if (window.fetchDvRequests) window.fetchDvRequests();
     if (window.fetchAgingDocuments) window.fetchAgingDocuments();
@@ -331,8 +787,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const pageNumbersContainer = document.getElementById('page-numbers');
     const currentRangeSpan = document.getElementById('current-range');
     const totalRecordsSpan = document.getElementById('total-records');
-
-    let allRequests = [];
+    let activeBulkOperation = null;
+    let bulkOperationTimeout = null;
     let searchTerm = "";
     let cachedAgingData = [];
     
@@ -341,7 +797,11 @@ document.addEventListener('DOMContentLoaded', function() {
     let perPage = 25;
     let totalPages = 1;
     let totalRecords = 0;
-
+    
+    let notificationQueue = {
+    received: [],
+    timeout: null
+};
     const statusColors = {
         'submitted': ['bg-gray-100 text-gray-800','bg-gray-400','Pending'],
         'IMSD_received': ['bg-blue-100 text-blue-800','bg-blue-400','Received'],
@@ -380,326 +840,223 @@ document.addEventListener('DOMContentLoaded', function() {
     // Subscribe to IMSD channel
     const generalChannel = pusher.subscribe('dv-requests-imsd');
 
-    // ============ PUSHER EVENT LISTENERS ============
+   // ============ PUSHER EVENT LISTENERS ============
 
-    // Listen for new DV request submissions
-    generalChannel.bind('dv-request-submitted', function(data) {
-        console.log('✅ New DV request submitted:', data);
-        
-        const controlNum = data.control_number || 'New Request';
-        const program = data.program || '';
-        const submittedBy = data.submitted_by || 'Unknown';
-        
-        window.showToast(`New request ${controlNum} submitted by ${submittedBy}`, 'success');
-        
-        fetchDvRequests();
-        setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 1000);
-    });
-
-    // Listen for DV request updates
-    generalChannel.bind('dv-request-updated', function(data) {
-        console.log('📝 DV request updated by focal person:', data);
-        
-        window.showToast(
-            `Document ${data.control_number} updated by ${data.updated_by}`, 
-            'info'
-        );
-        
-        fetchDvRequests();
-        setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 1000);
-    });
-
-    // Listen for DV request deletions
-    generalChannel.bind('dv-request-deleted', function(data) {
-        console.log('🗑️ DV request deleted by focal person:', data);
-        
-        window.showToast(
-            `Document ${data.control_number} was deleted by ${data.deleted_by}`, 
-            'warning'
-        );
-        
-        const deletedRow = document.querySelector(`tr[data-dv-id="${data.dv_request_id}"]`);
-        if (deletedRow) {
-            deletedRow.style.transition = 'opacity 0.3s ease-out';
-            deletedRow.style.opacity = '0';
-            setTimeout(() => {
-                deletedRow.remove();
-                fetchDvRequests();
-            }, 300);
-        } else {
+        // Listen for new DV request submissions
+        generalChannel.bind('dv-request-submitted', function(data) {
+            console.log('✅ New DV request submitted:', data);
+              
             fetchDvRequests();
-        }
+            setTimeout(() => {
+                fetchAgingDocuments();
+                updateStatistics();
+            }, 1000);
+        });
         
-        setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 1000);
-    });
-
-    // Listen for request received events
+        // Listen for DV request updates
+        generalChannel.bind('dv-request-updated', function(data) {
+            console.log('📝 DV request updated by focal person:', data);
+            
+            window.showToast(
+                `Document ${data.control_number} updated by ${data.updated_by}`, 
+                'info'
+            );
+            
+            fetchDvRequests();
+            setTimeout(() => {
+                fetchAgingDocuments();
+                updateStatistics();
+            }, 1000);
+        });
+        
+        // Listen for DV request deletions
+        generalChannel.bind('dv-request-deleted', function(data) {
+            console.log('🗑️ DV request deleted by focal person:', data);
+            
+            window.showToast(
+                `Document ${data.control_number} was deleted by ${data.deleted_by}`, 
+                'warning'
+            );
+            
+            const deletedRow = document.querySelector(`tr[data-dv-id="${data.dv_request_id}"]`);
+            if (deletedRow) {
+                deletedRow.style.transition = 'opacity 0.3s ease-out';
+                deletedRow.style.opacity = '0';
+                setTimeout(() => {
+                    deletedRow.remove();
+                    fetchDvRequests();
+                }, 300);
+            } else {
+                fetchDvRequests();
+            }
+            
+            setTimeout(() => {
+                fetchAgingDocuments();
+                updateStatistics();
+            }, 1000);
+        });
+        
+     // Listen for request received events (single receive)
     generalChannel.bind('dv-request-received', function(data) {
-        console.log('DV request received:', data);
+    console.log('DV request received:', data);
+    
+    const currentUserId = {{ auth()->id() }};
+    
+    // Check if this is part of a bulk operation
+    const isBulkOperation = activeBulkOperation && 
+                           activeBulkOperation.processed_ids.includes(data.dv_request_id) &&
+                           (Date.now() - activeBulkOperation.timestamp) < 2000;
+    
+    if (data.locked_by && data.locked_by !== currentUserId) {
+        console.log('Removing locked request from view:', data.dv_request_id);
         
-        let message = `Document ${data.control_number} received by ${data.received_by}`;
-        window.showToast(message, 'success');
-        
-        fetchDvRequests();
-        setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 1000);
-    });
-
-    // Listen for other status updates
-    generalChannel.bind('dv-request-processing', function(data) {
-        console.log('DV request processing started:', data);
-        fetchDvRequests();
-        setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 1000);
-    });
-
-    generalChannel.bind('dv-request-verified', function(data) {
-        console.log('DV request verified:', data);
-        fetchDvRequests();
-        setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 1000);
-    });
-
-    generalChannel.bind('status-updated', function(data) {
-        console.log('DV request status updated:', data);
-        fetchDvRequests();
-        setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 1000);
-    });
-
-    // Aging alerts
-    generalChannel.bind('document-aging-alert', function(data) {
-        console.log('IMSD Aging alert received:', data);
-        window.showToast(`Aging document: ${data.control_number} is ${data.days_old} days old`, 'warning');
-        fetchAgingDocuments();
-        updateStatistics();
-    });
-
-    generalChannel.bind('imsd-aging-update', function(data) {
-        console.log('IMSD aging update received:', data);
-        window.showToast('Aging data updated', 'info');
-        fetchAgingDocuments();
-        updateStatistics();
-    });
-
-    // ============ DATA FETCHING FUNCTIONS ============
-    async function fetchDvRequests() {
-        try {
-            const res = await fetch("{{ route('RegionalOffices.IMSD.fetchAll') }}?search=" + encodeURIComponent(searchTerm));
-            const data = await res.json();
+        // Only process if NOT part of bulk operation (bulk operation already handled removal)
+        if (!isBulkOperation) {
+            // Remove from allRequests and filteredRequests arrays
+            allRequests = allRequests.filter(req => req.id !== data.dv_request_id);
+            filteredRequests = filteredRequests.filter(req => req.id !== data.dv_request_id);
             
-            allRequests = data;
-            totalRecords = data.length;
+            // Update totals
+            totalRecords = filteredRequests.length;
             totalPages = Math.ceil(totalRecords / perPage);
-            currentPage = 1;
             
+            // Remove from selection if it was selected
+            selectedRequests.forEach(req => {
+                if (req.id === data.dv_request_id) {
+                    selectedRequests.delete(req);
+                }
+            });
+            
+            // Re-render the table immediately
             renderTable(getPaginatedData());
             updatePaginationInfo();
+            updateBulkActionsBar();
             
-        } catch (err) {
-            console.error('Failed to fetch DV requests', err);
-            tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
+            // Update aging and statistics
+            setTimeout(() => {
+                fetchAgingDocuments();
+                updateStatistics();
+            }, 500);
+        }
+    } else if (data.locked_by === currentUserId) {
+        // Only show toast for single operations, not bulk
+        if (!isBulkOperation) {
+            let message = `Document ${data.control_number} received successfully`;
+            window.showToast(message, 'success');
+        }
+        
+        // Still update aging and statistics for the user who received (only if not bulk)
+        if (!isBulkOperation) {
+            setTimeout(() => {
+                fetchAgingDocuments();
+                updateStatistics();
+            }, 500);
         }
     }
-
-    async function fetchAgingDocuments() {
-        try {
-            const res = await fetch('{{ route("IMSD.aging.documents") }}');
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    });
+        
+        // Listen for bulk operation completed
+        generalChannel.bind('bulk-operation-completed', function(data) {
+            console.log('Bulk operation completed:', data);
             
-            const data = await res.json();
-            if (!data.success) throw new Error(data.message || 'Failed to fetch aging documents');
+            const currentUserId = {{ auth()->id() }};
             
-            cachedAgingData = data.documents || [];
-            renderAgingAlerts(data.documents, data.aging_count);
-            
-        } catch (err) {
-            console.error('Failed to fetch aging documents:', err);
-        }
-    }
-
-    async function updateStatistics() {
-        try {
-            const res = await fetch('{{ route("IMSD.aging.statistics") }}');
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            
-            const data = await res.json();
-            if (!data.success) throw new Error(data.message || 'Failed to fetch statistics');
-            
-            document.getElementById('stat-critical').textContent = data.critical || 0;
-            document.getElementById('stat-high').textContent = data.high || 0;
-            document.getElementById('stat-medium').textContent = data.medium || 0;
-            document.getElementById('stat-total').textContent = data.total_aging || 0;
-            
-        } catch (err) {
-            console.error('Failed to fetch statistics:', err);
-        }
-    }
-
-    // Make functions available globally for window.handleReceiveAction
-    window.fetchDvRequests = fetchDvRequests;
-    window.fetchAgingDocuments = fetchAgingDocuments;
-    window.updateStatistics = updateStatistics;
-
-    // ============ RENDERING FUNCTIONS ============
-    function renderTable(dvRequests) {
-        if (dvRequests.length === 0) {
-            tableContainer.innerHTML = `
-                <div class="text-center py-16">
-                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
-                    <p class="text-gray-500">Try adjusting your search filter.</p>
-                </div>
-            `;
-            return;
-        }
-
-        function formatToPHT(dateString) {
-            if (!dateString) return 'N/A';
-            try {
-                const date = new Date(dateString);
-                return date.toLocaleString('en-US', {
-                    timeZone: 'Asia/Manila',
-                    month: 'short',
-                    day: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true
-                });
-            } catch (error) {
-                return dateString;
+            if ((data.operation === 'bulk_receive' || data.operation === 'bulk_verify') && data.processed_ids) {
+                // Only remove from other users' views (not the user who performed the action)
+                if (data.performed_by && data.performed_by !== currentUserId) {
+                    console.log(`Removing ${data.operation} requests from view for other user`);
+                    
+                    // Remove all processed requests from arrays
+                    data.processed_ids.forEach(dvId => {
+                        allRequests = allRequests.filter(req => req.id !== dvId);
+                        filteredRequests = filteredRequests.filter(req => req.id !== dvId);
+                        
+                        // Remove from selection if it was selected
+                        selectedRequests.forEach(req => {
+                            if (req.id === dvId) {
+                                selectedRequests.delete(req);
+                            }
+                        });
+                    });
+                    
+                    // Update totals and re-render
+                    totalRecords = filteredRequests.length;
+                    totalPages = Math.ceil(totalRecords / perPage);
+                    
+                    // Adjust current page if needed
+                    if (currentPage > totalPages && totalPages > 0) {
+                        currentPage = totalPages;
+                    }
+                    
+                    renderTable(getPaginatedData());
+                    updatePaginationInfo();
+                    updateBulkActionsBar();
+                    
+                    // Show notification
+                    window.showToast(
+                        `Bulk ${data.operation.replace('_', ' ')}: ${data.success_count} processed by another user`,
+                        'info'
+                    );
+                }
+                
+                // Always update aging and statistics for all users (including the one who performed the action)
+                setTimeout(() => {
+                    fetchAgingDocuments();
+                    updateStatistics();
+                }, 500);
             }
-        }
-
-        let html = `
-            <div class="overflow-x-auto">
-                <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
-                    <thead class="bg-gray-50 text-[13px]">
-                        <tr>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
-                            <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
-        `;
-
-        dvRequests.forEach(request => {
-            const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
-            const formattedDate = formatToPHT(request.date);
-            
-            html += `
-                <tr class="hover:bg-gray-50 transition-colors duration-150" data-dv-id="${request.id}">
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${request.accounting_control_number}</td>
-                    <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                        <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span>
-                    </td>
-                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
-                    <td class="px-6 py-4">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
-                            <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">${formattedDate}</td>
-                    <td class="px-5 py-4 text-center text-sm font-medium">
-                        ${request.status === 'submitted' 
-                            ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">Receive</button>`    
-                            : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">View / Process</a>`
-                        }
-                    </td>
-                </tr>`;
+        });
+        
+        // Listen for other status updates
+        generalChannel.bind('dv-request-processing', function(data) {
+            console.log('DV request processing started:', data);
+            fetchDvRequests();
+            setTimeout(() => {
+                fetchAgingDocuments();
+                updateStatistics();
+            }, 1000);
+        });
+        
+        generalChannel.bind('dv-request-verified', function(data) {
+            console.log('DV request verified:', data);
+            fetchDvRequests();
+             setTimeout(() => {
+                fetchAgingDocuments();
+                updateStatistics();
+            }, 500);
+        });
+        
+        generalChannel.bind('status-updated', function(data) {
+            console.log('DV request status updated:', data);
+            fetchDvRequests();
+            setTimeout(() => {
+                fetchAgingDocuments();
+                updateStatistics();
+            }, 1000);
+        });
+        
+        // Aging alerts
+        generalChannel.bind('document-aging-alert', function(data) {
+            console.log('IMSD Aging alert received:', data);
+            window.showToast(`Aging document: ${data.control_number} is ${data.days_old} days old`, 'warning');
+            fetchAgingDocuments();
+            updateStatistics();
+        });
+        
+        generalChannel.bind('imsd-aging-update', function(data) {
+            console.log('IMSD aging update received:', data);
+            window.showToast('Aging data updated', 'info');
+            fetchAgingDocuments();
+            updateStatistics();
         });
 
-        html += `</tbody></table></div>`;
-        tableContainer.innerHTML = html;
+    // ============ PAGINATION FUNCTIONS ============
+    window.getPaginatedData = function() {
+        const startIndex = (currentPage - 1) * perPage;
+        const endIndex = startIndex + perPage;
+        return filteredRequests.slice(startIndex, endIndex);
     }
 
-    function renderAgingAlerts(documents, count) {
-        if (!agingAlertsContainer || !documents || documents.length === 0) {
-            if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
-            return;
-        }
-
-        const agingDocs = documents.filter(doc => !['IMSD_verified', 'completed'].includes(doc.status));
-        if (agingDocs.length === 0) {
-            agingAlertsContainer.innerHTML = '';
-            return;
-        }
-
-        // Aging alert rendering logic (keeping it concise)
-        agingDocs.forEach(doc => {
-            const days = Math.abs(Number(doc.days_old)) || 0;
-            doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
-        });
-
-        const highestUrgency = agingDocs.reduce((highest, doc) => {
-            const order = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
-            return order[doc.urgency] > order[highest] ? doc.urgency : highest;
-        }, 'low');
-
-        const config = {
-            'critical': { icon: '🚨', bg: 'bg-red-50 border-red-500', text: 'text-red-900' },
-            'high': { icon: '⚠️', bg: 'bg-orange-50 border-orange-500', text: 'text-orange-900' },
-            'medium': { icon: '⏰', bg: 'bg-yellow-50 border-yellow-500', text: 'text-yellow-900' },
-            'low': { icon: 'ℹ️', bg: 'bg-blue-50 border-blue-500', text: 'text-blue-900' }
-        };
-
-        const c = config[highestUrgency];
-
-        agingAlertsContainer.innerHTML = `
-            <div class="rounded-lg border-l-4 p-5 ${c.bg} shadow-md">
-                <div class="flex items-start justify-between mb-3">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">${c.icon}</span>
-                        <div>
-                            <h3 class="font-bold text-lg ${c.text}">Documents Need Processing</h3>
-                            <p class="text-sm opacity-80 ${c.text}">${agingDocs.length} document(s) older than 3 days</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="space-y-2 mt-4">
-                    ${agingDocs.slice(0, 5).map(doc => `
-                        <div class="p-3 bg-white/50 border rounded-lg">
-                            <p class="font-semibold text-sm ${c.text}">${doc.control_number}</p>
-                            <p class="text-xs opacity-70 ${c.text}">${doc.submitted_by} • ${doc.program}</p>
-                            <p class="text-xs font-medium mt-1 text-red-700">${doc.days_old} days old</p>
-                        </div>
-                    `).join('')}
-                    ${agingDocs.length > 5 ? `<p class="text-xs mt-3 opacity-75 ${c.text}">+${agingDocs.length - 5} more documents</p>` : ''}
-                </div>
-            </div>
-        `;
-    }
-
-    // ============ PAGINATION ============
     function updatePaginationInfo() {
         const start = ((currentPage - 1) * perPage) + 1;
         const end = Math.min(currentPage * perPage, totalRecords);
@@ -764,10 +1121,297 @@ document.addEventListener('DOMContentLoaded', function() {
         tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    function getPaginatedData() {
-        const startIndex = (currentPage - 1) * perPage;
-        const endIndex = startIndex + perPage;
-        return allRequests.slice(startIndex, endIndex);
+    // ============ SEARCH FUNCTIONALITY ============
+    function filterRequests(requests, searchTerm) {
+        if (!searchTerm) return requests;
+        
+        const searchLower = searchTerm.toLowerCase();
+        return requests.filter(request => {
+            return (
+                (request.accounting_control_number && request.accounting_control_number.toLowerCase().includes(searchLower)) ||
+                (request.submitted_by && request.submitted_by.toLowerCase().includes(searchLower)) ||
+                (request.program && request.program.toLowerCase().includes(searchLower)) ||
+                (request.ors_number && request.ors_number.toLowerCase().includes(searchLower)) ||
+                (request.respocenter && request.respocenter.toLowerCase().includes(searchLower))
+            );
+        });
+    }
+
+    function performSearch() {
+        filteredRequests = filterRequests(allRequests, searchTerm);
+        totalRecords = filteredRequests.length;
+        totalPages = Math.ceil(totalRecords / perPage);
+        currentPage = 1;
+        
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+    }
+
+    // ============ DATA FETCHING FUNCTIONS ============
+    async function fetchDvRequests() {
+        try {
+            const res = await fetch("{{ route('RegionalOffices.IMSD.fetchAll') }}");
+            const data = await res.json();
+            
+            allRequests = data;
+            performSearch(); // Apply current search filter to the new data
+            
+        } catch (err) {
+            console.error('Failed to fetch DV requests', err);
+            tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
+        }
+    }
+
+    async function fetchAgingDocuments() {
+        try {
+            const res = await fetch('{{ route("IMSD.aging.documents") }}');
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message || 'Failed to fetch aging documents');
+            
+            cachedAgingData = data.documents || [];
+            renderAgingAlerts(data.documents, data.aging_count);
+            
+        } catch (err) {
+            console.error('Failed to fetch aging documents:', err);
+        }
+    }
+
+    async function updateStatistics() {
+        try {
+            const res = await fetch('{{ route("IMSD.aging.statistics") }}');
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message || 'Failed to fetch statistics');
+            
+            document.getElementById('stat-critical').textContent = data.critical || 0;
+            document.getElementById('stat-high').textContent = data.high || 0;
+            document.getElementById('stat-medium').textContent = data.medium || 0;
+            document.getElementById('stat-total').textContent = data.total_aging || 0;
+            
+        } catch (err) {
+            console.error('Failed to fetch statistics:', err);
+        }
+    }
+
+    // Make functions available globally for window.handleReceiveAction
+    window.fetchDvRequests = fetchDvRequests;
+    window.fetchAgingDocuments = fetchAgingDocuments;
+    window.updateStatistics = updateStatistics;
+
+    // ============ RENDERING FUNCTIONS ============
+    function renderTable(dvRequests) {
+        // Don't clear the select all checkbox state here - let updateSelectAllCheckbox handle it
+        
+        if (dvRequests.length === 0) {
+            tableContainer.innerHTML = `
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                    <p class="text-gray-500">${searchTerm ? 'Try adjusting your search filter.' : 'No requests available.'}</p>
+                </div>
+            `;
+            
+            // Update select all checkbox for empty state
+            updateSelectAllCheckbox();
+            return;
+        }
+
+        function formatToPHT(dateString) {
+            if (!dateString) return 'N/A';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleString('en-US', {
+                    timeZone: 'Asia/Manila',
+                    month: 'short',
+                    day: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            } catch (error) {
+                return dateString;
+            }
+        }
+
+        let html = `
+            <div class="overflow-x-auto">
+                <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
+                    <thead class="bg-gray-50 text-[13px]">
+                        <tr>
+                            <th class="px-5 py-3 w-[5%] text-center">
+                                <input type="checkbox" id="select-all-checkbox" onclick="toggleSelectAll(this)" class="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500">
+                            </th>
+                            <th class="px-5 py-3 w-[13%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                            <th class="px-5 py-3 w-[11%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-5 py-3 w-[13%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                            <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
+        `;
+
+        dvRequests.forEach(request => {
+            const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
+            const formattedDate = formatToPHT(request.date);
+            
+            // Check if this specific request is in the selectedRequests Set
+            const isSelected = Array.from(selectedRequests).some(req => req.id === request.id);
+            
+            html += `
+                <tr class="hover:bg-gray-50 transition-colors duration-150" data-dv-id="${request.id}">
+                    <td class="px-5 py-4 text-center">
+                        <input type="checkbox" class="request-checkbox w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500" 
+                               data-request-id="${request.id}" 
+                               data-status="${request.status}"
+                               ${isSelected ? 'checked' : ''}
+                               onclick="toggleSelectRequest(${request.id}, '${request.status}')">
+                    </td>
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${request.accounting_control_number}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">
+                        <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span>
+                    </td>
+                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
+                    <td class="px-6 py-4">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
+                            <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${formattedDate}</td>
+                    <td class="px-5 py-4 text-center text-sm font-medium">
+                        ${request.status === 'submitted' 
+                            ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">Receive</button>`    
+                            : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">View / Process</a>`
+                        }
+                    </td>
+                </tr>`;
+        });
+
+        html += `</tbody></table></div>`;
+        tableContainer.innerHTML = html;
+        
+        // Update select all checkbox state after rendering
+        updateSelectAllCheckbox();
+    }
+
+    function renderAgingAlerts(documents, count) {
+        if (!agingAlertsContainer || !documents || documents.length === 0) {
+            if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
+            return;
+        }
+
+        const agingDocs = documents.filter(doc => !['IMSD_verified', 'completed'].includes(doc.status));
+        if (agingDocs.length === 0) {
+            agingAlertsContainer.innerHTML = '';
+            return;
+        }
+
+        // Ensure whole numbers for urgency calculation
+        agingDocs.forEach(doc => {
+            const days = Math.floor(Math.abs(Number(doc.days_old))) || 0; // Ensure whole number
+            doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
+        });
+
+        const highestUrgency = agingDocs.reduce((highest, doc) => {
+            const order = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
+            return order[doc.urgency] > order[highest] ? doc.urgency : highest;
+        }, 'low');
+
+        const config = {
+            'critical': { icon: '🚨', bg: 'bg-red-50 border-red-500', text: 'text-red-900' },
+            'high': { icon: '⚠️', bg: 'bg-orange-50 border-orange-500', text: 'text-orange-900' },
+            'medium': { icon: '⏰', bg: 'bg-yellow-50 border-yellow-500', text: 'text-yellow-900' },
+            'low': { icon: 'ℹ️', bg: 'bg-blue-50 border-blue-500', text: 'text-blue-900' }
+        };
+
+        const c = config[highestUrgency];
+
+        // Check if we have a saved state for the alert container
+        const alertState = JSON.parse(localStorage.getItem('agingAlertMinimized') || 'false');
+        const isMinimized = alertState === true;
+
+        agingAlertsContainer.innerHTML = `
+            <div class="rounded-lg border-l-4 p-5 ${c.bg} shadow-md aging-alert-container">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">${c.icon}</span>
+                        <div>
+                            <h3 class="font-bold text-lg ${c.text}">Documents Need Processing</h3>
+                            <p class="text-sm opacity-80 ${c.text}">${agingDocs.length} document(s) older than 3 days</p>
+                        </div>
+                    </div>
+                    <button class="minimize-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50" 
+                            title="${isMinimized ? 'Expand' : 'Minimize'}">
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                             style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
+                    <div class="space-y-2 mt-4">
+                        ${agingDocs.slice(0, 5).map(doc => {
+                            const daysOld = Math.floor(doc.days_old);
+                            return `
+                                <div class="p-3 bg-white/50 border rounded-lg">
+                                    <p class="font-semibold text-sm ${c.text}">${doc.control_number}</p>
+                                    <p class="text-xs opacity-70 ${c.text}">${doc.submitted_by} • ${doc.program}</p>
+                                    <p class="text-xs font-medium mt-1 text-red-700">${daysOld} days old</p>
+                                </div>
+                            `;
+                        }).join('')}
+                        ${agingDocs.length > 5 ? `<p class="text-xs mt-3 opacity-75 ${c.text}">+${agingDocs.length - 5} more documents</p>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Add event listener for the minimize button
+        const minimizeBtn = agingAlertsContainer.querySelector('.minimize-alert-btn');
+        const alertContent = agingAlertsContainer.querySelector('.alert-content');
+        
+        if (minimizeBtn && alertContent) {
+            minimizeBtn.addEventListener('click', function() {
+                const isCurrentlyMinimized = alertContent.classList.contains('hidden');
+                
+                if (isCurrentlyMinimized) {
+                    // Expand
+                    alertContent.classList.remove('hidden');
+                    alertContent.classList.add('block');
+                    this.innerHTML = `
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    `;
+                    this.setAttribute('title', 'Minimize');
+                    localStorage.setItem('agingAlertMinimized', 'false');
+                } else {
+                    // Minimize
+                    alertContent.classList.remove('block');
+                    alertContent.classList.add('hidden');
+                    this.innerHTML = `
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    `;
+                    this.setAttribute('title', 'Expand');
+                    localStorage.setItem('agingAlertMinimized', 'true');
+                }
+            });
+        }
     }
 
     // ============ EVENT LISTENERS ============
@@ -790,10 +1434,19 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
             searchTerm = this.value;
-            currentPage = 1;
-            fetchDvRequests();
+            performSearch();
         }, 300);
     });
+
+    // Modal event handlers
+    const bulkActionModal = document.getElementById('bulkActionModal');
+    if (bulkActionModal) {
+        bulkActionModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeBulkActionModal();
+            }
+        });
+    }
 
     // ============ AUTO-REFRESH ============
     setInterval(fetchAgingDocuments, 2 * 60 * 1000); // Every 2 minutes

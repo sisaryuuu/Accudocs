@@ -3,434 +3,441 @@
 @section('title', 'Obligate DV Request')
 
 @section('content')
-<div class="max-w-screen-2xl mx-auto py-8 px-4">
-    <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
-        
-        <!-- Left Section - ORS Processing - Now spans 4 columns -->
-        <div class="xl:col-span-4 bg-white shadow rounded-xl p-6">
-            <h1 class="text-2xl font-bold text-gray-900 mb-6">Budget Officer</h1>
+<div class="min-h-screen flex items-center justify-center py-8 px-4"> <!-- Centered wrapper -->
+    <div class="w-full max-w-screen-2xl"> <!-- Full width container -->
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
+            
+            <!-- Left Section - ORS Processing - Now spans 4 columns -->
+            <div class="xl:col-span-4 bg-white shadow rounded-xl p-6">
+                <h1 class="text-2xl font-bold text-gray-900 mb-6">Budget Officer</h1>
 
-            <form action="{{ route('BudgetOfficer.dvrequests.store', $dvRequest->id) }}" method="POST" class="space-y-6">
-                @csrf
-                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Mode of Payment</label>
+                <form action="{{ route('BudgetOfficer.dvrequests.store', $dvRequest->id) }}" method="POST" class="space-y-6">
+                    @csrf
+                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Mode of Payment</label>
 
-                    @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
-                    <ul class="space-y-2">
-                        @foreach($dvRequest->modeOfPayments as $mop)
-                            <li class="flex items-center p-3 rounded-lg border
-                                @if($loop->first) border-blue-500 bg-blue-50 @else border-gray-200 bg-white @endif">
-                                <input 
-                                    type="radio" 
-                                    name="selected_mop" 
-                                    value="{{ $mop->id }}" 
-                                    class="h-4 w-4 text-blue-600 border-gray-300 mr-2"
-                                    @if($loop->first) checked @endif
-                                    disabled
-                                >
-                                <span class="text-sm font-medium text-gray-900">{{ $mop->mopname ?? 'N/A' }}</span>
-                            </li>
-                        @endforeach
-                    </ul>
-                    @else
-                    <p class="text-gray-400">N/A</p>
-                    @endif
-                </div>
-
-                <!-- Basic Info - Now 4 columns -->
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Control No.</label>
-                        <input type="text" value="{{ $dvRequest->id ?? '' }}" 
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
+                        <ul class="space-y-2">
+                            @foreach($dvRequest->modeOfPayments as $mop)
+                                <li class="flex items-center p-3 rounded-lg border
+                                    @if($loop->first) border-blue-500 bg-blue-50 @else border-gray-200 bg-white @endif">
+                                    <input 
+                                        type="radio" 
+                                        name="selected_mop" 
+                                        value="{{ $mop->id }}" 
+                                        class="h-4 w-4 text-blue-600 border-gray-300 mr-2"
+                                        @if($loop->first) checked @endif
+                                        disabled
+                                    >
+                                    <span class="text-sm font-medium text-gray-900">{{ $mop->mopname ?? 'N/A' }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
+                        @else
+                        <p class="text-gray-400">N/A</p>
+                        @endif
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Name of Payee</label>
-                        <input type="text" value="{{ $dvRequest->focalPerson->fname ?? '' }} {{ $dvRequest->focalPerson->lname ?? '' }}"
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
-                        <p class="mt-1 text-sm text-gray-900">
-                          {{ $dvRequest->respocenter->rccode ?? '' }} {{ $dvRequest->respocenter->description ?? '' }}
-                        </p>
-                    </div>
-                </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Particulars</label>
-                    <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
-                </div>
-               
-                <!-- Enhanced Amounts Section -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Gross Amount</label>
-                    
-                    @if(in_array($dvRequest->status, ['ORS_received', 'ORS_in_process', 'ORS_onhold']))
-                        <!-- Amount Display with Edit Button -->
-                        <div class="mt-1">
-                            <div class="flex items-center space-x-3">
-                                <div class="amount-display bg-white border border-gray-300 rounded-lg px-4 py-2 min-w-[150px]">
-                                    <span class="text-lg font-medium">₱{{ number_format($dvRequest->amount, 2) }}</span>
-                                </div>
-                                <button type="button" 
-                                        onclick="openAmountModal({{ $dvRequest->id }}, {{ $dvRequest->amount }})"
-                                        class="edit-amount-btn text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50 transition-colors duration-200"
-                                        title="Edit amount">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                            <!-- Hidden input for form submission -->
-                            <input type="hidden" name="amount" id="amount-hidden" value="{{ $dvRequest->amount }}">
-                            <p class="text-xs text-green-600 mt-1 flex items-center">
-                                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
-                                </svg>
-                                Amount is editable while ORS is being processed
+                    <!-- Basic Info - Now 4 columns -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Control No.</label>
+                            <input type="text" value="{{ $dvRequest->id ?? '' }}" 
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Name of Payee</label>
+                            <input type="text" value="{{ $dvRequest->focalPerson->fname ?? '' }} {{ $dvRequest->focalPerson->lname ?? '' }}"
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
+                            <p class="mt-1 text-sm text-gray-900">
+                              {{ $dvRequest->respocenter->rccode ?? '' }} {{ $dvRequest->respocenter->description ?? '' }}
                             </p>
                         </div>
-                    @else
-                        <!-- Read-only Amount -->
-                        <input type="text" value="₱{{ number_format($dvRequest->amount, 2) }}"
-                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm bg-gray-50" readonly>
-                        <p class="text-xs text-gray-500 mt-1">Amount cannot be edited in current status</p>
-                    @endif
-                </div>
-
-                <!-- Payment Details Section - Now 4 columns -->
-                @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
-                    @foreach($dvRequest->modeOfPayments as $mop)
-                        @if($mop->pivot && $mop->pivot->paymentDetail)
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Bank Name</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                                </div>
-                                <div class="md:col-span-2">
-                                    <label class="block text-sm font-medium text-gray-700">Bank Address</label>
-                                    <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                                </div>
-                            </div>
-                            @break
-                        @endif
-                    @endforeach
-                    @if(!$dvRequest->modeOfPayments->contains(function($mop) { return $mop->pivot && $mop->pivot->paymentDetail; }))
-                        <p class="text-xs text-gray-400">No payment details available</p>
-                    @endif
-                @endif
-
-                <!-- Attachments Display Section -->
-                @if($dvRequest->program->prcode === 'GIP')
-                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-3">GIP Attachments</h2>
-                    
-                    @if($attachments && $attachments->count() > 0)
-                        <div class="space-y-2">
-                            @foreach($attachments as $attachment)
-                            <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                <div class="flex items-center space-x-3">
-                                    @if($attachment->is_present)
-                                        <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                        </svg>
-                                    @else
-                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                        </svg>
-                                    @endif
-                                    <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
-                                        {{ $attachment->name }}
-                                    </span>
-                                </div>
-                                <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
-                                    {{ $attachment->is_present ? 'Present' : 'Missing' }}
-                                </span>
-                            </div>
-                            @endforeach
-                        </div>
-                    @else
-                        <p class="text-gray-500 italic">No attachments available for this GIP request.</p>
-                    @endif
-                </div>
-                @endif
-
-                @if($dvRequest->program->prcode === 'TUPAD')
-                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                        TUPAD Attachments
-                        @if($selectedModality)
-                            <span class="text-sm font-normal text-blue-600">
-                                (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
-                            </span>
-                        @endif
-                    </h3>
-
-                    @if($selectedModality && $attachments && $attachments->count() > 0)
-                        <div class="space-y-2">
-                            @foreach($attachments as $attachment)
-                            <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                <div class="flex items-center space-x-3">
-                                    @if($attachment->is_present)
-                                        <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                        </svg>
-                                    @else
-                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
-                                        </svg>
-                                    @endif
-                                    <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
-                                        {{ $attachment->name }}
-                                    </span>
-                                </div>
-                                <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
-                                    {{ $attachment->is_present ? 'Present' : 'Missing' }}
-                                </span>
-                            </div>
-                            @endforeach
-                        </div>
-                    @elseif(!$selectedModality)
-                        <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
-                    @else
-                        <p class="text-gray-400">No attachments found for the selected modality.</p>
-                    @endif
-                </div>
-                @endif
-
-                @if($dvRequest->program->prcode === 'TEV')
-                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                        TEV Attachments
-                        @if($tevSelectedModality)
-                            <span class="text-sm font-normal text-blue-600">
-                                (Modality: {{ ucfirst(str_replace('_', ' ', $tevSelectedModality)) }})
-                            </span>
-                        @endif
-                    </h3>
-
-                    @if($tevSelectedModality && $tevAttachments && $tevAttachments->count() > 0)
-                        <div class="space-y-2">
-                            @foreach($tevAttachments as $attachment)
-                            <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                <div class="flex items-center space-x-3">
-                                    @if($attachment->is_present)
-                                        <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                        </svg>
-                                    @else
-                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
-                                        </svg>
-                                    @endif
-                                    <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
-                                        {{ $attachment->name }}
-                                    </span>
-                                </div>
-                                <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
-                                    {{ $attachment->is_present ? 'Present' : 'Missing' }}
-                                </span>
-                            </div>
-                            @endforeach
-                        </div>
-                    @elseif(!$tevSelectedModality)
-                        <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
-                    @else
-                        <p class="text-gray-400">No attachments found for the selected modality.</p>
-                    @endif
-                </div>
-                @endif
-
-                <!-- UACS Code Section -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-3">
-                        UACS Codes
-                        <span class="text-red-500">*</span>
-                    </label>
-                    
-                    <!-- Dynamic UACS Rows Container -->
-                    <div id="uacs-container" class="space-y-3">
-                        <!-- Rows will be added by JavaScript -->
                     </div>
-                    
-                    <!-- Add More Button -->
-                    <button type="button" 
-                            onclick="addUACSRow()"
-                            class="mt-3 inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                        </svg>
-                        Add Another UACS Code
-                    </button>
-                    
-                    <p class="text-xs text-gray-500 mt-2">
-                        <svg class="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-                        </svg>
-                        Select UACS codes that apply to this ORS request
-                    </p>
-                </div>  
-                             
-                <!-- ADL Code Section with Multiple Entry -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-3">
-                        ADL Codes
-                        <span class="text-red-500">*</span>
-                    </label>
-                    
-                    <!-- Dynamic ADL Rows Container -->
-                    <div id="adl-container" class="space-y-3">
-                        <!-- Rows will be added by JavaScript -->
-                    </div>
-                    
-                    <!-- Add More Button -->
-                    <button type="button" 
-                            onclick="addADLRow()"
-                            class="mt-3 inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                        </svg>
-                        Add Another ADL Code
-                    </button>
-                    
-                    <!-- Add New ADL Code Quick Button -->
-                    <button type="button" 
-                            onclick="openAddADLModal()"
-                            class="mt-2 ml-2 inline-flex items-center px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors duration-200">
-                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                        </svg>
-                        Create New ADL Code
-                    </button>
-                    
-                    <p class="text-xs text-gray-500 mt-2">
-                        <svg class="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-                        </svg>
-                        Select ADL codes that apply to this ORS request
-                    </p>
-                </div>
 
-                <!-- Allotment Class -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Allotment Class</label>
-                    <select name="allotment_class_id" 
-                        id="allotment-class-select"
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
-                        <option value="">-- Select Allotment Class --</option>
-                        @foreach($allotment_classes as $class)
-                            <option value="{{ $class->id }}">
-                                {{ $class->allotcode }} - {{ $class->description }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <!-- MFO/PAP -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">MFO/PAP</label>
-                    <select name="mfopap_id" 
-                        id="mfopap-select"
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
-                        <option value="">-- Select MFO/PAP --</option>
-                        @foreach($mfopaps as $mfopap)
-                            <option value="{{ $mfopap->id }}">
-                                {{ $mfopap->mfocode }} - {{ $mfopap->mfodescription }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <!-- Continuing/Current -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Continuing/Current</label>
-                    <select name="contcurrent_id" 
-                        id="contcurrent-select"
-                        class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
-                        <option value="">-- Select --</option>
-                        @foreach($contcurrents as $cont)
-                            <option value="{{ $cont->id }}">
-                                {{ $cont->ccode }} - {{ $cont->description }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <!-- Received Info -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Received By</label>
-                        <input type="text" value="{{ auth()->user()->fname ?? '' }} {{ auth()->user()->lname ?? '' }}" 
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Received At</label>
-                        <input type="text"  value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d  H:i')  : '' }}"
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
-                    </div>
-                </div>
-  
-                <!-- Remarks -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Remarks / Notes</label>
-                    <textarea id="remarks" name="remarks" rows="3" 
-                              class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm text-sm"
-                              placeholder="Enter remarks or notes...">{{ old('remarks') }}</textarea>
-                </div>
+                    
                 
-              @if(in_array($dvRequest->status, ['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified']))
-                  <button type="button"
-                            onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
-                            id="receive-btn">
-                            <span class="button-text">Receive</span>
-                            <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </button>
-                          <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
-                @elseif($dvRequest->status === 'ORS_received')
-                <div class="flex justify-end space-x-3">
-                    <button type="submit" 
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Obligate
-                    </button>
-                    <button type="button"
-                            onclick="openRejectModal({{ $dvRequest->id }})"
-                            class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                        Reject
-                    </button>
-                    <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        onclick="releaseLock(event, {{ $dvRequest->id }})"
-                       class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
-                        Cancel
-                    </a>
-                </div>
-                   @else
-                        <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
-                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
-                            Back
-                        </a>
+                    <!-- Enhanced Amounts Section -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Gross Amount</label>
+                        
+                        @if(in_array($dvRequest->status, ['ORS_received', 'ORS_in_process', 'ORS_onhold']))
+                            <!-- Amount Display with Edit Button -->
+                            <div class="mt-1">
+                                <div class="flex items-center space-x-3">
+                                    <div class="amount-display bg-white border border-gray-300 rounded-lg px-4 py-2 min-w-[150px]">
+                                        <span class="text-lg font-medium">₱{{ number_format($dvRequest->amount, 2) }}</span>
+                                    </div>
+                                    <button type="button" 
+                                            onclick="openAmountModal({{ $dvRequest->id }}, {{ $dvRequest->amount }})"
+                                            class="edit-amount-btn text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50 transition-colors duration-200"
+                                            title="Edit amount">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <!-- Hidden input for form submission -->
+                                <input type="hidden" name="amount" id="amount-hidden" value="{{ $dvRequest->amount }}">
+                                    <p class="text-xs text-green-600 mt-1 flex items-center">
+                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        Amount is editable while ORS is being processed
+                                    </p>
+                            </div>
+                        @else
+                            <!-- Read-only Amount -->
+                            <input type="text" value="₱{{ number_format($dvRequest->amount, 2) }}"
+                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm bg-gray-50" readonly>
+                            <p class="text-xs text-gray-500 mt-1">Amount cannot be edited in current status</p>
+                        @endif
+                    </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700">Particulars</label>
+                            <textarea 
+                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm h-48" 
+                                readonly>{{ $dvRequest->particulars ?? '' }}
+                            </textarea>
+                        </div>
+                    </div>
+                    <!-- Payment Details Section - Now 4 columns -->
+                    @if($dvRequest->modeOfPayments && $dvRequest->modeOfPayments->count() > 0)
+                        @foreach($dvRequest->modeOfPayments as $mop)
+                            @if($mop->pivot && $mop->pivot->paymentDetail)
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Bank Name</label>
+                                        <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
+                                        <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-sm font-medium text-gray-700">Bank Address</label>
+                                        <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                                    </div>
+                                </div>
+                                @break
+                            @endif
+                        @endforeach
+                        @if(!$dvRequest->modeOfPayments->contains(function($mop) { return $mop->pivot && $mop->pivot->paymentDetail; }))
+                            <p class="text-xs text-gray-400">No payment details available</p>
+                        @endif
                     @endif
-                </div>
-            </form>
-        </div>
 
-        <!-- Right Section - If needed for additional content -->
-        <div class="xl:col-span-1">
-            <!-- You can add any sidebar content here if needed -->
+                    <!-- Attachments Display Section -->
+                    @if($dvRequest->program->prcode === 'GIP')
+                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h2 class="text-lg font-semibold text-gray-800 mb-3">GIP Attachments</h2>
+                        
+                        @if($attachments && $attachments->count() > 0)
+                            <div class="space-y-2">
+                                @foreach($attachments as $attachment)
+                                <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                    <div class="flex items-center space-x-3">
+                                        @if($attachment->is_present)
+                                            <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                        @else
+                                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                        @endif
+                                        <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
+                                            {{ $attachment->name }}
+                                        </span>
+                                    </div>
+                                    <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
+                                        {{ $attachment->is_present ? 'Present' : 'Missing' }}
+                                    </span>
+                                </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="text-gray-500 italic">No attachments available for this GIP request.</p>
+                        @endif
+                    </div>
+                    @endif
+
+                    @if($dvRequest->program->prcode === 'TUPAD')
+                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                            TUPAD Attachments
+                            @if($selectedModality)
+                                <span class="text-sm font-normal text-blue-600">
+                                    (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
+                                </span>
+                            @endif
+                        </h3>
+
+                        @if($selectedModality && $attachments && $attachments->count() > 0)
+                            <div class="space-y-2">
+                                @foreach($attachments as $attachment)
+                                <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                    <div class="flex items-center space-x-3">
+                                        @if($attachment->is_present)
+                                            <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                        @else
+                                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
+                                            </svg>
+                                        @endif
+                                        <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
+                                            {{ $attachment->name }}
+                                        </span>
+                                    </div>
+                                    <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
+                                        {{ $attachment->is_present ? 'Present' : 'Missing' }}
+                                    </span>
+                                </div>
+                                @endforeach
+                            </div>
+                        @elseif(!$selectedModality)
+                            <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
+                        @else
+                            <p class="text-gray-400">No attachments found for the selected modality.</p>
+                        @endif
+                    </div>
+                    @endif
+
+                    @if($dvRequest->program->prcode === 'TEV')
+                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                            TEV Attachments
+                            @if($tevSelectedModality)
+                                <span class="text-sm font-normal text-blue-600">
+                                    (Modality: {{ ucfirst(str_replace('_', ' ', $tevSelectedModality)) }})
+                                </span>
+                            @endif
+                        </h3>
+
+                        @if($tevSelectedModality && $tevAttachments && $tevAttachments->count() > 0)
+                            <div class="space-y-2">
+                                @foreach($tevAttachments as $attachment)
+                                <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                    <div class="flex items-center space-x-3">
+                                        @if($attachment->is_present)
+                                            <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                        @else
+                                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
+                                            </svg>
+                                        @endif
+                                        <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
+                                            {{ $attachment->name }}
+                                        </span>
+                                    </div>
+                                    <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
+                                        {{ $attachment->is_present ? 'Present' : 'Missing' }}
+                                    </span>
+                                </div>
+                                @endforeach
+                            </div>
+                        @elseif(!$tevSelectedModality)
+                            <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
+                        @else
+                            <p class="text-gray-400">No attachments found for the selected modality.</p>
+                        @endif
+                    </div>
+                    @endif
+
+                    <!-- UACS Code Section -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            UACS Codes
+                            <span class="text-red-500">*</span>
+                        </label>
+                        
+                        <!-- Dynamic UACS Rows Container -->
+                        <div id="uacs-container" class="space-y-3">
+                            <!-- Rows will be added by JavaScript -->
+                        </div>
+                        
+                        <!-- Add More Button -->
+                        <button type="button" 
+                                onclick="addUACSRow()"
+                                class="mt-3 inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                            Add Another UACS Code
+                        </button>
+                        
+                        <p class="text-xs text-gray-500 mt-2">
+                            <svg class="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                            </svg>
+                            Select UACS codes that apply to this ORS request
+                        </p>
+                    </div>  
+                                
+                    <!-- ADL Code Section with Multiple Entry -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            ADL Codes
+                            <span class="text-red-500">*</span>
+                        </label>
+                        
+                        <!-- Dynamic ADL Rows Container -->
+                        <div id="adl-container" class="space-y-3">
+                            <!-- Rows will be added by JavaScript -->
+                        </div>
+                        
+                        <!-- Add More Button -->
+                        <button type="button" 
+                                onclick="addADLRow()"
+                                class="mt-3 inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                            Add Another ADL Code
+                        </button>
+                        
+                        <!-- Add New ADL Code Quick Button -->
+                        <button type="button" 
+                                onclick="openAddADLModal()"
+                                class="mt-2 ml-2 inline-flex items-center px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors duration-200">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                            Create New ADL Code
+                        </button>
+                        
+                        <p class="text-xs text-gray-500 mt-2">
+                            <svg class="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                            </svg>
+                            Select ADL codes that apply to this ORS request
+                        </p>
+                    </div>
+
+                    <!-- Allotment Class -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Allotment Class</label>
+                        <select name="allotment_class_id" 
+                            id="allotment-class-select"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
+                            <option value="">-- Select Allotment Class --</option>
+                            @foreach($allotment_classes as $class)
+                                <option value="{{ $class->id }}">
+                                    {{ $class->allotcode }} - {{ $class->description }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- MFO/PAP -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">MFO/PAP</label>
+                        <select name="mfopap_id" 
+                            id="mfopap-select"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
+                            <option value="">-- Select MFO/PAP --</option>
+                            @foreach($mfopaps as $mfopap)
+                                <option value="{{ $mfopap->id }}">
+                                    {{ $mfopap->mfocode }} - {{ $mfopap->mfodescription }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- Continuing/Current -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Continuing/Current</label>
+                        <select name="contcurrent_id" 
+                            id="contcurrent-select"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" required>
+                            <option value="">-- Select --</option>
+                            @foreach($contcurrents as $cont)
+                                <option value="{{ $cont->id }}">
+                                    {{ $cont->ccode }} - {{ $cont->description }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- Received Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Received By</label>
+                            <input type="text" value="{{ auth()->user()->fname ?? '' }} {{ auth()->user()->lname ?? '' }}" 
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Received At</label>
+                            <input type="text"  value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d  H:i')  : '' }}"
+                                   class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                        </div>
+                    </div>
+    
+                    <!-- Remarks -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Remarks / Notes</label>
+                        <textarea id="remarks" name="remarks" rows="3" 
+                                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm text-sm"
+                                  placeholder="Enter remarks or notes...">{{ old('remarks') }}</textarea>
+                    </div>
+                    
+                  @if(in_array($dvRequest->status, ['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified']))
+                      <button type="button"
+                                onclick="handleReceiveAction({{ $dvRequest->id }}, this)"
+                                class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                                id="receive-btn">
+                                <span class="button-text">Receive</span>
+                                <svg class="animate-spin -mr-1 ml-3 h-5 w-5 text-white hidden" id="loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </button>
+                              <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
+                            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                                Back
+                            </a>
+                    @elseif($dvRequest->status === 'ORS_received')
+                    <div class="flex justify-end space-x-3">
+                        <button type="submit" 
+                                class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            Obligate
+                        </button>
+                        <button type="button"
+                                onclick="openRejectModal({{ $dvRequest->id }})"
+                                class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            Reject
+                        </button>
+                        <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
+                            onclick="releaseLock(event, {{ $dvRequest->id }})"
+                           class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            Cancel
+                        </a>
+                    </div>
+                       @else
+                            <a href="{{ route('BudgetOfficer.dvrequests.index') }}"
+                            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" onclick="releaseLock(event, {{ $dvRequest->id }})">
+                                Back
+                            </a>
+                        @endif
+                    </div>
+                </form>
+            </div>
+
+            <!-- Right Section - If needed for additional content -->
+            <div class="xl:col-span-1">
+                <!-- You can add any sidebar content here if needed -->
+            </div>
         </div>
     </div>
 </div>

@@ -44,4 +44,10 @@ return [
         'client_id' => env('SENDPULSE_CLIENT_ID'),
         'client_secret' => env('SENDPULSE_CLIENT_SECRET'),
     ],
+
+    'iprogsms' => [
+    'base_url' => env('IPROG_SMS_BASE_URL', 'https://sms.iprogtech.com/api/v1'),
+    'token' => env('IPROG_SMS_API_TOKEN'),
+    ],
+
 ];

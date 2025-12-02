@@ -65,6 +65,7 @@
                             <option value="GIP" {{ request('program') == 'GIP' ? 'selected' : '' }}>GIP</option>
                             <option value="TUPAD" {{ request('program') == 'TUPAD' ? 'selected' : '' }}>TUPAD</option>
                             <option value="TEV" {{ request('program') == 'TEV' ? 'selected' : '' }}>TEV</option>
+                            <option value="CASH_FOR_WORK" {{ request('program') == 'CASH_FOR_WORK' ? 'selected' : '' }}>Cash for Work</option>
                         </select>
                     </div>
                     <div>
@@ -159,7 +160,7 @@
                 <table class="w-full text-sm text-left border">
                     <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
                         <tr>
-                            <th class="px-4 py-3">DV Request ID</th>
+                            <th class="px-4 py-3">DV Control Number</th>
                             <th class="px-4 py-3">Verification Step</th>
                             <th class="px-4 py-3">Status Before</th>
                             <th class="px-4 py-3">Status After</th>
@@ -167,7 +168,6 @@
                             <th class="px-4 py-3">Payee</th>
                             <th class="px-4 py-3">Date & Time</th>
                             <th class="px-4 py-3">Remarks</th>
-                            <th class="px-4 py-3">Attachments Checked</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -175,8 +175,13 @@
                             <tr class="hover:bg-gray-50">
                                 <!-- DV Request ID -->
                                 <td class="px-4 py-3 font-medium text-gray-900">
-                                    #{{ $history->dv_request_id }}
-                                </td>
+                                @if($history->dvRequest && $history->dvRequest->accounting_control_number)
+                                    CN #-{{ now()->year }}-{{ str_pad($history->dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) }}
+                                @elseif($history->accounting_control_number)
+                                    CN #-{{ now()->year }}-{{ str_pad($history->accounting_control_number, 4, '0', STR_PAD_LEFT) }}
+                                @else
+                                    <span class="text-gray-400">Pending</span>
+                                @endif
                                 
                                 <!-- Verification Step -->
                                 <td class="px-4 py-3">
@@ -224,9 +229,9 @@
                                 
                                 <!-- Payee -->
                                 <td class="px-4 py-3">
-                                    @if($history->dvRequest && $history->dvRequest->focalPerson)
-                                        {{ $history->dvRequest->focalPerson->fname ?? '' }} 
-                                        {{ $history->dvRequest->focalPerson->lname ?? '' }}
+                                    @if($history->dvRequest)
+                                        {{ $history->dvRequest->payee_fname ?? $history->dvRequest->focalPerson->fname ?? '' }} 
+                                        {{ $history->dvRequest->payee_lname ?? $history->dvRequest->focalPerson->lname ?? '' }}
                                     @else
                                         N/A
                                     @endif
@@ -242,34 +247,6 @@
                                     {{ $history->remarks ?? '—' }}
                                 </td>
                                 
-                                <!-- Attachments Checked -->
-                                <td class="px-4 py-3">
-                                    @if($history->verification_data && isset($history->verification_data['attachments_checked']))
-                                        @php
-                                            $attachments = $history->verification_data['attachments_checked'];
-                                            if (is_array($attachments)) {
-                                                $checkedCount = count(array_filter($attachments, function($a) {
-                                                    return is_array($a) && ($a['is_present'] ?? false);
-                                                }));
-                                                $totalCount = count($attachments);
-                                            } else {
-                                                $checkedCount = 0;
-                                                $totalCount = 0;
-                                            }
-                                        @endphp
-                                        <span class="text-xs text-gray-600">
-                                            {{ $checkedCount }}/{{ $totalCount }} checked
-                                        </span>
-                                        @if($checkedCount > 0)
-                                            <div class="mt-1 text-xs text-green-600">
-                                                <i class="fas fa-check-circle mr-1"></i>
-                                                {{ $checkedCount }} present
-                                            </div>
-                                        @endif
-                                    @else
-                                        <span class="text-xs text-gray-400">—</span>
-                                    @endif
-                                </td>
                                 
                 
                             </tr>

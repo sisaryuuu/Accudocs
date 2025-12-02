@@ -7,6 +7,7 @@ use App\Models\DvRequest;
 use App\Models\DocumentAgingAlert;
 use App\Services\PusherService;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class ORSRequestAgingController extends Controller
 {
@@ -21,65 +22,68 @@ class ORSRequestAgingController extends Controller
      * Get aging ORS documents for Budget Officer - USING DV_REQUEST_ID
      */
     public function getAgingDocuments()
-{
-    try {
-        Log::info('Fetching ORS aging documents using DV request IDs');
-        
-        $agingThreshold = 3; // days
-        $cutoffTime = now()->subDays($agingThreshold);
+    {
+        try {
+            Log::info('Fetching ORS aging documents using DV request IDs');
+            
+            $agingThreshold = 3; // days
+            $cutoffTime = now()->subDays($agingThreshold);
 
-        $agingRequests = DvRequest::with(['focalPerson', 'program', 'respocenter', 'orsRequest'])
-            ->whereIn('status', [
-                'Incoming-GIP_verified',
-                'Incoming-TUPAD_verified', 
-                'Incoming-TEV_verified',
-                'ORS_received',
-                'ORS_in_process',
-            ])
-            ->where('created_at', '<=', $cutoffTime)
-            ->orderBy('created_at', 'asc')
-            ->get()
-            ->map(function ($request) {
-                $daysOld = now()->diffInDays($request->created_at);
-                
-                // Get the latest alert for this DV request if it exists
-                $latestAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
-                    ->orderBy('created_at', 'desc')
-                    ->first();
-                
-                return [
-                    'id' => $request->id, // This is the DV request ID
-                    'alert_id' => $latestAlert ? $latestAlert->id : null,
-                    'control_number' => $request->accounting_control_number ? 
-                        'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) : '—',
-                    'ors_number' => $request->orsRequest->ors_number ?? '—',
-                    'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
-                    'program' => $request->program->prcode ?? 'N/A',
-                    'current_status' => $request->status,
-                    'submitted_date' => $request->created_at->format('M d, Y h:i A'),
-                    'days_in_status' => $daysOld,
-                    'urgency' => $this->getUrgencyLevel($daysOld),
-                ];
-            });
+            $agingRequests = DvRequest::with(['focalPerson', 'program', 'respocenter', 'orsRequest'])
+                ->whereIn('status', [
+                    'Incoming-GIP_verified',
+                    'Incoming-TUPAD_verified', 
+                    'Incoming-TEV_verified',
+                    'ORS_received',
+                    'ORS_in_process',
+                ])
+                ->where('created_at', '<=', $cutoffTime)
+                ->orderBy('created_at', 'asc')
+                ->get()
+                ->map(function ($request) {
+                    // FIX: Use proper days calculation with whole numbers
+                    $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
+                    $daysOld = abs((int) $daysOld);
+                    
+                    // Get the latest alert for this DV request if it exists
+                    $latestAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
+                        ->orderBy('created_at', 'desc')
+                        ->first();
+                    
+                    return [
+                        'id' => $request->id, // This is the DV request ID
+                        'alert_id' => $latestAlert ? $latestAlert->id : null,
+                        'control_number' => $request->accounting_control_number ? 
+                            'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) : '—',
+                        'ors_number' => $request->orsRequest->ors_number ?? '—',
+                        'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+                        'program' => $request->program->prcode ?? 'N/A',
+                        'current_status' => $request->status,
+                        'submitted_date' => $request->created_at->format('M d, Y h:i A'),
+                        'days_in_status' => $daysOld, // Now this will be a positive whole number
+                        'urgency' => $this->getUrgencyLevel($daysOld),
+                    ];
+                });
 
-        Log::info('ORS aging documents fetched successfully using DV request IDs', ['count' => $agingRequests->count()]);
+            Log::info('ORS aging documents fetched successfully using DV request IDs', ['count' => $agingRequests->count()]);
 
-        return response()->json([
-            'success' => true,
-            'aging_count' => $agingRequests->count(),
-            'documents' => $agingRequests,
-            'threshold_days' => $agingThreshold,
-        ]);
+            return response()->json([
+                'success' => true,
+                'aging_count' => $agingRequests->count(),
+                'documents' => $agingRequests,
+                'threshold_days' => $agingThreshold,
+            ]);
 
-    } catch (\Exception $e) {
-        Log::error('Error fetching Budget Officer ORS aging documents: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to fetch ORS aging documents',
-            'error' => $e->getMessage()
-        ], 500);
+        } catch (\Exception $e) {
+            Log::error('Error fetching Budget Officer ORS aging documents: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch ORS aging documents',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
+
     /**
      * Get ORS aging statistics - USING DV_REQUEST_ID
      */
@@ -156,7 +160,9 @@ class ORSRequestAgingController extends Controller
 
             $alertedCount = 0;
             foreach ($agingRequests as $request) {
-                $daysOld = now()->diffInDays($request->created_at);
+                // FIX: Use proper days calculation with whole numbers
+                $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
+                $daysOld = abs((int) $daysOld);
 
                 // ✅ Use DocumentAgingAlert with dv_request_id
                 $existingAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
@@ -180,7 +186,7 @@ class ORSRequestAgingController extends Controller
                         'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
                         'program' => $request->program->prcode ?? 'N/A',
                         'current_status' => $request->status,
-                        'days_old' => $daysOld,
+                        'days_old' => $daysOld, // Now this will be a positive whole number
                         'urgency' => $this->getUrgencyLevel($daysOld),
                         'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                         'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
@@ -209,6 +215,9 @@ class ORSRequestAgingController extends Controller
 
     protected function getUrgencyLevel($daysOld)
     {
+        // FIX: Ensure we're working with positive whole numbers
+        $daysOld = abs((int) $daysOld);
+        
         if ($daysOld >= 7) return 'critical';
         if ($daysOld >= 5) return 'high';
         if ($daysOld >= 3) return 'medium';

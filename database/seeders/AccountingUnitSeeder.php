@@ -7,6 +7,7 @@ use Illuminate\Database\Seeder;
 use App\Models\AccountingUnit;
 use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Hash;
+use Faker\Factory as Faker;
 
 class AccountingUnitSeeder extends Seeder
 {
@@ -15,6 +16,7 @@ class AccountingUnitSeeder extends Seeder
      */
     public function run(): void
     {
+       $faker = Faker::create();
         // Create roles
         $adminRole = Role::firstOrCreate(['name' => 'Admin']);
         $imsdRole = Role::firstOrCreate(['name' => 'IMSD']);
@@ -23,318 +25,266 @@ class AccountingUnitSeeder extends Seeder
         $incomingTevRole = Role::firstOrCreate(['name' => 'Incoming-TEV']);
         $budgetOfficerRole = Role::firstOrCreate(['name' => 'Budget_Officer']);
         $outgoingRole = Role::firstOrCreate(['name' => 'Outgoing']);
-        $accountingRole = Role::firstOrCreate(['name' => 'Accounting_III']);
+        $accountingRole = Role::firstOrCreate(['name' => 'Accountant_III']); // Changed to Accountant_III
         $regionalDirectorRole = Role::firstOrCreate(['name' => 'Regional_Director']);
         $cashierRole = Role::firstOrCreate(['name' => 'Cashier']);
 
-        // Create Admin account
+        // All available roles for random assignment
+        $allRoles = [
+            $adminRole, $imsdRole, $incomingGipRole, $incomingTupadRole, $incomingTevRole,
+            $budgetOfficerRole, $outgoingRole, $accountingRole, $regionalDirectorRole, $cashierRole
+        ];
+
+        // All roles except admin for regular users
+        $regularUserRoles = [
+            $imsdRole, $incomingGipRole, $incomingTupadRole, $incomingTevRole,
+            $budgetOfficerRole, $outgoingRole, $accountingRole, $regionalDirectorRole, $cashierRole
+        ];
+
+        // Create Admin account with ALL roles
         $admin = AccountingUnit::firstOrCreate(
             ['email' => 'admin@email.com'],
             [
-                'fname' => 'Admin',
+                'fname' => 'Kadyn',
                 'mi' => 'A',
-                'lname' => 'Admin',
+                'lname' => 'Curtis',
                 'password' => 'password',
                 'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅ Add verified timestamp
+                'email_verified_at' => now(),
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
         );
-        $admin->assignRole($adminRole);
+        $admin->syncRoles($allRoles); // Admin gets ALL roles
+        $admin->update(['primary_role' => 'Admin']);
 
-        // IMSD Users
-        $imsd = AccountingUnit::firstOrCreate(
-            ['email' => 'imsd@email.com'],
-            [
-                'fname' => 'IMSD',
-                'mi' => 'I',
-                'lname' => 'User',
-                'password' => 'password',
-                'profile_image' => '27.jpg',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $imsd->assignRole($imsdRole);
+        // Create users with multiple random roles
+        $users = [];
 
-        $imsd2 = AccountingUnit::firstOrCreate(
-            ['email' => 'imsd2@email.com'],
-            [
-                'fname' => 'IMSD2',
-                'mi' => 'I',
-                'lname' => 'User2',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $imsd2->assignRole($imsdRole);
+        // IMSD Users (2-3 roles including IMSD)
+        for ($i = 1; $i <= 3; $i++) {
+            $user = AccountingUnit::firstOrCreate(
+                ['email' => "imsd{$i}@email.com"],
+                [
+                    'fname' => $faker->firstName(),
+                    'mi' => $faker->randomLetter(),
+                    'lname' => $faker->lastName(),
+                    'password' => 'password',
+                    'profile_image' => $i == 1 ? '27.jpg' : 'default.png',
+                    'email_verified_at' => now(),
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+            
+            // Assign 2-3 random roles including IMSD
+            $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+            if (!in_array($imsdRole, $roles)) {
+                $roles[0] = $imsdRole; // Ensure IMSD role is included
+            }
+            $user->syncRoles($roles);
+            $user->update(['primary_role' => $imsdRole->name]);
+            $users[] = $user;
+        }
 
-        $imsd3 = AccountingUnit::firstOrCreate(
-            ['email' => 'imsd3@email.com'],
-            [
-                'fname' => 'IMSD3',
-                'mi' => 'I',
-                'lname' => 'User3',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $imsd3->assignRole($imsdRole);
-        
-        // Incoming GIP Users
-        $incomingGip = AccountingUnit::firstOrCreate(
-            ['email' => 'incoming.gip@email.com'],
-            [
-                'fname' => 'Incoming',
-                'mi' => 'G',
-                'lname' => 'IP',
-                'password' => 'password',
-                'profile_image' => '30.jpg',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $incomingGip->assignRole($incomingGipRole);
+        // Incoming GIP Users (2-3 roles including Incoming-GIP)
+        for ($i = 1; $i <= 3; $i++) {
+            $user = AccountingUnit::firstOrCreate(
+                ['email' => "incoming.gip{$i}@email.com"],
+                [
+                    'fname' => $faker->firstName(),
+                    'mi' => $faker->randomLetter(),
+                    'lname' => $faker->lastName(),
+                    'password' => 'password',
+                    'profile_image' => $i == 1 ? '30.jpg' : 'default.png',
+                    'email_verified_at' => now(),
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+            
+            // Assign 2-3 random roles including Incoming-GIP
+            $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+            if (!in_array($incomingGipRole, $roles)) {
+                $roles[0] = $incomingGipRole;
+            }
+            $user->syncRoles($roles);
+            $user->update(['primary_role' => $incomingGipRole->name]);
+            $users[] = $user;
+        }
 
-        $incomingGip2 = AccountingUnit::firstOrCreate(
-            ['email' => 'incoming.gip2@email.com'],
-            [
-                'fname' => 'Incoming2',
-                'mi' => 'G',
-                'lname' => 'IP2',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $incomingGip2->assignRole($incomingGipRole);
+        // Incoming TUPAD Users (2-3 roles including Incoming-TUPAD)
+        for ($i = 1; $i <= 3; $i++) {
+            $user = AccountingUnit::firstOrCreate(
+                ['email' => "incoming.tupad{$i}@email.com"],
+                [
+                    'fname' => $faker->firstName(),
+                    'mi' => $faker->randomLetter(),
+                    'lname' => $faker->lastName(),
+                    'password' => 'password',
+                    'profile_image' => $i == 2 ? '35.jpg' : 'default.png',
+                    'email_verified_at' => now(),
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+            
+            // Assign 2-3 random roles including Incoming-TUPAD
+            $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+            if (!in_array($incomingTupadRole, $roles)) {
+                $roles[0] = $incomingTupadRole;
+            }
+            $user->syncRoles($roles);
+            $user->update(['primary_role' => $incomingTupadRole->name]);
+            $users[] = $user;
+        }
 
-        $incomingGip3 = AccountingUnit::firstOrCreate(
-            ['email' => 'incoming.gip3@email.com'], // ✅ Fixed duplicate email
-            [
-                'fname' => 'Incoming3',
-                'mi' => 'G',
-                'lname' => 'IP3',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $incomingGip3->assignRole($incomingGipRole);
-
-        // Incoming TUPAD Users
-        $incomingTupad = AccountingUnit::firstOrCreate(
-            ['email' => 'incoming.tupad@email.com'],
-            [
-                'fname' => 'Incoming',
-                'mi' => 'T',
-                'lname' => 'Tupad',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $incomingTupad->assignRole($incomingTupadRole);
-
-        $incomingTupad2 = AccountingUnit::firstOrCreate(
-            ['email' => 'incoming.tupad2@email.com'],
-            [
-                'fname' => 'Incoming2',
-                'mi' => 'T',
-                'lname' => 'Tupad2',
-                'password' => 'password',
-                'profile_image' => '35.jpg',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $incomingTupad2->assignRole($incomingTupadRole);
-
-        $incomingTupad3 = AccountingUnit::firstOrCreate(
-            ['email' => 'incoming.tupad3@email.com'],
-            [
-                'fname' => 'Incoming3',
-                'mi' => 'T',
-                'lname' => 'Tupad3',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $incomingTupad3->assignRole($incomingTupadRole);
-
-        // Incoming TEV User
+        // Incoming TEV User (2-3 roles including Incoming-TEV)
         $incomingTev = AccountingUnit::firstOrCreate(
             ['email' => 'incoming.tev@email.com'],  
             [
-                'fname' => 'Incoming',
-                'mi' => 'T',
-                'lname' => 'EV',
+                'fname' => $faker->firstName(),
+                'mi' => $faker->randomLetter(),
+                'lname' => $faker->lastName(),
                 'password' => 'password',
                 'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
+                'email_verified_at' => now(),
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
         );
-        $incomingTev->assignRole($incomingTevRole);
-
-        // Budget Officers
-        $budgetOfficer = AccountingUnit::firstOrCreate(
-            ['email' => 'budget.officer@email.com'],
-            [
-                'fname' => 'Budget',
-                'mi' => 'O',
-                'lname' => 'Officer',
-                'password' => 'password',
-                'profile_image' => '52.jpg',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $budgetOfficer->assignRole($budgetOfficerRole);
-
-        $budgetOfficer2 = AccountingUnit::firstOrCreate(
-            ['email' => 'budget.officer2@email.com'],
-            [
-                'fname' => 'Budget2',
-                'mi' => 'O',
-                'lname' => 'Officer2',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $budgetOfficer2->assignRole($budgetOfficerRole);
-
-        $budgetOfficer3 = AccountingUnit::firstOrCreate(
-            ['email' => 'budget.officer3@email.com'],
-            [
-                'fname' => 'Budget3',
-                'mi' => 'O',
-                'lname' => 'Officer3',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $budgetOfficer3->assignRole($budgetOfficerRole);
         
-        // Outgoing Users
-        $outgoing = AccountingUnit::firstOrCreate(
-            ['email' => 'outgoing@email.com'],
-            [
-                'fname' => 'Outgoing',
-                'mi' => 'D',
-                'lname' => 'Going',
-                'password' => 'password',
-                'profile_image' => '37.jpg',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $outgoing->assignRole($outgoingRole);
+        // Assign 2-3 random roles including Incoming-TEV
+        $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+        if (!in_array($incomingTevRole, $roles)) {
+            $roles[0] = $incomingTevRole;
+        }
+        $incomingTev->syncRoles($roles);
+        $incomingTev->update(['primary_role' => $incomingTevRole->name]);
 
-        $outgoing2 = AccountingUnit::firstOrCreate(
-            ['email' => 'outgoing2@email.com'],
-            [
-                'fname' => 'Outgoing2',
-                'mi' => 'D',
-                'lname' => 'Going2',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $outgoing2->assignRole($outgoingRole);
+        // Budget Officers (2-3 roles including Budget_Officer)
+        for ($i = 1; $i <= 3; $i++) {
+            $user = AccountingUnit::firstOrCreate(
+                ['email' => "budget.officer{$i}@email.com"],
+                [
+                    'fname' => $faker->firstName(),
+                    'mi' => $faker->randomLetter(),
+                    'lname' => $faker->lastName(),
+                    'password' => 'password',
+                    'profile_image' => $i == 1 ? '52.jpg' : 'default.png',
+                    'email_verified_at' => now(),
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+            
+            // Assign 2-3 random roles including Budget_Officer
+            $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+            if (!in_array($budgetOfficerRole, $roles)) {
+                $roles[0] = $budgetOfficerRole;
+            }
+            $user->syncRoles($roles);
+            $user->update(['primary_role' => $budgetOfficerRole->name]);
+            $users[] = $user;
+        }
 
-        $outgoing3 = AccountingUnit::firstOrCreate(
-            ['email' => 'outgoing3@email.com'],
-            [
-                'fname' => 'Outgoing3',
-                'mi' => 'D',
-                'lname' => 'Going3',
-                'password' => 'password',
-                'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
-                'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
-        $outgoing3->assignRole($outgoingRole);
+        // Outgoing Users (2-3 roles including Outgoing)
+        for ($i = 1; $i <= 3; $i++) {
+            $user = AccountingUnit::firstOrCreate(
+                ['email' => "outgoing{$i}@email.com"],
+                [
+                    'fname' => $faker->firstName(),
+                    'mi' => $faker->randomLetter(),
+                    'lname' => $faker->lastName(),
+                    'password' => 'password',
+                    'profile_image' => $i == 1 ? '37.jpg' : 'default.png',
+                    'email_verified_at' => now(),
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+            
+            // Assign 2-3 random roles including Outgoing
+            $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+            if (!in_array($outgoingRole, $roles)) {
+                $roles[0] = $outgoingRole;
+            }
+            $user->syncRoles($roles);
+            $user->update(['primary_role' => $outgoingRole->name]);
+            $users[] = $user;
+        }
 
-        // Accounting III
+        // Accounting III (2-3 roles including Accounting_III)
         $accounting = AccountingUnit::firstOrCreate(
             ['email' => 'accounting3@email.com'],
             [
-                'fname' => 'Accounting',
-                'mi' => 'A',
-                'lname' => 'Accounting',
+                'fname' => $faker->firstName(),
+                'mi' => $faker->randomLetter(),
+                'lname' => $faker->lastName(),
                 'password' => 'password',
                 'profile_image' => '79.jpg',
-                'email_verified_at' => now(), // ✅
+                'email_verified_at' => now(),
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
         );
-        $accounting->assignRole($accountingRole);
+        
+        // Assign 2-3 random roles including Accounting_III
+        $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+        if (!in_array($accountingRole, $roles)) {
+            $roles[0] = $accountingRole;
+        }
+        $accounting->syncRoles($roles);
+        $accounting->update(['primary_role' => $accountingRole->name]);
 
-        // Regional Director
+        // Regional Director (2-3 roles including Regional_Director)
         $rd = AccountingUnit::firstOrCreate(
             ['email' => 'regional.director@email.com'],
             [
-                'fname' => 'Regional',
-                'mi' => 'R',
-                'lname' => 'Director',
+                'fname' => $faker->firstName(),
+                'mi' => $faker->randomLetter(),
+                'lname' => $faker->lastName(),
                 'password' => 'password',
                 'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
+                'email_verified_at' => now(),
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
         );
-        $rd->assignRole($regionalDirectorRole);
+        
+        // Assign 2-3 random roles including Regional_Director
+        $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+        if (!in_array($regionalDirectorRole, $roles)) {
+            $roles[0] = $regionalDirectorRole;
+        }
+        $rd->syncRoles($roles);
+        $rd->update(['primary_role' => $regionalDirectorRole->name]);
 
-        // Cashier
+        // Cashier (2-3 roles including Cashier)
         $cash = AccountingUnit::firstOrCreate(
             ['email' => 'cashier@email.com'],
             [
-                'fname' => 'Cashier',
-                'mi' => 'C',
-                'lname' => 'Cashier',
+                'fname' => $faker->firstName(),
+                'mi' => $faker->randomLetter(),
+                'lname' => $faker->lastName(),
                 'password' => 'password',
                 'profile_image' => 'default.png',
-                'email_verified_at' => now(), // ✅
+                'email_verified_at' => now(),
                 'updated_at' => now(),
                 'created_at' => now(),
             ]
         );
-        $cash->assignRole($cashierRole);
+        
+        // Assign 2-3 random roles including Cashier
+        $roles = $faker->randomElements($regularUserRoles, $faker->numberBetween(2, 3));
+        if (!in_array($cashierRole, $roles)) {
+            $roles[0] = $cashierRole;
+        }
+        $cash->syncRoles($roles);
+        $cash->update(['primary_role' => $cashierRole->name]);
+
+        // Output summary
+        $this->command->info('Admin user created with ALL roles: ' . $admin->getRoleNames()->implode(', '));
+        $this->command->info('Total users created: ' . (count($users) + 5)); // +5 for the single role users
     }
 }

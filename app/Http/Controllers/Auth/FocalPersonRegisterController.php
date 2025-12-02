@@ -36,7 +36,13 @@ class FocalPersonRegisterController extends Controller
             'fname'          => 'required|string|max:100',
             'mi'             => 'nullable|string|max:50',
             'lname'          => 'required|string|max:100',
-            'TIN_number'     => 'required|string|max:15|unique:focalpersons',
+            'TIN_number'     => [
+                'required',
+                'string',
+                'max:20',
+                'unique:focalpersons',
+                'regex:/^(\d{9}|\d{13}|\d{3}-\d{3}-\d{3}|\d{3}-\d{3}-\d{3}-\d{4})$/'
+            ],
             'Address'        => 'nullable|string|max:255',
             'email'          => [
                 'required', 
@@ -54,15 +60,40 @@ class FocalPersonRegisterController extends Controller
             ],
             'respocenter_id' => 'nullable|exists:responcenters,id',
         ], [
+            'TIN_number.regex' => 'The TIN number must be 9 digits (000-000-000) or 13 digits (000-000-000-0000).',
+            'TIN_number.max' => 'The TIN number must not exceed 16 characters.',
             'contactnumber.regex' => 'The contact number must be exactly 11 digits and contain numbers only.',
         ]);
 
-        // ✅ Create focal person with hashed password
+        // ✅ Format TIN number consistently
+        $tinNumber = $validated['TIN_number'];
+        $cleanTin = preg_replace('/[^0-9]/', '', $tinNumber);
+        
+        if (!in_array(strlen($cleanTin), [9, 13])) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors([
+                    'TIN_number' => 'The TIN number must be exactly 9 or 13 digits long.'
+                ]);
+        }
+        
+        if (strlen($cleanTin) === 9) {
+            $formattedTin = substr($cleanTin, 0, 3) . '-' . 
+                           substr($cleanTin, 3, 3) . '-' . 
+                           substr($cleanTin, 6, 3);
+        } else {
+            $formattedTin = substr($cleanTin, 0, 3) . '-' . 
+                           substr($cleanTin, 3, 3) . '-' . 
+                           substr($cleanTin, 6, 3) . '-' . 
+                           substr($cleanTin, 9, 4);
+        }
+
+        // ✅ Create focal person
         $focalPerson = FocalPerson::create([
             'fname'          => $validated['fname'],
             'mi'             => $validated['mi'] ?? null,
             'lname'          => $validated['lname'],
-            'TIN_number'     => $validated['TIN_number'],
+            'TIN_number'     => $formattedTin,
             'Address'        => $validated['Address'] ?? null,
             'email'          => $validated['email'],
             'password'       => Hash::make($validated['password']),
@@ -80,10 +111,8 @@ class FocalPersonRegisterController extends Controller
             $focalPerson->sendEmailVerificationNotification();
         }
 
-        // ✅ Login user
-        Auth::guard('focal')->login($focalPerson);
-
-        return redirect()->route('verification.notice')
-            ->with('success', 'Registration completed! Please check your email to verify your account before logging in.');
+        // ✅ Redirect with success message
+        return redirect()->route('login')
+            ->with('registration_success', 'Registration completed! Please login your account for email verification.');
     }
 }

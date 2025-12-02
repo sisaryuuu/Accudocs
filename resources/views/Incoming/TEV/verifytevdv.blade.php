@@ -57,66 +57,129 @@
                     </div>
                 </div>
 
+                {{-- Responsibility Center --}}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Responsibility Center</label>
+                    <input type="text" value="{{ $dvRequest->respocenter->rccode ?? '' }} - {{ $dvRequest->respocenter->description ?? '' }}" readonly
+                           class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
+                </div>
+
                 {{-- Particulars --}}
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Particulars</label>
                     <textarea rows="2" readonly class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
 
-                
-        {{-- TEV Attachments Section --}}
-        <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <label class="block text-sm font-medium text-gray-700 mb-3">
-                TEV Attachments 
-                @if($dvRequest->tev_modality)
-                    <span class="text-blue-600">({{ ucfirst($dvRequest->tev_modality) }})</span>
-                @endif
-            </label>
+                <!-- TEV Attachments Checklist -->
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            📋 TEV Attachments Verification
+                        </h3>
+                        
+                        <!-- Check All/Uncheck All Buttons -->
+                        <div id="bulk-action-buttons" class="flex items-center space-x-3 hidden">
+                            <button type="button" 
+                                    onclick="checkAllTEVAttachments()"
+                                    class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                Check All
+                            </button>
+                            <button type="button" 
+                                    onclick="uncheckAllTEVAttachments()"
+                                    class="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                                Uncheck All
+                            </button>
+                        </div>
+                    </div>
 
-            @if($dvRequest->tev_modality && $tevAttachments && $tevAttachments->count() > 0)
-                <ul class="space-y-2">
-                    @foreach($tevAttachments as $item)
-                        <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition border border-gray-200">
-                            <input type="checkbox" 
-                                name="tev_attachments[{{ $item->id }}]" 
-                                value="1"
-                                id="tev_attachment_{{ $item->id }}"
-                                class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
-                                {{ $item->is_present ? 'checked' : '' }}>
-                            <label for="tev_attachment_{{ $item->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
-                                {{ $item->name }}
-                            </label>
-                            @if($item->is_present)
-                                <span class="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded">✓ Present</span>
-                            @else
-                                <span class="text-xs text-gray-400 font-medium">Not Present</span>
-                            @endif
-                        </li>
-                    @endforeach
-                </ul>
-                
-                <div class="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
-                    <p class="text-xs text-blue-700">
-                        <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
-                    </p>
-                </div>
-            @elseif(!$dvRequest->tev_modality)
-                <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p class="text-sm text-yellow-800">
-                        <strong>⚠️ No Modality Selected</strong><br>
-                        No modality was selected by IMSD for this request. Please contact IMSD to select a modality first.
-                    </p>
-                </div>
-            @else
-                <div class="p-4 bg-gray-100 border border-gray-300 rounded-lg">
-                    <p class="text-sm text-gray-600">
-                        No attachments found for the selected modality ({{ $dvRequest->tev_modality }}).
-                    </p>
-                </div>
-            @endif
-        </div>    
+                    <!-- Modality Selection -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Select TEV Modality <span class="text-red-500">*</span>
+                        </label>
+                        <select name="tev_modality" required 
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm">
+                            <option value="">-- Select Modality --</option>
+                            <option value="Cash Advance for Local Travel" {{ $tevSelectedModality == 'Cash Advance for Local Travel' ? 'selected' : '' }}>Cash Advance for Local Travel</option>
+                            <option value="Liquidation of Cash Advances" {{ $tevSelectedModality == 'Liquidation of Cash Advances' ? 'selected' : '' }}>Liquidation of Cash Advances</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Select the TEV modality to verify required attachments</p>
+                    </div>
 
-
+                    <!-- Dynamic Attachments Container -->
+                    <div id="dynamic-attachments-container">
+                        @if($tevSelectedModality && $tevAttachments && $tevAttachments->count() > 0)
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                <p class="text-sm text-blue-800">
+                                    <strong>Verification Responsibility:</strong> 
+                                    <span class="font-semibold">Incoming-TEV</span> verifies all physical TEV attachments.
+                                    Found {{ $tevAttachments->count() }} required attachments for this modality.
+                                </p>
+                            </div>
+                    
+                            <ul class="space-y-2">
+                                @foreach($tevAttachments as $item)
+                                    <li class="flex items-center p-3 rounded-lg transition-all duration-200 
+                                        {{ $item->is_present ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200' }}">
+                                        <input type="checkbox" 
+                                            name="tev_attachments[{{ $item->id }}]" 
+                                            value="1"
+                                            id="tev_attachment_{{ $item->id }}"
+                                            class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3 attachment-checkbox"
+                                            {{ $item->is_present ? 'checked' : '' }}>
+                                        <label for="tev_attachment_{{ $item->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
+                                            {{ $item->name }}
+                                        </label>
+                                        <span class="text-xs font-medium px-2 py-1 rounded-full 
+                                            {{ $item->is_present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                            {{ $item->is_present ? '✓ Present' : '✗ Missing' }}
+                                        </span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                            
+                            <!-- Summary -->
+                            <div class="mt-4 flex items-center justify-between text-sm">
+                                <div class="flex items-center space-x-4">
+                                    <span class="flex items-center">
+                                        <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+                                        <span class="text-green-700" id="present-count">Present: {{ $tevAttachments->where('is_present', true)->count() }}</span>
+                                    </span>
+                                    <span class="flex items-center">
+                                        <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                                        <span class="text-red-700" id="missing-count">Missing: {{ $tevAttachments->where('is_present', false)->count() }}</span>
+                                    </span>
+                                </div>
+                                <span class="text-gray-600" id="total-count">Total: {{ $tevAttachments->count() }}</span>
+                            </div>
+                            
+                            <p class="text-xs text-gray-500 mt-4">
+                                <strong>Note:</strong> Check all physical documents that are present. 
+                                All attachments are required for TEV verification.
+                            </p>
+                        @elseif($tevSelectedModality && $tevAttachments->count() === 0)
+                            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                                <p class="text-sm text-yellow-800">
+                                    <strong>No attachments found!</strong> 
+                                    There are no attachments configured for the "{{ $tevSelectedModality }}" modality.
+                                    Please run the TEV attachment seeder or contact administrator.
+                                </p>
+                            </div>
+                        @else
+                            <div class="bg-gray-100 border border-gray-300 rounded-lg p-4">
+                                <p class="text-sm text-gray-600 italic">
+                                    Please select a modality above to view required attachments.
+                                </p>
+                            </div>
+                        @endif
+                    </div>
+                </div>
 
                 {{-- Amount --}}
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -129,25 +192,58 @@
 
                 {{-- Payment Details --}}
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    @if(isset($mop) && $mop->pivot->paymentDetail)
+                    @if($dvRequest->paymentDetails && $dvRequest->paymentDetails->count() > 0)
+                        @php
+                            $paymentDetail = $dvRequest->paymentDetails->first();
+                        @endphp
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Bank Name</label>
-                            <input type="text" value="{{ $mop->pivot->paymentDetail->bank_name ?? 'N/A' }}" readonly
+                            <input type="text" value="{{ $paymentDetail->bank_name ?? 'N/A' }}" readonly
                                    class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Bank Account Number</label>
-                            <input type="text" value="{{ $mop->pivot->paymentDetail->bank_accnum ?? 'N/A' }}" readonly
+                            <input type="text" value="{{ $paymentDetail->bank_accnum ?? 'N/A' }}" readonly
                                    class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Bank Address</label>
-                            <input type="text" value="{{ $mop->pivot->paymentDetail->bank_address ?? 'N/A' }}" readonly
+                            <input type="text" value="{{ $paymentDetail->bank_address ?? 'N/A' }}" readonly
                                    class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
                         </div>
                     @else
-                        <p class="text-xs text-gray-400">No payment details available</p>
+                        <p class="text-xs text-gray-400 col-span-3">No payment details available</p>
                     @endif
+                </div>
+
+                {{-- Received Info --}}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Received By</label>
+                        <input type="text" value="{{ $dvRequest->accountingUnit->fname ?? '' }} {{ $dvRequest->accountingUnit->lname ?? '' }}" readonly
+                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Received From</label>
+                        <input type="text" value="{{ $dvRequest->focalPerson->fname ?? 'Unknown' }} {{ $dvRequest->focalPerson->lname ?? '' }}" readonly
+                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">
+                    </div>
+                </div>
+
+                {{-- Date and Time --}}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Date Received</label>
+                        <input type="date" 
+                            value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('Y-m-d') : '' }}"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Time</label>
+                        <input type="time"   
+                            value="{{ $dvRequest->created_at ? $dvRequest->created_at->format('H:i') : '' }}"
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
+                    </div>
                 </div>
 
                 {{-- Remarks --}}
@@ -313,6 +409,32 @@
 <script>
 let currentRejectId = null;
 
+// Check All TEV Attachments
+function checkAllTEVAttachments() {
+    const checkboxes = document.querySelectorAll('#dynamic-attachments-container .attachment-checkbox');
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.checked) {
+            checkbox.checked = true;
+            // Trigger change event to update UI
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All TEV attachments marked as present', 'success');
+}
+
+// Uncheck All TEV Attachments
+function uncheckAllTEVAttachments() {
+    const checkboxes = document.querySelectorAll('#dynamic-attachments-container .attachment-checkbox');
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            checkbox.checked = false;
+            // Trigger change event to update UI
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All TEV attachments marked as missing', 'success');
+}
+
 // Update character count
 function updateCharCount() {
     const textarea = document.getElementById('rejectRemarks');
@@ -451,34 +573,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Handle TEV attachments
+    // Handle TEV attachment checkboxes - Update colors when changed
     const tevCheckboxes = document.querySelectorAll('input[name^="tev_attachments["]');
-
     tevCheckboxes.forEach(cb => {
         cb.addEventListener('change', (e) => {
             const listItem = e.target.closest('li');
-            let statusSpan = listItem.querySelector('span.text-xs');
-
-            // If there's no existing span (for unchecked ones), create it
-            if (!statusSpan) {
-                statusSpan = document.createElement('span');
-                statusSpan.classList.add('text-xs', 'ml-2');
-                listItem.appendChild(statusSpan);
-            }
-
+            const statusSpan = listItem.querySelector('span.text-xs');
+            
             if (e.target.checked) {
-                // ✅ Mark as Present
+                // ✅ Present - Green
+                listItem.classList.remove('bg-red-50', 'border-red-200');
+                listItem.classList.add('bg-green-50', 'border-green-200');
                 statusSpan.textContent = '✓ Present';
-                statusSpan.classList.remove('text-gray-400', 'font-normal', 'bg-transparent', 'px-0', 'py-0', 'rounded-none');
-                statusSpan.classList.add('text-green-600', 'font-medium', 'bg-green-50', 'px-2', 'py-1', 'rounded');
+                statusSpan.classList.remove('bg-red-100', 'text-red-800');
+                statusSpan.classList.add('bg-green-100', 'text-green-800');
             } else {
-                // ❌ Mark as Not Present
-                statusSpan.textContent = 'Not Present';
-                statusSpan.classList.remove('text-green-600', 'font-medium', 'bg-green-50', 'px-2', 'py-1', 'rounded');
-                statusSpan.classList.add('text-gray-400', 'font-normal');
+                // ❌ Missing - Red
+                listItem.classList.remove('bg-green-50', 'border-green-200');
+                listItem.classList.add('bg-red-50', 'border-red-200');
+                statusSpan.textContent = '✗ Missing';
+                statusSpan.classList.remove('bg-green-100', 'text-green-800');
+                statusSpan.classList.add('bg-red-100', 'text-red-800');
             }
+            
+            // Update summary counts
+            updateTEVAttachmentSummary();
         });
     });
+    
+    // Function to update TEV attachment summary
+    function updateTEVAttachmentSummary() {
+        const tevCheckboxes = document.querySelectorAll('input[name^="tev_attachments["]');
+        const total = tevCheckboxes.length;
+        const present = Array.from(tevCheckboxes).filter(cb => cb.checked).length;
+        const missing = total - present;
+        
+        // Update the summary display if it exists
+        const presentSpan = document.querySelector('.text-green-700');
+        const missingSpan = document.querySelector('.text-red-700');
+        
+        if (presentSpan) {
+            presentSpan.textContent = `Present: ${present}`;
+        }
+        if (missingSpan) {
+            missingSpan.textContent = `Missing: ${missing}`;
+        }
+    }
 });
 
 // Function to show toast messages
@@ -621,4 +761,202 @@ function releaseLock(event, id) {
         window.location.href = "{{ route('Incoming.TEV.index') }}";
     });
 }
+
+// TEV Attachments handling with dynamic color updates
+document.addEventListener('DOMContentLoaded', function() {
+    const modalitySelect = document.querySelector('select[name="tev_modality"]');
+    const bulkActionButtons = document.getElementById('bulk-action-buttons');
+    
+    if (!modalitySelect) {
+        return;
+    }
+    
+    // TEV attachments data by modality
+    const attachmentsByModality = {
+        'Cash Advance for Local Travel': [
+            '2 Copies of Obligation Request and Status (ORS)',
+            '3 copies of Disbursement Vouchers (DVs)',
+            '2 copies of Approved Itinerary of Travel',
+            'Approved Office Order or Travel Order',
+            'Certification from the Accountant that previous cash advance has been liquidated and accounted for in the books'
+        ],
+        'Liquidation of Cash Advances': [
+            '2 copies of Liquidation Report (Appendix 44, GAM)',
+            '2 copies of Revised Itinerary of Travel, if the previously approved itinerary was not followed',
+            'Certificate of Appearance or Attendance',
+            'Copy of previously approved Itinerary of Travel',
+            'Approved Travel Order or Notice of Inspection or Approved Official Business or equivalent',
+            'Paper or electronic plane, boat, or bus tickets; boarding pass; terminal fee receipts',
+            'Official invoices/receipts (e.g., hotel bills, Grab or taxi receipts)',
+            'Certification by the Head of Agency as to the absolute necessity of the expenses, with corresponding bills/receipts',
+            'Certificate of Expense Not Requiring Receipts (CENRR) or Reimbursable Expense Receipt (RER), as applicable (per Memorandum No. ROXI-2025-August-603 dated August 1, 2025)',
+            'Other supporting documents necessary to justify travel and reimbursement',
+            'Official Receipt (OR) in case of refund'
+        ]
+    };
+
+    // Handle modality selection change
+    modalitySelect.addEventListener('change', function() {
+        const selectedModality = this.value;
+        const attachmentsContainer = document.getElementById('dynamic-attachments-container');
+        
+        if (!selectedModality) {
+            // Show placeholder
+            attachmentsContainer.innerHTML = `
+                <div class="bg-gray-100 border border-gray-300 rounded-lg p-4">
+                    <p class="text-sm text-gray-600 italic">
+                        Please select a modality above to view required attachments.
+                    </p>
+                </div>
+            `;
+            // Hide bulk action buttons
+            if (bulkActionButtons) {
+                bulkActionButtons.classList.add('hidden');
+            }
+            return;
+        }
+
+        // Get attachments for selected modality
+        const attachments = attachmentsByModality[selectedModality] || [];
+
+        if (attachments.length === 0) {
+            attachmentsContainer.innerHTML = `
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p class="text-sm text-yellow-800">
+                        <strong>No attachments found!</strong> 
+                        There are no attachments configured for the "${selectedModality}" modality.
+                        Please run the TEV attachment seeder or contact administrator.
+                    </p>
+                </div>
+            `;
+            // Hide bulk action buttons
+            if (bulkActionButtons) {
+                bulkActionButtons.classList.add('hidden');
+            }
+            return;
+        }
+
+        // Show bulk action buttons
+        if (bulkActionButtons) {
+            bulkActionButtons.classList.remove('hidden');
+        }
+
+        // Generate attachments checklist with color coding
+        let attachmentsHTML = `
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p class="text-sm text-blue-800">
+                    <strong>Verification Responsibility:</strong> 
+                    <span class="font-semibold">Incoming-TEV</span> verifies all physical TEV attachments.
+                    Found ${attachments.length} required attachments for this modality.
+                </p>
+            </div>
+
+            <ul class="space-y-2">
+        `;
+
+        attachments.forEach((attachment, index) => {
+            const checkboxId = `tev_attachment_${selectedModality.replace(/\s+/g, '_')}_${index}`;
+            attachmentsHTML += `
+                <li class="flex items-center p-3 rounded-lg transition-all duration-200 bg-red-50 border border-red-200">
+                    <input 
+                        type="checkbox" 
+                        id="${checkboxId}"
+                        name="tev_attachments[${attachment}]"
+                        value="1"
+                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3 attachment-checkbox"
+                    >
+                    <label 
+                        for="${checkboxId}" 
+                        class="text-sm text-gray-900 cursor-pointer flex-1"
+                    >
+                        ${attachment}
+                    </label>
+                    <span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-800">✗ Missing</span>
+                </li>
+            `;
+        });
+
+        attachmentsHTML += `
+            </ul>
+            
+            <!-- Summary -->
+            <div class="mt-4 flex items-center justify-between text-sm">
+                <div class="flex items-center space-x-4">
+                    <span class="flex items-center">
+                        <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+                        <span class="text-green-700" id="dynamic-present-count">Present: 0</span>
+                    </span>
+                    <span class="flex items-center">
+                        <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                        <span class="text-red-700" id="dynamic-missing-count">Missing: ${attachments.length}</span>
+                    </span>
+                </div>
+                <span class="text-gray-600" id="dynamic-total-count">Total: ${attachments.length}</span>
+            </div>
+            
+            <p class="text-xs text-gray-500 mt-4">
+                <strong>Note:</strong> Check all physical documents that are present. 
+                All attachments are required for TEV verification.
+            </p>
+        `;
+
+        attachmentsContainer.innerHTML = attachmentsHTML;
+
+        // Add event listeners to new checkboxes
+        const newCheckboxes = attachmentsContainer.querySelectorAll('.attachment-checkbox');
+        newCheckboxes.forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const listItem = e.target.closest('li');
+                const statusSpan = listItem.querySelector('span.text-xs');
+                
+                if (e.target.checked) {
+                    // ✅ Present - Green
+                    listItem.classList.remove('bg-red-50', 'border-red-200');
+                    listItem.classList.add('bg-green-50', 'border-green-200');
+                    statusSpan.textContent = '✓ Present';
+                    statusSpan.classList.remove('bg-red-100', 'text-red-800');
+                    statusSpan.classList.add('bg-green-100', 'text-green-800');
+                } else {
+                    // ❌ Missing - Red
+                    listItem.classList.remove('bg-green-50', 'border-green-200');
+                    listItem.classList.add('bg-red-50', 'border-red-200');
+                    statusSpan.textContent = '✗ Missing';
+                    statusSpan.classList.remove('bg-green-100', 'text-green-800');
+                    statusSpan.classList.add('bg-red-100', 'text-red-800');
+                }
+                
+                // Update summary counts
+                updateDynamicTEVSummary();
+            });
+        });
+    });
+
+    // Function to update dynamic TEV summary
+    function updateDynamicTEVSummary() {
+        const dynamicCheckboxes = document.querySelectorAll('#dynamic-attachments-container .attachment-checkbox');
+        const total = dynamicCheckboxes.length;
+        const present = Array.from(dynamicCheckboxes).filter(cb => cb.checked).length;
+        const missing = total - present;
+        
+        // Update the summary display
+        const presentSpan = document.getElementById('dynamic-present-count');
+        const missingSpan = document.getElementById('dynamic-missing-count');
+        const totalSpan = document.getElementById('dynamic-total-count');
+        
+        if (presentSpan) {
+            presentSpan.textContent = `Present: ${present}`;
+        }
+        if (missingSpan) {
+            missingSpan.textContent = `Missing: ${missing}`;
+        }
+        if (totalSpan) {
+            totalSpan.textContent = `Total: ${total}`;
+        }
+    }
+
+    // Trigger change event if there's a pre-selected modality
+    if (modalitySelect.value) {
+        modalitySelect.dispatchEvent(new Event('change'));
+    }
+});
 </script>

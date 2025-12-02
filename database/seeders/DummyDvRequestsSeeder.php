@@ -5,122 +5,388 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Models\FocalPerson;
+use App\Models\Program;
+use App\Models\ResponCenter;
+use App\Models\ModeOfPayment;
+use App\Models\DvRequest;
+use App\Models\DvRequestModeOfPayment;
+use App\Models\PaymentDetail;
+use App\Models\DvRequestLog;
 use Carbon\Carbon;
 
 class DummyDvRequestsSeeder extends Seeder
 {
+    /**
+     * Run the database seeds.
+     */
     public function run(): void
     {
-        $startMonth = Carbon::create(2024, 9, 1);
-        $endMonth = Carbon::now();
-
-        $months = [];
-        $current = $startMonth->copy();
-
-        while ($current <= $endMonth) {
-            $months[] = $current->copy();
-            $current->addMonth();
-        }
-
-        $programDistribution = [1 => 60, 2 => 25, 3 => 15];
-        $statusDistribution = [
-            'Incoming-GIP_verified' => 20,
-            'Incoming-TUPAD_verified' => 30,
-            'Incoming-TEV_verified' => 15,
-            'IMSD_verified' => 25,
-            'submitted' => 10,
-        ];
-
-        $pickProgram = function () use ($programDistribution) {
-            $rand = rand(1, 100);
-            $cumulative = 0;
-            foreach ($programDistribution as $programId => $weight) {
-                $cumulative += $weight;
-                if ($rand <= $cumulative) return $programId;
-            }
-            return 1;
-        };
-
-        $pickStatus = function () use ($statusDistribution) {
-            $rand = rand(1, 100);
-            $cumulative = 0;
-            foreach ($statusDistribution as $status => $weight) {
-                $cumulative += $weight;
-                if ($rand <= $cumulative) return $status;
-            }
-            return 'submitted';
-        };
-
-        // Track sequential numbers per accounting unit per year
-        $yearlyCounters = [];
+        DB::beginTransaction();
         
-        // Track user sequences PER FOCAL PERSON (moved outside the month loop)
-        $sequenceTracker = [];
-
-        foreach ($months as $month) {
-            $records = [];
-
-            for ($i = 0; $i < 100; $i++) {
-                $focalpersonId = rand(1, 3);
-                $accountingunitId = rand(1, 3);
-                $randomDay = rand(1, $month->daysInMonth);
-                $randomDate = $month->copy()->day($randomDay)->addHours(rand(0, 23))->addMinutes(rand(0, 59));
-
-                // Initialize sequence tracker for this focal person if not exists
-                if (!isset($sequenceTracker[$focalpersonId])) {
-                    $sequenceTracker[$focalpersonId] = 1;
-                } else {
-                    $sequenceTracker[$focalpersonId]++;
-                }
-
-                // Initialize counter for this accounting unit for the current year
-                $currentYear = $randomDate->year;
-                $counterKey = $currentYear . '_' . $accountingunitId;
-                
-                if (!isset($yearlyCounters[$counterKey])) {
-                    $yearlyCounters[$counterKey] = 1;
-                }
-
-                // AUTO-GENERATE accounting_control_number with 4 digits
-                $accountingControlNumber = 'CN #-' . $currentYear . '-' . str_pad($yearlyCounters[$counterKey], 4, '0', STR_PAD_LEFT);
-                
-                // Increment the counter
-                $yearlyCounters[$counterKey]++;
-
-                $records[] = [
-                    'reference_number' => 'DVORS-' . strtoupper(Str::random(10)),
-                    'accounting_control_number' => $accountingControlNumber,
-                    'accountingunit_id' => $accountingunitId,
-                    'focalperson_id' => $focalpersonId,
-                    'program_id' => $pickProgram(),
-                    'respoCenter_id' => rand(1, 3),
-                    'particulars' => 'Auto-generated DV entry for ' . $month->format('F Y'),
-                    'amount' => rand(10000, 90000),
-                    'status' => $pickStatus(),
-                    'locked_by' => rand(1, 3),
-                    'locked_at' => $randomDate,
-                    'user_sequence' => $sequenceTracker[$focalpersonId], // This is now unique per focal person
-                    'created_at' => $randomDate,
-                    'updated_at' => $randomDate->copy()->addDays(rand(0, 5)),
-                ];
-            }
-
-            DB::table('dv_requests')->insert($records);
-            $this->command->info('✅ Inserted 100 records for ' . $month->format('F Y'));
-        }
-
-        $this->command->info('🎉 All dummy data inserted successfully!');
-        
-        // Display sample data for verification
-        $this->command->info('Sample Accounting Control Numbers (4-digit format):');
-        $samples = DB::table('dv_requests')
-            ->select('focalperson_id', 'user_sequence', 'accounting_control_number', 'status')
-            ->orderBy('accounting_control_number')
-            ->limit(15)
-            ->get();
+        try {
+            // Create Focal Persons
+            $focalPersons = $this->createFocalPersons();
             
-        foreach ($samples as $sample) {
-            $this->command->info("  - ACN: {$sample->accounting_control_number}, Focal: {$sample->focalperson_id}, Seq: {$sample->user_sequence}");
+            // Create Programs
+            $programs = $this->createPrograms();
+            
+            // Create Responsibility Centers
+            $respoCenters = $this->createRespoCenters();
+            
+            // Create Mode of Payments
+            $modeOfPayments = $this->createModeOfPayments();
+            
+            // Create DV Requests with different statuses
+            $this->createDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments);
+            
+            DB::commit();
+            
+            $this->command->info('✅ DV Request seeder completed successfully!');
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->command->error('❌ Seeder failed: ' . $e->getMessage());
+            throw $e;
         }
+    }
+    
+    /**
+     * Create Focal Persons
+     */
+    private function createFocalPersons(): array
+    {
+        $this->command->info('Creating/Using Focal Persons...');
+        
+        // Check if focal persons already exist
+        $existingFocals = FocalPerson::all();
+        
+        if ($existingFocals->count() > 0) {
+            $this->command->info('✓ Using ' . $existingFocals->count() . ' existing focal persons');
+            return $existingFocals->all();
+        }
+        
+        // If no focal persons exist, create new ones
+        $focalPersons = [
+            [
+                'fname' => 'Juan',
+                'mi' => 'D',
+                'lname' => 'Cruz',
+                'email' => 'juan.cruz@dole.gov.ph',
+                'password' => bcrypt('password'),
+                'TIN_number' => '123-456-789-000',
+                'Address' => 'Davao City, Philippines',
+                'contactnumber' => '09123456789',
+                'respocenter_id' => 1,
+            ],
+            [
+                'fname' => 'Maria',
+                'mi' => 'S',
+                'lname' => 'Santos',
+                'email' => 'maria.santos@dole.gov.ph',
+                'password' => bcrypt('password'),
+                'TIN_number' => '987-654-321-000',
+                'Address' => 'Tagum City, Philippines',
+                'contactnumber' => '09123456790',
+                'respocenter_id' => 2,
+            ],
+            [
+                'fname' => 'Pedro',
+                'mi' => 'L',
+                'lname' => 'Reyes',
+                'email' => 'pedro.reyes@dole.gov.ph',
+                'password' => bcrypt('password'),
+                'TIN_number' => '456-789-123-000',
+                'Address' => 'Mati City, Philippines',
+                'contactnumber' => '09123456791',
+                'respocenter_id' => 3,
+            ]
+        ];
+        
+        $created = [];
+        foreach ($focalPersons as $data) {
+            $created[] = FocalPerson::firstOrCreate(
+                ['email' => $data['email']], 
+                $data
+            );
+        }
+        
+        $this->command->info('✓ Created ' . count($created) . ' new focal persons');
+        return $created;
+    }
+    
+    /**
+     * Create Programs
+     */
+    private function createPrograms(): array
+    {
+        $this->command->info('Creating/Using Programs...');
+        
+        $existingPrograms = Program::all();
+        
+        if ($existingPrograms->count() > 0) {
+            $this->command->info('✓ Using ' . $existingPrograms->count() . ' existing programs');
+            return $existingPrograms->all();
+        }
+        
+        $programs = [
+            ['prcode' => 'TUPAD', 'description' => 'Tulong Panghanapbuhay sa Ating Disadvantaged/Displaced Workers'],
+            ['prcode' => 'GIP', 'description' => 'Government Internship Program'],
+            ['prcode' => 'TEV', 'description' => 'Travel Expenses Voucher'],
+            ['prcode' => 'SPES', 'description' => 'Special Program for Employment of Students'],
+            ['prcode' => 'KABUHAYAN', 'description' => 'Kabuhayan Development Program'],
+        ];
+        
+        $created = [];
+        foreach ($programs as $data) {
+            $created[] = Program::firstOrCreate(
+                ['prcode' => $data['prcode']], 
+                $data
+            );
+        }
+        
+        $this->command->info('✓ Created ' . count($created) . ' programs');
+        return $created;
+    }
+    
+    /**
+     * Create Responsibility Centers
+     */
+    private function createRespoCenters(): array
+    {
+        $this->command->info('Creating/Using Responsibility Centers...');
+        
+        $existingRespoCenters = ResponCenter::all();
+        
+        if ($existingRespoCenters->count() > 0) {
+            $this->command->info('✓ Using ' . $existingRespoCenters->count() . ' existing responsibility centers');
+            return $existingRespoCenters->all();
+        }
+        
+        $centers = [
+            ['rccode' => '16-001-03-00011-01-01', 'description' => 'OR'],
+            ['rccode' => '16-001-03-00011-01-02', 'description' => 'OARD'],
+            ['rccode' => '16-001-03-00011-01-01-01', 'description' => 'MALSU'],
+            ['rccode' => '16-001-03-00011-02-01', 'description' => 'IMSD'],
+            ['rccode' => '16-001-03-00011-02-02', 'description' => 'TSSD'],
+            ['rccode' => '16-001-03-00011-03-01', 'description' => 'DCFO'],
+            ['rccode' => '16-001-03-00011-03-02', 'description' => 'DNFO'],
+            ['rccode' => '16-001-03-00011-03-03', 'description' => 'DOFO'],
+            ['rccode' => '16-001-03-00011-03-04', 'description' => 'DSFO'],
+            ['rccode' => '16-001-03-00011-03-05', 'description' => 'DOCFO'],
+            ['rccode' => '16-001-03-00011-03-06', 'description' => 'DORFO'],
+            ['rccode' => '16-001-03-00011-03-07', 'description' => 'DIEO'],
+            ['rccode' => '16-001-03-00011-03-08', 'description' => 'DBFO'],
+        ];
+        
+        $created = [];
+        foreach ($centers as $data) {
+            $created[] = ResponCenter::firstOrCreate(
+                ['rccode' => $data['rccode']], 
+                $data
+            );
+        }
+        
+        $this->command->info('✓ Created ' . count($created) . ' responsibility centers');
+        return $created;
+    }
+    
+    /**
+     * Create Mode of Payments
+     */
+    private function createModeOfPayments(): array
+    {
+        $this->command->info('Using existing Mode of Payments...');
+        
+        // Use existing mode of payments from database
+        $existing = ModeOfPayment::all();
+        
+        if ($existing->count() > 0) {
+            $this->command->info('✓ Found ' . $existing->count() . ' existing mode of payments');
+            return $existing->all();
+        }
+        
+        // Fallback: create if none exist
+        $modes = [
+            ['mopname' => 'MDS Check'],
+            ['mopname' => 'Commercial Check'],
+            ['mopname' => 'ADA'],
+        ];
+        
+        $created = [];
+        foreach ($modes as $data) {
+            $created[] = ModeOfPayment::firstOrCreate($data);
+        }
+        
+        $this->command->info('✓ Created ' . count($created) . ' mode of payments');
+        return $created;
+    }
+    
+    /**
+     * Create DV Requests
+     */
+    private function createDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments): void
+    {
+        $this->command->info('Creating DV Requests...');
+        
+        $particularsTemplates = [
+            'Payment for training materials and supplies',
+            'Wages for TUPAD beneficiaries - Phase 1',
+            'Procurement of office equipment',
+            'Professional fees for consultancy services',
+            'Travel expenses for monitoring activities',
+            'Food and accommodation for training participants',
+            'Honorarium for resource speakers',
+            'Internet and communication expenses',
+        ];
+        
+        // Monthly distribution based on your data
+        $monthlyData = [
+            ['month' => 1, 'count' => 8],   // January
+            ['month' => 2, 'count' => 6],   // February
+            ['month' => 3, 'count' => 6],   // March
+            ['month' => 4, 'count' => 5],   // April
+            ['month' => 5, 'count' => 5],   // May
+            ['month' => 6, 'count' => 5],   // June
+            ['month' => 7, 'count' => 5],   // July
+            ['month' => 8, 'count' => 5],   // August
+            ['month' => 9, 'count' => 5],   // September
+            ['month' => 10, 'count' => 5],  // October
+            ['month' => 11, 'count' => 3],  // November (up to Nov 12)
+        ];
+        
+        $userSequence = 200;
+        $createdCount = 0;
+        
+        foreach ($monthlyData as $monthInfo) {
+            $month = $monthInfo['month'];
+            $count = $monthInfo['count'];
+            
+            for ($i = 0; $i < $count; $i++) {
+                $focal = $focalPersons[array_rand($focalPersons)];
+                $program = $programs[array_rand($programs)];
+                $respoCenter = $respoCenters[array_rand($respoCenters)];
+                $mop = $modeOfPayments[array_rand($modeOfPayments)];
+                
+                // Generate reference number: DVORS-XXXXXXXX (8 random uppercase characters)
+                do {
+                    $referenceNumber = 'DVORS-' . strtoupper(Str::random(8));
+                } while (DvRequest::where('reference_number', $referenceNumber)->exists());
+                
+                // Generate dates within the month
+                $day = rand(1, $month == 11 ? 12 : 28);
+                $createdAt = Carbon::create(2025, $month, $day, rand(8, 17), rand(0, 59));
+                $updatedAt = $createdAt->copy()->addHours(rand(1, 5));
+                
+                // Generate Accounting Control Number (simple incrementing number)
+                $accountingControlNumber = $userSequence;
+                                
+               try {
+                    $qrFileName = $referenceNumber . '.png';
+                    $qrStoragePath = storage_path('app/public/qr_codes/' . $qrFileName);
+                    $verifyUrl = url('dv/verify/' . $referenceNumber);
+                
+                    // Create directory if it doesn't exist
+                    $directory = dirname($qrStoragePath);
+                    if (!is_dir($directory)) {
+                        mkdir($directory, 0777, true);
+                    }
+                
+                    // Use external QR API
+                    $apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&data=' . urlencode($verifyUrl);
+                    $qrCodeContent = @file_get_contents($apiUrl);
+                
+                    if ($qrCodeContent === false) {
+                        // Fallback: Try alternative API
+                        $apiUrl2 = 'https://chart.googleapis.com/chart?chs=600x600&cht=qr&chl=' . urlencode($verifyUrl);
+                        $qrCodeContent = @file_get_contents($apiUrl2);
+                    }
+                
+                    if ($qrCodeContent !== false) {
+                        file_put_contents($qrStoragePath, $qrCodeContent);
+                
+                        if (file_exists($qrStoragePath) && filesize($qrStoragePath) > 0) {
+                            // ✅ Public URL (for viewing)
+                            $qrCodePath = '/qr_codes/' . $qrFileName;
+                        }
+                    }
+                } catch (\Exception $qrError) {
+                    $this->command->warn('QR Code generation failed for ' . $referenceNumber . ': ' . $qrError->getMessage());
+                }
+
+                                
+                // Create DV Request with accounting control number
+                $dvRequest = DvRequest::create([
+                    'focalperson_id' => $focal->id,
+                    'reference_number' => $referenceNumber,
+                    'accounting_control_number' => $accountingControlNumber,
+                    'user_sequence' => $userSequence++,
+                    'program_id' => $program->id,
+                    'respocenter_id' => $respoCenter->id,
+                    'amount' => rand(8900, 18200),
+                    'particulars' => $particularsTemplates[array_rand($particularsTemplates)],
+                    'status' => 'submitted',
+                    'dv_number' => null,
+                    'qr_code_path' => $qrCodePath,
+                    'confirmed_by_focal_person' => false,
+                    'confirmed_at' => null,
+                    'locked_by' => null,
+                    'locked_at' => null,
+                    'created_at' => $createdAt,
+                    'updated_at' => $updatedAt,
+                ]);
+                
+                // Attach Mode of Payment with better error handling
+                try {
+                    // Use DB insert for better error visibility
+                    $dvRequestMopId = DB::table('dv_request_mode_of_payment')->insertGetId([
+                        'dv_request_id' => $dvRequest->id,
+                        'mode_of_payment_id' => $mop->id,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    
+                    if (!$dvRequestMopId) {
+                        throw new \Exception("Failed to insert DvRequestModeOfPayment");
+                    }
+                    
+                    // Create Payment Details only for MDS Check and ADA
+                    if (in_array($mop->mopname, ['MDS Check', 'ADA'])) {
+                        DB::table('payment_details')->insert([
+                            'dv_request_mode_of_payment_id' => $dvRequestMopId,
+                            'bank_name' => ['BDO', 'BPI', 'Metrobank', 'Landbank'][array_rand(['BDO', 'BPI', 'Metrobank', 'Landbank'])],
+                            'bank_accnum' => (string) rand(100000000, 999999999),
+                            'bank_address' => 'Davao City Branch',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    $this->command->error("Error creating payment records: " . $e->getMessage());
+                    $this->command->info("DV Request ID: {$dvRequest->id}, Mode of Payment ID: {$mop->id}");
+                    throw $e;
+                }
+                
+                // Create initial submission log
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => $focal->id,
+                    'accountingunit_id' => null,
+                    'action' => 'Submitted',
+                    'remarks' => 'DV Request submitted by Focal Person',
+                    'created_at' => $createdAt,
+                ]);
+                
+                $createdCount++;
+                
+                // Progress indicator
+                if ($createdCount % 10 === 0) {
+                    sleep(1);
+                    $this->command->info("Created {$createdCount} requests...");
+                }
+            }
+        }
+        
+        $this->command->info('✓ Created ' . $createdCount . ' DV requests (all with "submitted" status and QR codes)');
     }
 }

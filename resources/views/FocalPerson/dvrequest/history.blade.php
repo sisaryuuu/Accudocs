@@ -99,6 +99,7 @@
                             <tr class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Control #</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ORS #</th> <!-- NEW COLUMN -->
+                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">DV #</th> <!-- NEW COLUMN -->
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Program</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Particulars</th>
                                 <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Amount</th>
@@ -115,7 +116,7 @@
                                         <div class="flex items-center">
                                             <div class="bg-gray-100 px-3 py-1 rounded-lg">
                                                 <span class="text-sm font-bold text-gray-700">
-                                                    {{ $request->accounting_control_number ?? 'N/A' }}
+                                                    CN #-{{ now()->year }}-{{ str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) }}
                                                 </span>
                                             </div>
                                         </div>
@@ -132,6 +133,18 @@
                                         @else
                                             <span class="text-sm text-gray-400">No ORS</span>
                                         @endif
+                                    </td>
+                                     <td class="px-6 py-4 whitespace-nowrap">
+                                      
+                                    @if($request->dv_number)
+                                        <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                                            {{ $request->dv_number }}
+                                        </span>
+                                    @else
+                                        <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">
+                                            No DV Number
+                                        </span>
+                                    @endif
                                     </td>
 
                                     <!-- Program -->

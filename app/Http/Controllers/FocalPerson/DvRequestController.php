@@ -54,6 +54,9 @@ public function index()
     $focalId = Auth::guard('focal')->id();
 
     try {
+        // Get per_page from request or default to 10
+        $perPage = request('per_page', 10);
+        
         $dvRequests = DvRequest::with(['focalperson', 'program', 'respocenter', 'modeOfPayments'])
             ->where('focalperson_id', $focalId)
             ->whereNotIn('status', ['Completed']) // Still exclude old Completed status
@@ -62,7 +65,8 @@ public function index()
                 $query->where('status', 'not like', '%_rejected');
             })
             ->latest()
-            ->get();
+            ->paginate($perPage); // Changed from get() to paginate()
+
     } catch (\Exception $e) {
         return back()->with('error', 'Database error: ' . $e->getMessage());
     }
@@ -387,26 +391,23 @@ public function history()
 
         return view('FocalPerson.dvrequest.preview', compact('data', 'dvRequest'));
     }
-
-    public function generatePDF($id)
+public function generatePDF($id)
 {
-     ini_set('max_execution_time', 300); // 5 minutes
+    ini_set('max_execution_time', 300);
     ini_set('memory_limit', '512M');
+    
     try {
         $dvRequest = DvRequest::with([
-                'focalperson', 
-                'program', 
-                'respocenter', 
-                'modeOfPayments'
-            ])
-            ->findOrFail($id);
+            'focalperson', 
+            'program', 
+            'respocenter', 
+            'modeOfPayments'
+        ])->findOrFail($id);
 
-        // Authorization check
         if ($dvRequest->focalperson_id !== Auth::guard('focal')->id()) {
             abort(403, 'Unauthorized access.');
         }
 
-        // Load payment details
         $dvRequest->modeOfPayments->each(function($mop) {
             $mop->pivot->load('paymentDetail');
         });
@@ -414,58 +415,106 @@ public function history()
         $modeOfPayment = $dvRequest->modeOfPayments->first();
         $paymentDetail = $modeOfPayment?->pivot?->paymentDetail;
 
-        // Prepare data for PDF
-     
-        $data = [
-           'payee' => $this->formatFullName(
-                $dvRequest->focalperson->fname,
-                $dvRequest->focalperson->mi,
-                $dvRequest->focalperson->lname
-            ),
-            'date' => $dvRequest->created_at->format('F d, Y'),
-            'address' => $dvRequest->focalperson->Address,
-            'tin' => $dvRequest->focalperson->TIN_number,
-            'mode_of_payment' => $modeOfPayment?->mopname ?? 'Not specified',
-            'particulars' => $dvRequest->particulars,
-            'amount' => number_format($dvRequest->amount, 2),
-            'respocenter_code' => $dvRequest->respocenter->rccode ?? '',
-            'respocenter_desc' => $dvRequest->respocenter->description ?? '',
-            'program_code' => $dvRequest->program->prcode ?? '',
-            'program_desc' => $dvRequest->program->description ?? '',
-            'bank_name' => $paymentDetail?->bank_name ?? '',
-            'bank_accnum' => $paymentDetail?->bank_accnum ?? '',
-            'bank_address' => $paymentDetail?->bank_address ?? '',
-            'imsd_head' => \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD'),
-            'accountant_name' => \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT'),
-            'regional_director' => \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR'),
-            'budget_officer' => \App\Models\Setting::get('budget_officer', 'NAME OF BUDGET OFFICER'),
-        ];
+        // Simple logo handling
+        $logo_url = null;
+        $logoPath = '/home/u203167746/domains/accudocs.accudocs.site/AccudocsProject/storage/app/public/logo/DOLE.png';
+        
+        if (file_exists($logoPath)) {
+            $imageData = file_get_contents($logoPath);
+            $base64 = base64_encode($imageData);
+            $logo_url = 'data:image/png;base64,' . $base64;
+        }
 
+        // Prepare variables
+        $payee = $this->formatFullName(
+            $dvRequest->focalperson->fname,
+            $dvRequest->focalperson->mi,
+            $dvRequest->focalperson->lname
+        );
+        
+        $date = $dvRequest->created_at->format('F d, Y');
+        $address = $dvRequest->focalperson->Address;
+        $tin = $dvRequest->focalperson->TIN_number;
+        $mode_of_payment = $modeOfPayment?->mopname ?? 'Not specified';
+        $particulars = $dvRequest->particulars;
+        $amount = number_format($dvRequest->amount, 2);
+        $respocenter_code = $dvRequest->respocenter->rccode ?? '';
+        $respocenter_desc = $dvRequest->respocenter->description ?? '';
+        $program_code = $dvRequest->program->prcode ?? '';
+        $program_desc = $dvRequest->program->description ?? '';
+        $bank_name = $paymentDetail?->bank_name ?? '';
+        $bank_accnum = $paymentDetail?->bank_accnum ?? '';
+        $bank_address = $paymentDetail?->bank_address ?? '';
+        $ors_no = $dvRequest->ors_number ?? '';
+        $dv_no = $dvRequest->dv_number ?? '';
+        
+        $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
+        $accountant_name = \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT');
+        $regional_director = \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR');
+        $budget_officer = \App\Models\Setting::get('budget_officer', 'NAME OF BUDGET OFFICER');
 
-        // Generate PDF
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.initdv', $data)
-        ->setPaper('Legal', 'portrait')
-        ->setOption('defaultFont', 'Times New Roman')
-        ->setOption('isHtml5ParserEnabled', true)
-        ->setOption('isRemoteEnabled', true)
-        ->setOption('isFontSubsettingEnabled', true);
+        // **MANUAL DOMPDF INSTANCE - BYPASS LARAVEL WRAPPER**
+        $dompdf = new \Dompdf\Dompdf();
+        
+        // Set options directly
+        $options = new \Dompdf\Options();
+        $options->set('defaultFont', 'Times New Roman');
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', false);
+        $options->set('isFontSubsettingEnabled', true);
+        $options->set('chroot', base_path());
+        $options->set('tempDir', sys_get_temp_dir());
+        $options->set('fontDir', storage_path('fonts'));
+        $options->set('fontCache', storage_path('fonts'));
+        
+        $dompdf->setOptions($options);
+        $dompdf->setPaper('Legal', 'portrait');
+
+        // Load HTML content
+        $html = view('pdf.initdv', compact(
+            'payee',
+            'date',
+            'address',
+            'tin',
+            'mode_of_payment',
+            'particulars',
+            'amount',
+            'respocenter_code',
+            'respocenter_desc',
+            'program_code',
+            'program_desc',
+            'bank_name',
+            'bank_accnum',
+            'bank_address',
+            'ors_no',
+            'dv_no',
+            'logo_url',
+            'imsd_head',
+            'accountant_name',
+            'regional_director',
+            'budget_officer'
+        ))->render();
+
+        $dompdf->loadHtml($html);
+        $dompdf->render();
 
         $filename = 'DV_' . ($dvRequest->reference_number ?? $dvRequest->id) . '_' . now()->format('Ymd_His') . '.pdf';
 
-        return $pdf->download($filename);
+        // Output the PDF
+        return $dompdf->stream($filename);
 
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        \Log::error('DV Request not found', ['id' => $id, 'error' => $e->getMessage()]);
-        return redirect()->back()->with('error', 'DV Request not found.');
     } catch (\Exception $e) {
         \Log::error('PDF Generation Failed', [
             'id' => $id, 
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
         ]);
+        
         return redirect()->back()->with('error', 'Failed to generate PDF: ' . $e->getMessage());
     }
 }
+
 public function generateORSPDF($id)
 {
     // Increase limits
@@ -497,6 +546,25 @@ public function generateORSPDF($id)
 
         \Log::info('Step 3: Preparing data');
 
+        // ✅ ADD LOGO HANDLING
+        $logo_url = null;
+        $logoPath = '/home/u203167746/domains/accudocs.accudocs.site/AccudocsProject/storage/app/public/logo/DOLE.png';
+        
+        if (file_exists($logoPath)) {
+            $imageData = file_get_contents($logoPath);
+            $base64 = base64_encode($imageData);
+            $logo_url = 'data:image/png;base64,' . $base64;
+            \Log::info('Logo loaded for ORS PDF');
+        } else {
+            // Fallback SVG logo
+            $svg = '<svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+                <rect width="200" height="100" fill="#f8f9fa" stroke="#dee2e6"/>
+                <text x="100" y="50" text-anchor="middle" dy=".3em" font-family="Arial" font-size="12" fill="#6c757d">DOLE LOGO</text>
+            </svg>';
+            $logo_url = 'data:image/svg+xml;base64,' . base64_encode($svg);
+            \Log::info('Using SVG fallback logo for ORS PDF');
+        }
+
         $data = [
             'payee' => $this->formatFullName(
                 $dvRequest->focalperson->fname,
@@ -508,7 +576,7 @@ public function generateORSPDF($id)
             'address' => $dvRequest->focalperson->Address ?? '',
             'tin' => $dvRequest->focalperson->TIN_number ?? '',
             'particulars' => $dvRequest->particulars ?? '',
-            'mfo' => $dvRequest->program->prcode ?? '',
+            'mfo' => '',
             'uacs' => '',
             'amount' => $dvRequest->amount,
         ];
@@ -531,26 +599,43 @@ public function generateORSPDF($id)
             return redirect()->back()->with('error', 'ORS template not found');
         }
 
-        \Log::info('Step 8: Generating PDF');
+        \Log::info('Step 8: Generating PDF with manual DomPDF');
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.initors', compact(
+        // MANUAL DOMPDF INSTANCE
+        $dompdf = new \Dompdf\Dompdf();
+        
+        // Set options directly
+        $options = new \Dompdf\Options();
+        $options->set('defaultFont', 'Times New Roman');
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', false);
+        $options->set('isFontSubsettingEnabled', false);
+        $options->set('chroot', base_path());
+        $options->set('tempDir', sys_get_temp_dir());
+        $options->set('fontDir', storage_path('fonts'));
+        $options->set('fontCache', storage_path('fonts'));
+        
+        $dompdf->setOptions($options);
+        $dompdf->setPaper('Legal', 'portrait');
+
+        // Load HTML content - ADD LOGO_URL TO COMPACT
+        $html = view('pdf.initors', compact(
             'data', 
             'respocenter_code', 
             'respocenter_desc',
             'imsd_head',
-            'budget_officer'
-        ))
-        ->setPaper('Legal', 'portrait')
-        ->setOption('isRemoteEnabled', false)
-        ->setOption('isHtml5ParserEnabled', true)
-        ->setOption('isFontSubsettingEnabled', false);
+            'budget_officer',
+            'logo_url' // ← ADD THIS
+        ))->render();
+
+        $dompdf->loadHtml($html);
+        $dompdf->render();
 
         $filename = 'ORS_' . ($dvRequest->ors_number ?? $dvRequest->reference_number ?? $dvRequest->id) . '_' . now()->format('Ymd_His') . '.pdf';
 
         \Log::info('Step 9: Starting download');
 
-        // Use stream with attachment header
-       return $pdf->download($filename);
+        return $dompdf->stream($filename);
 
     } catch (\Exception $e) {
         \Log::error('ORS PDF Generation Failed', [
@@ -563,7 +648,6 @@ public function generateORSPDF($id)
         return redirect()->back()->with('error', 'Failed to generate ORS PDF: ' . $e->getMessage());
     }
 }
-
 private function formatFullName($firstName, $middleInitial, $lastName)
 {
     $name = trim($lastName . ', ' . $firstName);
@@ -825,23 +909,21 @@ public function destroy(DvRequest $dvRequest)
             $profileImage = asset('storage/profiles/default.png');
             $roleOrDepartment = $log->department ?? 'System';
             
-            // FIXED: Properly handle actor names
+            // FIXED: Use primary_role instead of first role
             if ($log->focalperson) {
                 $actorName = trim($log->focalperson->fname . ' ' . ($log->focalperson->mi ?? '') . ' ' . $log->focalperson->lname);
                 if ($log->focalperson->profile_image) {
                     $profileImage = asset('storage/profiles/' . $log->focalperson->profile_image);
                 }
-                if ($log->focalperson->roles->first()) {
-                    $roleOrDepartment = $log->focalperson->roles->first()->name;
-                }
+                // FIXED: Use primary_role with fallback
+                $roleOrDepartment = $log->focalperson->primary_role ?? ($log->focalperson->roles->first()->name ?? 'Focal Person');
             } elseif ($log->accountingUnit) {
                 $actorName = trim(($log->accountingUnit->fname ?? '') . ' ' . ($log->accountingUnit->lname ?? ''));
                 if ($log->accountingUnit->profile_image) {
                     $profileImage = asset('storage/profiles/' . $log->accountingUnit->profile_image);
                 }
-                if ($log->accountingUnit->roles->first()) {
-                    $roleOrDepartment = $log->accountingUnit->roles->first()->name;
-                }
+                // FIXED: Use primary_role with fallback
+                $roleOrDepartment = $log->accountingUnit->primary_role ?? ($log->accountingUnit->roles->first()->name ?? 'Accounting Unit');
             } elseif ($log->external_actor) {
                 $actorName = $log->external_actor;
                 $roleOrDepartment = 'External Actor';
@@ -894,16 +976,13 @@ public function destroy(DvRequest $dvRequest)
                 $role = null;
                 $actorName = 'System';
                 
+                // FIXED: Use primary_role instead of first role
                 if ($log->focalperson) {
                     $actorName = trim($log->focalperson->fname . ' ' . ($log->focalperson->mi ?? '') . ' ' . $log->focalperson->lname);
-                    if ($log->focalperson->roles->first()) {
-                        $role = $log->focalperson->roles->first()->name;
-                    }
+                    $role = $log->focalperson->primary_role ?? ($log->focalperson->roles->first()->name ?? 'Focal Person');
                 } elseif ($log->accountingUnit) {
                     $actorName = trim(($log->accountingUnit->fname ?? '') . ' ' . ($log->accountingUnit->lname ?? ''));
-                    if ($log->accountingUnit->roles->first()) {
-                        $role = $log->accountingUnit->roles->first()->name;
-                    }
+                    $role = $log->accountingUnit->primary_role ?? ($log->accountingUnit->roles->first()->name ?? 'Accounting Unit');
                 } elseif ($log->external_actor) {
                     $actorName = $log->external_actor;
                     $role = 'External Actor';
@@ -921,12 +1000,14 @@ public function destroy(DvRequest $dvRequest)
                         'fname' => $log->focalperson->fname,
                         'lname' => $log->focalperson->lname,
                         'mi' => $log->focalperson->mi ?? '',
-                        'profile_image' => $log->focalperson->profile_image
+                        'profile_image' => $log->focalperson->profile_image,
+                        'primary_role' => $log->focalperson->primary_role // Add primary_role
                     ] : null,
                     'accounting_unit' => $log->accountingUnit ? [
                         'fname' => $log->accountingUnit->fname,
                         'lname' => $log->accountingUnit->lname,
-                        'profile_image' => $log->accountingUnit->profile_image
+                        'profile_image' => $log->accountingUnit->profile_image,
+                        'primary_role' => $log->accountingUnit->primary_role // Add primary_role
                     ] : null,
                 ];
             })
@@ -937,7 +1018,6 @@ public function destroy(DvRequest $dvRequest)
     
     return view('FocalPerson.dvrequest.logs', compact('dvRequest', 'logs', 'steps'));
 }
-
     protected function logAction(DvRequest $dvRequest, string $status, string $action, string $remarks): void
     {
         $focalId = Auth::guard('focal')->id();
@@ -1036,11 +1116,11 @@ public function destroy(DvRequest $dvRequest)
         'Outgoing_in_process' => 'Outgoing',
         'Outgoing_finalized' => 'Outgoing',
         'Outgoing_rejected' => 'Outgoing',
-        'RANCA_received' => 'Accounting_III',
-        'RANCA_in_process' => 'Accounting_III',
-        'RANCA_validated' => 'Accounting_III',
-        'RANCA_rejected' => 'Accounting_III',
-        'RANCA_amount_updated' => 'Accounting_III', 
+        'RANCA_received' => 'Accountant_III',
+        'RANCA_in_process' => 'Accountant_III',
+        'RANCA_validated' => 'Accountant_III',
+        'RANCA_rejected' => 'Accountant_III',
+        'RANCA_amount_updated' => 'Accountant_III', 
         'Regional_Director_received' => 'Regional_Director',
         'Regional_Director_signed_approved' => 'Regional_Director',
         'Cashier_received' => 'Cashier',

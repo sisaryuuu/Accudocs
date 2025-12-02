@@ -14,9 +14,9 @@ class OrsRequest extends Model
         'accountingunit_id',
         'focalperson_id',
         'adlcode_id',
-        'allotmentclass_id',
+        'allotment_class_id',
         'mfopap_id',
-        'continuingorcurrent_id',
+        'concurrent_id',
         'status',
         'obligated_by',
         'obligated_at',
@@ -75,16 +75,16 @@ class OrsRequest extends Model
 
     public function ContinuingOrCurrent()
     {
-        return $this->belongsTo(ContinuingOrCurrent::class, 'continuingorcurrent_id');
+        return $this->belongsTo(ContinuingOrCurrent::class, 'contcurrent_id');
     }
 
     public function AllotmentClass()
     {
-        return $this->belongsTo(AllotmentClass::class, 'allotmentclass_id');
+        return $this->belongsTo(AllotmentClass::class, 'allotment_class_id');
     }
 
     public function Mfopap()
     {
-        return $this->belongsTo(Mfopap::class, 'mfopap_id');
+        return $this->belongsTo(MfoPap::class, 'mfopap_id');
     }
 }

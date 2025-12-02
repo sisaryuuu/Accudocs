@@ -67,16 +67,12 @@
             <table class="w-full text-sm text-left border">
                 <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
                     <tr>
-                        <th class="px-4 py-3">DV Request ID</th>
+                        <th class="px-4 py-3">Control Number</th>
                         <th class="px-4 py-3">Verification Step</th>
                         <th class="px-4 py-3">Status Before</th>
                         <th class="px-4 py-3">Status After</th>
                         <th class="px-4 py-3">Program</th>
                         <th class="px-4 py-3">Payee</th>
-                        <th class="px-4 py-3">MFO/PAP</th>
-                        <th class="px-4 py-3">ADL Code</th>
-                        <th class="px-4 py-3">UACS Code</th>
-                        <th class="px-4 py-3">Allotment Class</th>
                         <th class="px-4 py-3">Date & Time</th>
                         <th class="px-4 py-3">Remarks</th>
                         <th class="px-4 py-3">Details</th>
@@ -86,9 +82,13 @@
                 <tbody class="divide-y">
                     @forelse($verificationHistory as $history)
                         <tr class="hover:bg-gray-50">
-                            {{-- DV Request ID --}}
+                            {{-- Control Number --}}
                             <td class="px-4 py-3 font-medium text-gray-900">
-                                #{{ $history->dv_request_id }}
+                                @if($history->dvRequest && $history->dvRequest->accounting_control_number)
+                                    CN #-{{ now()->year }}-{{ str_pad($history->dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) }}
+                                @else
+                                    <span class="text-gray-400">Pending</span>
+                                @endif
                             </td>
                             
                             {{-- Verification Step --}}
@@ -144,43 +144,7 @@
                                     {{ $history->verification_data['payee_name'] ?? 'N/A' }}
                                 @endif
                             </td>
-                            
-                            {{-- MFO/PAP --}}
-                            <td class="px-4 py-3 text-gray-700">
-                                @if($history->dvRequest && $history->dvRequest->mfoPap)
-                                    {{ $history->dvRequest->mfoPap->name ?? 'N/A' }}
-                                @else
-                                    {{ $history->verification_data['mfo_pap'] ?? 'N/A' }}
-                                @endif
-                            </td>
-                            
-                            {{-- ADL Code --}}
-                            <td class="px-4 py-3 text-gray-700">
-                                @if($history->dvRequest && $history->dvRequest->adlCode)
-                                    {{ $history->dvRequest->adlCode->code ?? 'N/A' }}
-                                @else
-                                    {{ $history->verification_data['adl_code'] ?? 'N/A' }}
-                                @endif
-                            </td>
-                            
-                            {{-- UACS Code --}}
-                            <td class="px-4 py-3 text-gray-700">
-                                @if($history->dvRequest && $history->dvRequest->uacsCode)
-                                    {{ $history->dvRequest->uacsCode->code ?? 'N/A' }}
-                                @else
-                                    {{ $history->verification_data['uacs_code'] ?? 'N/A' }}
-                                @endif
-                            </td>
-                            
-                            {{-- Allotment Class --}}
-                            <td class="px-4 py-3 text-gray-700">
-                                @if($history->dvRequest && $history->dvRequest->allotmentClass)
-                                    {{ $history->dvRequest->allotmentClass->name ?? 'N/A' }}
-                                @else
-                                    {{ $history->verification_data['allotment_class'] ?? 'N/A' }}
-                                @endif
-                            </td>
-                            
+                
                             {{-- Date & Time --}}
                             <td class="px-4 py-3 text-gray-600">
                                 {{ $history->verified_at->format('M d, Y h:i A') }}
@@ -236,7 +200,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="14" class="px-4 py-6 text-center text-gray-500">
+                            <td colspan="10" class="px-4 py-6 text-center text-gray-500">
                                 @if(request()->hasAny(['search', 'program', 'step', 'date_from', 'date_to']))
                                     No verification history found for the applied filters.
                                 @else

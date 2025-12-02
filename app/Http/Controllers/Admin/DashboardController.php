@@ -79,7 +79,7 @@ class DashboardController extends Controller
                     'error' => $e->getMessage()
                 ], 500);
             }
-
+            
             return redirect()->route('Admin.dashboard')
                 ->with('error', 'Failed to apply filters');
         }

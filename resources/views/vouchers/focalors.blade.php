@@ -265,9 +265,7 @@
                     <td style="border: 1px solid #000; border-top: none; padding: 3px; text-align: center; vertical-align: middle;">
                         Date
                     </td>
-                    <td style="border: 1px solid #000; border-top: none; border-left: none; padding: 3px; text-align: center;">
-                        {{ $data['date'] }}
-                    </td>
+
                 </tr>
             </table>
         </td>

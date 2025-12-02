@@ -13,6 +13,7 @@ use App\Models\DocumentAgingAlert;
 use App\Models\TUPADAttachment;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
+use App\Services\IprogSmsService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -24,10 +25,12 @@ class TupadDvRequestProcessingController extends Controller
      use TriggersDashboardUpdate; 
 
      protected PusherService $pusher;
+     protected IprogSmsService $smsService;
 
-    public function __construct(PusherService $pusher)
+    public function __construct(PusherService $pusher, IprogSmsService $smsService)
     {
         $this->pusher = $pusher;
+        $this->smsService = $smsService;
     }   
 
  public function index(Request $request)
@@ -388,6 +391,7 @@ protected function getOrCreateAttachmentsForDvRequest(DvRequest $dvRequest, stri
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
+            'particulars'  => $request->particulars,
             'amount'       => number_format($request->amount, 2),
             'status'       => $request->status,
             'date'         => $request->created_at->timezone('Asia/Manila')->format('M d, Y h:i A'),
@@ -568,38 +572,45 @@ protected function getOrCreateAttachmentsForDvRequest(DvRequest $dvRequest, stri
 }
 
 public function reject(Request $request, $id)
-{
-    try {
-        // Validate input
-        $request->validate([
-            'remarks' => 'required|string|max:1000|min:10',
-        ]);
+    {
+        try {
+            // Validate input
+            $request->validate([
+                'remarks' => 'required|string|max:1000|min:10',
+            ]);
 
-        // Find the DV request
-        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
+            // Find the DV request
+            $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'TUPAD'))
                               ->findOrFail($id);
-         $statusBefore = $dvRequest->status;
-        $currentUserId = auth()->id();
-    
-        // ✅ Only allow rejection if status is currently in Incoming-TUPAD stage
-        if ($dvRequest->status !== 'Incoming-TUPAD_received') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This DV request cannot be rejected at its current stage.'
-            ], 422);
-        }
+            
+            $statusBefore = $dvRequest->status;
+            $currentUserId = auth()->id();
+        
+            // ✅ Only allow rejection if status is currently in Incoming-TUPAD stage
+            if ($dvRequest->status !== 'Incoming-TUPAD_received') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This DV request cannot be rejected at its current stage.'
+                ], 422);
+            }
 
-        $rejectedAt = now();
-        $focalId = $dvRequest->focalperson_id;
-        $remarks = trim($request->remarks);
+            $rejectedAt = now();
+            $focalId = $dvRequest->focalperson_id;
+            $remarks = trim($request->remarks);
 
-        // ✅ Update DV request
-        $dvRequest->update([
-            'status'     => 'Incoming-TUPAD_rejected',
-            'locked_by'  => null,
-            'locked_at'  => null,
-        ]);
-        $this->saveIncomingTUPADVerificationHistory(
+            // ✅ FIX: Initialize variables before transaction
+            $emailSent = false;
+            $smsSent = false;
+
+            DB::transaction(function () use ($dvRequest, $statusBefore, $rejectedAt, $remarks, $focalId, $currentUserId, &$emailSent, &$smsSent) {
+                // ✅ Update DV request
+                $dvRequest->update([
+                    'status'     => 'Incoming-TUPAD_rejected',
+                    'locked_by'  => null,
+                    'locked_at'  => null,
+                ]);
+                
+                $this->saveIncomingTUPADVerificationHistory(
                     $dvRequest,
                     'reject',
                     $remarks,
@@ -612,87 +623,168 @@ public function reject(Request $request, $id)
                         'rejection_reason' => $remarks
                     ]
                 );
-        // ✅ Log rejection
-        $this->logAction(
-            $dvRequest->id,
-            'Incoming-TUPAD',
-            'Incoming-TUPAD_rejected',
-            "Rejected by Incoming-TUPAD: {$remarks}"
-        );
 
-          $emailSent = $this->sendRejectionEmail($dvRequest, $remarks);
+                // ✅ Log rejection
+                $this->logAction(
+                    $dvRequest->id,
+                    'Incoming-TUPAD',
+                    'Incoming-TUPAD_rejected',
+                    "Rejected by Incoming-TUPAD: {$remarks}"
+                );
+                // ✅ Notify focal person
+                Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => 'Incoming-TUPAD_rejected',
+                    'action'         => 'Rejected',
+                    'remarks'        => $remarks,
+                ]);
 
-        // ✅ Notify focal person
-        Notification::create([
-            'focalperson_id' => $focalId,
-            'dv_request_id'  => $dvRequest->id,
-            'status'         => 'Incoming-TUPAD_rejected',
-            'action'         => 'Rejected',
-            'remarks'        => $remarks,
-        ]);
+                // ✅ Real-time push to focal person
+                if (isset($this->pusher)) {
+                    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                        'dv_request_id' => $dvRequest->id,
+                        'status'        => 'Incoming-TUPAD_rejected',
+                        'remarks'       => $remarks,
+                        'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    ]);
 
-        // ✅ Real-time push to focal person
-        if (isset($this->pusher)) {
-            $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => 'Incoming-TUPAD_rejected',
-                'remarks'       => $remarks,
-                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            ]);
+                    // ✅ Real-time push to Incoming-TUPAD dashboard
+                    $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-rejected', [
+                        'dv_request_id' => $dvRequest->id,
+                        'status'        => 'Incoming-TUPAD_rejected',
+                        'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'action_performer_id' => $currentUserId,
+                        'verified_by_user_id' => $currentUserId,
+                    ]);
+                }
+            });
 
-            // ✅ Real-time push to Incoming-TUPAD dashboard
-            $this->pusher->trigger('dv-requests-incoming-tupad', 'dv-request-rejected', [
-                'dv_request_id' => $dvRequest->id,
-                'status'        => 'Incoming-TUPAD_rejected',
-                'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                'action_performer_id' => $currentUserId, // ADD THIS
-                'verified_by_user_id' => $currentUserId, // ADD THIS
-            ]);
-        }
+            
+            $emailSent = $this->sendRejectionEmail($dvRequest, $remarks);
+            $smsSent = $this->sendRejectionSMS($dvRequest, $remarks);
+
+
             $this->triggerDashboardUpdate();
 
-            $responseMessage = $emailSent ?? false
-                ? 'DV request has been rejected'
-                : 'DV request has been rejected';
+            // ✅ FIX: Update response message to include both email and SMS status
+            $responseMessage = 'DV request has been rejected';
+            
+            if ($emailSent && $smsSent) {
+                $responseMessage .= ' and notifications sent.';
+            } elseif ($emailSent) {
+                $responseMessage .= ' (email sent, SMS failed).';
+            } elseif ($smsSent) {
+                $responseMessage .= ' (SMS sent, email failed).';
+            } else {
+                $responseMessage .= ' (both notifications failed).';
+            }
 
-        // ✅ Always return JSON
-        return response()->json([
-            'success' => true,
-            'message' => $responseMessage,
-            'data' => [
-                'id'         => $dvRequest->id,
-                'status'     => 'Incoming-TUPAD_rejected',
-                'remarks'    => $remarks,
-                'email_sent' => $emailSent,
-            ]
-        ], 200);
+            // ✅ Always return JSON
+            return response()->json([
+                'success' => true,
+                'message' => $responseMessage,
+                'data' => [
+                    'id'         => $dvRequest->id,
+                    'status'     => 'Incoming-TUPAD_rejected',
+                    'remarks'    => $remarks,
+                    'email_sent' => $emailSent,
+                    'sms_sent'   => $smsSent
+                ]
+            ], 200);
 
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        \Log::error('DV Request not found: ' . $e->getMessage());
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'DV request not found.'
-        ], 404);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            \Log::error('DV Request not found: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'DV request not found.'
+            ], 404);
 
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        \Log::error('Validation error: ' . json_encode($e->errors()));
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Validation failed: ' . implode(', ', $e->errors()['remarks'] ?? ['Invalid input'])
-        ], 422);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation error: ' . json_encode($e->errors()));
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed: ' . implode(', ', $e->errors()['remarks'] ?? ['Invalid input'])
+            ], 422);
 
-    } catch (\Exception $e) {
-        \Log::error('Error rejecting TUPAD DV request: ' . $e->getMessage());
-        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        } catch (\Exception $e) {
+            \Log::error('Error rejecting TUPAD DV request: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
 
-        return response()->json([
-            'success' => false,
-            'message' => 'An error occurred while rejecting the DV request: ' . $e->getMessage()
-        ], 500);
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while rejecting the DV request: ' . $e->getMessage()
+            ], 500);
+        }
     }
-}
+
+    /**
+     * ✅ SEND REJECTION SMS - For TUPAD rejections
+     */
+    protected function sendRejectionSMS($dvRequest, $rejectionRemarks)
+    {
+        try {
+            $focalPerson = $dvRequest->focalPerson;
+            
+            // Use 'contactnumber' instead of 'phone'
+            if (!$focalPerson || empty($focalPerson->contactnumber)) {
+                Log::warning('Cannot send rejection SMS: focal person or contact number missing', [
+                    'dv_request_id' => $dvRequest->id,
+                    'focal_person_id' => $focalPerson->id ?? 'null',
+                    'has_contactnumber' => !empty($focalPerson->contactnumber)
+                ]);
+                return false;
+            }
+
+            $phoneNumber = $focalPerson->contactnumber;
+            
+            // Truncate remarks for SMS (SMS has character limits)
+            $truncatedRemarks = strlen($rejectionRemarks) > 150 
+                ? substr($rejectionRemarks, 0, 147) . '...' 
+                : $rejectionRemarks;
+
+            // ✅ FIX: Use user_sequence instead of id
+            $userSequence = $dvRequest->user_sequence ?? 'N/A';
+            $message = "Hi {$focalPerson->fname}, your DV Request #{$userSequence} has been rejected. Reason: {$truncatedRemarks}.";
+
+            Log::info('Sending TUPAD rejection SMS via iProg', [
+                'phone' => $phoneNumber,
+                'dv_request_id' => $dvRequest->id,
+                'user_sequence' => $userSequence,
+                'message_length' => strlen($message)
+            ]);
+
+            $result = $this->smsService->sendQuickSMS($phoneNumber, $message);
+            
+            if ($result['success']) {
+                Log::info('TUPAD rejection SMS sent successfully', [
+                    'dv_request_id' => $dvRequest->id,
+                    'user_sequence' => $userSequence,
+                    'phone' => $phoneNumber,
+                    'message_id' => $result['message_id'] ?? 'N/A'
+                ]);
+                return true;
+            } else {
+                Log::error('Failed to send TUPAD rejection SMS', [
+                    'dv_request_id' => $dvRequest->id,
+                    'user_sequence' => $userSequence,
+                    'phone' => $phoneNumber,
+                    'error' => $result['error'] ?? 'Unknown error'
+                ]);
+                return false;
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('TUPAD SMS rejection notification failed: ' . $e->getMessage(), [
+                'dv_request_id' => $dvRequest->id,
+                'user_sequence' => $dvRequest->user_sequence ?? 'N/A',
+                'exception' => $e->getTraceAsString()
+            ]);
+            return false;
+        }
+    }
 
      /**
      * ✅ SEND REJECTION EMAIL - SendPulse with SMTP fallback

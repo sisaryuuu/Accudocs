@@ -273,11 +273,8 @@
                                 <td class="table-cell">
                                     @if($history->dvRequest && $history->dvRequest->focalPerson)
                                         <div class="font-medium">
-                                            {{ $history->dvRequest->focalPerson->fname ?? '' }} 
-                                            {{ $history->dvRequest->focalPerson->lname ?? '' }}
-                                        </div>
-                                        <div class="text-xs text-gray-500">
-                                            {{ $history->dvRequest->focalPerson->position ?? '' }}
+                                            {{ $history->dvRequest->payee_fname ?? '' }} 
+                                            {{ $history->dvRequest->payee_lname ?? '' }}
                                         </div>
                                     @else
                                         {{ $history->verification_data['payee_name'] ?? 'N/A' }}

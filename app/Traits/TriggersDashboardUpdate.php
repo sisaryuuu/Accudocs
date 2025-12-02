@@ -31,23 +31,26 @@ use Illuminate\Support\Facades\Log;
  */
 trait TriggersDashboardUpdate
 {
+    private $useDummyData = true; // Set to true for dummy data, false for real database data
+
     private function calculateWorkingDays($start, $end)
-{
-    $start = \Carbon\Carbon::parse($start);
-    $end = \Carbon\Carbon::parse($end);
-    $workingDays = 0;
-    $current = $start->copy();
-    
-    while ($current->lte($end)) {
-        // Check if it's a weekday (1 = Monday, 7 = Sunday)
-        if ($current->isWeekday()) {
-            $workingDays++;
+    {
+        $start = \Carbon\Carbon::parse($start);
+        $end = \Carbon\Carbon::parse($end);
+        $workingDays = 0;
+        $current = $start->copy();
+        
+        while ($current->lte($end)) {
+            // Check if it's a weekday (1 = Monday, 7 = Sunday)
+            if ($current->isWeekday()) {
+                $workingDays++;
+            }
+            $current->addDay();
         }
-        $current->addDay();
+        
+        return $workingDays;
     }
-    
-    return $workingDays;
-}
+
     /**
      * Trigger real-time dashboard update via Pusher
      * Call this method after any DV request status change
@@ -90,6 +93,18 @@ trait TriggersDashboardUpdate
      */
     protected function getDashboardData()
     {
+        if ($this->useDummyData) {
+            return $this->getDummyDashboardData();
+        }
+
+        return $this->getRealDashboardData();
+    }
+
+    /**
+     * Get real dashboard data from database
+     */
+    protected function getRealDashboardData()
+    {
         // =============================================
         // REQUESTS PER PROGRAM
         // =============================================
@@ -130,16 +145,17 @@ trait TriggersDashboardUpdate
             ->value('avg_minutes') ?? 0;
 
 
-// Count DISTINCT documents that reached each role
-$documentsPerRole = DB::table('dv_request_logs')
-    ->join('accountingunits', 'dv_request_logs.accountingunit_id', '=', 'accountingunits.id')
-    ->join('model_has_roles', 'accountingunits.id', '=', 'model_has_roles.model_id')
-    ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-    ->select('roles.name as role_name', DB::raw('COUNT(DISTINCT dv_request_id) as total_documents'))
-    ->whereNotNull('accountingunit_id')
-    ->whereNotIn('roles.name', ['Focal_Person', 'ADMIN'])
-    ->groupBy('roles.name')
-    ->pluck('total_documents', 'role_name');
+        // Count DISTINCT documents that reached each role
+        $documentsPerRole = DB::table('dv_request_logs')
+            ->join('accountingunits', 'dv_request_logs.accountingunit_id', '=', 'accountingunits.id')
+            ->join('model_has_roles', 'accountingunits.id', '=', 'model_has_roles.model_id')
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->select('roles.name as role_name', DB::raw('COUNT(DISTINCT dv_request_id) as total_documents'))
+            ->whereNotNull('accountingunit_id')
+            ->whereNotIn('roles.name', ['Focal_Person', 'ADMIN'])
+            ->groupBy('roles.name')
+            ->pluck('total_documents', 'role_name');
+
         // =============================================
         // MONTHLY REQUESTS TREND
         // =============================================
@@ -155,7 +171,7 @@ $documentsPerRole = DB::table('dv_request_logs')
         // =============================================
         // BUDGET PER PROGRAM (OBLIGATED ONLY)
         // =============================================
-$budgetPerProgram = DB::table('budget_obligation_history as h')
+        $budgetPerProgram = DB::table('budget_obligation_history as h')
             ->join('dv_requests as d', 'h.dv_request_id', '=', 'd.id')
             ->join('programs as p', 'd.program_id', '=', 'p.id')
             ->where('h.status_after', 'ORS_obligated')
@@ -170,25 +186,138 @@ $budgetPerProgram = DB::table('budget_obligation_history as h')
             'GIP'   => $budgetPerProgram->get('GIP', 0),
             'TEV'   => $budgetPerProgram->get('TEV', 0),
         ]);
-
-
-    $staffPerformance = DB::table('dv_requests')
-        ->select(
-            DB::raw("DATE_FORMAT(created_at, '%Y-%m') as month"),
-            DB::raw('COUNT(id) as total_requests')
-        )
-        ->where('created_at', '>=', now()->subMonths(12)) // only last 12 months
-        ->groupBy('month')
-        ->orderBy('month')
-        ->get()
-        ->map(function ($item) {
-            $item->month_label = date('F Y', strtotime($item->month . '-01'));
-            return $item;
-        });
         
-  // =============================================
-// 10-WORKING-DAY SLA ANALYSIS
-// =============================================
+        // Replace the staffPerformance query with this subquery approach:
+        $staffPerformance = DB::table(DB::raw('(
+            SELECT 
+                au.id as user_id,
+                au.fname as first_name,
+                au.lname as last_name,
+                roles.name as role,
+                logs.dv_request_id,
+                TIMESTAMPDIFF(MINUTE, 
+                    (SELECT MAX(created_at) 
+                     FROM dv_request_logs prev 
+                     WHERE prev.dv_request_id = logs.dv_request_id 
+                     AND prev.created_at < logs.created_at
+                     AND prev.accountingunit_id IS NOT NULL),
+                    logs.created_at
+                ) as processing_minutes
+            FROM dv_request_logs logs
+            INNER JOIN accountingunits au ON logs.accountingunit_id = au.id
+            INNER JOIN model_has_roles mhr ON au.id = mhr.model_id
+            INNER JOIN roles ON mhr.role_id = roles.id
+            WHERE logs.created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+            AND logs.accountingunit_id IS NOT NULL
+            AND roles.name NOT IN (\'Focal_Person\', \'ADMIN\', \'Focal Person\', \'Admin\')
+        ) as processing_data'))
+        ->select(
+            'user_id',
+            'first_name', 
+            'last_name',
+            'role',
+            DB::raw('COUNT(DISTINCT dv_request_id) as documents_processed'),
+            DB::raw('ROUND(AVG(
+                CASE 
+                    WHEN processing_minutes BETWEEN 1 AND 480 
+                    THEN processing_minutes 
+                    ELSE NULL 
+                END
+            ) / 60.0, 2) as avg_processing_hours')
+        )
+        ->groupBy('user_id', 'first_name', 'last_name', 'role')
+        ->having('documents_processed', '>=', 5)
+        ->orderByDesc('documents_processed')
+        ->get();
+
+        // 2. Monthly Staff Productivity Trend
+        $monthlyStaffProductivity = DB::table('dv_request_logs')
+            ->join('accountingunits', 'dv_request_logs.accountingunit_id', '=', 'accountingunits.id')
+            ->select(
+                DB::raw("DATE_FORMAT(dv_request_logs.created_at, '%Y-%m') as month"),
+                DB::raw("DATE_FORMAT(dv_request_logs.created_at, '%M %Y') as month_label"),
+                DB::raw('COUNT(DISTINCT dv_request_logs.dv_request_id) as total_processed'),
+                DB::raw('COUNT(DISTINCT dv_request_logs.accountingunit_id) as active_staff')
+            )
+            ->where('dv_request_logs.created_at', '>=', now()->subMonths(12))
+            ->whereNotNull('dv_request_logs.accountingunit_id')
+            ->groupBy('month', 'month_label')
+            ->orderBy('month')
+            ->get();
+        
+        // 3. Staff Workload Distribution by Role
+        $workloadByRole = DB::table('dv_request_logs')
+            ->join('accountingunits', 'dv_request_logs.accountingunit_id', '=', 'accountingunits.id')
+            ->join('model_has_roles', 'accountingunits.id', '=', 'model_has_roles.model_id')
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->select(
+                'roles.name as role',
+                DB::raw('COUNT(DISTINCT dv_request_logs.accountingunit_id) as staff_count'),
+                DB::raw('COUNT(DISTINCT dv_request_logs.dv_request_id) as total_documents'),
+                DB::raw('ROUND(COUNT(DISTINCT dv_request_logs.dv_request_id) / COUNT(DISTINCT dv_request_logs.accountingunit_id), 2) as avg_docs_per_staff')
+            )
+            ->where('dv_request_logs.created_at', '>=', now()->subMonths(12))
+            ->whereNotNull('dv_request_logs.accountingunit_id')
+            ->whereNotIn('roles.name', ['Focal_Person', 'ADMIN'])
+            ->groupBy('roles.name')
+            ->orderByDesc('total_documents')
+            ->get();
+
+        $topPerformers = DB::table(DB::raw('(
+            SELECT 
+                au.id as user_id,
+                CONCAT(au.fname, \' \', au.lname) as staff_name,
+                current_log.dv_request_id,
+                TIMESTAMPDIFF(MINUTE,
+                    (SELECT MAX(created_at) 
+                     FROM dv_request_logs prev 
+                     WHERE prev.dv_request_id = current_log.dv_request_id 
+                     AND prev.created_at < current_log.created_at
+                     AND prev.accountingunit_id IS NOT NULL),
+                    current_log.created_at
+                ) as processing_minutes
+            FROM dv_request_logs current_log
+            INNER JOIN accountingunits au ON current_log.accountingunit_id = au.id
+            WHERE current_log.created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+            AND current_log.accountingunit_id IS NOT NULL
+        ) as processing_data'))
+        ->select(
+            'staff_name',
+            DB::raw('COUNT(DISTINCT dv_request_id) as documents_handled'),
+            DB::raw('ROUND(AVG(
+                CASE 
+                    WHEN processing_minutes BETWEEN 1 AND 480
+                    THEN processing_minutes 
+                    ELSE NULL 
+                END
+            ) / 60.0, 2) as avg_processing_hours')
+        )
+        ->groupBy('user_id', 'staff_name')
+        ->having('documents_handled', '>=', 10)
+        ->havingRaw('avg_processing_hours > 0 AND avg_processing_hours < 100')
+        ->orderBy('avg_processing_hours', 'asc')
+        ->limit(10)
+        ->get();
+        
+        // 5. Staff Performance Summary & Insights
+        $staffInsights = [];
+        
+        if ($staffPerformance->isNotEmpty()) {
+            $topStaff = $staffPerformance->first();
+           $staffInsights[] = "Top performer: <span class='font-semibold'>{$topStaff->first_name} {$topStaff->last_name}</span> ({$topStaff->role}) processed {$topStaff->documents_processed} documents.";
+            
+            $avgDocsPerStaff = $staffPerformance->avg('documents_processed');
+            $staffInsights[] = "Average documents per staff: <span class='font-semibold'>" . round($avgDocsPerStaff, 2) . "</span>.";
+            
+            if ($topPerformers->isNotEmpty()) {
+                $fastest = $topPerformers->first();
+                $staffInsights[] = "Fastest processor: <span class='font-semibold'>{$fastest->staff_name}</span> with avg {$fastest->avg_processing_hours} hours per document.";
+            }
+        }
+                
+        // =============================================
+        // 10-WORKING-DAY SLA ANALYSIS
+        // =============================================
         $excludedRoles = ['submitted', 'focal_person', 'Focal_person', 'Focal Person', 'admin', 'Admin', 'Administrator'];
         
         // Step 1: Get all completed requests (reached Regional Director)
@@ -235,6 +364,7 @@ $budgetPerProgram = DB::table('budget_obligation_history as h')
         ];
         
         // Add SLA insights
+        $insights = [];
         if ($slaAnalysis['violation_rate_percent'] > 0) {
             $insights[] = "SLA Compliance: <span class='text-red-600 font-semibold'>{$slaAnalysis['violation_rate_percent']}%</span> of requests exceeded 10-working-day SLA.";
         } else {
@@ -297,73 +427,533 @@ $budgetPerProgram = DB::table('budget_obligation_history as h')
         ->limit(8)
         ->get();
         
-    $topProgram = DB::table('programs')
-        ->leftJoin('dv_requests', 'dv_requests.program_id', '=', 'programs.id')
-        ->select('programs.prcode', DB::raw('COUNT(dv_requests.id) as total'))
-        ->groupBy('programs.prcode')
-        ->orderByDesc('total')
-        ->first();
-    
-    // 🕒 Calculate trend (this month vs last month)
-    $thisMonth = DB::table('dv_requests')
-        ->whereMonth('created_at', now()->month)
-        ->whereYear('created_at', now()->year)
-        ->count();
-    
-    $lastMonth = DB::table('dv_requests')
-        ->whereMonth('created_at', now()->subMonth()->month)
-        ->whereYear('created_at', now()->subMonth()->year)
-        ->count();
-    
-    // 📈 Calculate % trend (safe for division)
-    if ($lastMonth > 0) {
-        $trend = round((($thisMonth - $lastMonth) / $lastMonth) * 100, 2);
-    } else {
-        $trend = 0; // avoid division by zero
-    }
-    
-    // 🧠 Build insights
-    $insights = [];
-    
-    if ($topProgram && $topProgram->total > 0) {
-        $insights[] = "{$topProgram->prcode} has the highest number of requests ({$topProgram->total}).";
-    }
-    
-    if ($trend > 0) {
-        $insights[] = "Requests increased by <span class='text-green-600 font-semibold'>{$trend}%</span> compared to last month.";
-    } elseif ($trend < 0) {
-        $insights[] = "Requests decreased by <span class='text-red-600 font-semibold'>" . abs($trend) . "%</span> compared to last month.";
-    } else {
-        $insights[] = "Requests remained stable compared to last month.";
-    }
-    
-    // Optional contextual stats
-    if (!empty($pendingRequests) && $pendingRequests > 0) {
-        $insights[] = "There are <span class='font-semibold'>{$pendingRequests}</span> requests still pending.";
-    }
-    
-    if (!empty($approvedRequests) && $approvedRequests > 0) {
-        $insights[] = "A total of <span class='font-semibold'>{$approvedRequests}</span> requests have been approved.";
-    }
-
+        $topProgram = DB::table('programs')
+            ->leftJoin('dv_requests', 'dv_requests.program_id', '=', 'programs.id')
+            ->select('programs.prcode', DB::raw('COUNT(dv_requests.id) as total'))
+            ->groupBy('programs.prcode')
+            ->orderByDesc('total')
+            ->first();
+        
+        // 🕒 Calculate trend (this month vs last month)
+        $thisMonth = DB::table('dv_requests')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->count();
+        
+        $lastMonth = DB::table('dv_requests')
+            ->whereMonth('created_at', now()->subMonth()->month)
+            ->whereYear('created_at', now()->subMonth()->year)
+            ->count();
+        
+        // 📈 Calculate % trend (safe for division)
+        if ($lastMonth > 0) {
+            $trend = round((($thisMonth - $lastMonth) / $lastMonth) * 100, 2);
+        } else {
+            $trend = 0; // avoid division by zero
+        }
+        
+        // 🧠 Build insights
+        if ($topProgram && $topProgram->total > 0) {
+            $insights[] = "{$topProgram->prcode} has the highest number of requests ({$topProgram->total}).";
+        }
+        
+        if ($trend > 0) {
+            $insights[] = "Requests increased by <span class='text-green-600 font-semibold'>{$trend}%</span> compared to last month.";
+        } elseif ($trend < 0) {
+            $insights[] = "Requests decreased by <span class='text-red-600 font-semibold'>" . abs($trend) . "%</span> compared to last month.";
+        } else {
+            $insights[] = "Requests remained stable compared to last month.";
+        }
+        
+        // Optional contextual stats
+        if (!empty($pendingRequests) && $pendingRequests > 0) {
+            $insights[] = "There are <span class='font-semibold'>{$pendingRequests}</span> requests still pending.";
+        }
+        
+        if (!empty($approvedRequests) && $approvedRequests > 0) {
+            $insights[] = "A total of <span class='font-semibold'>{$approvedRequests}</span> requests have been approved.";
+        }
 
         // =============================================
         // RETURN ALL DATA
         // =============================================
         return [
-    'requestsPerProgram'    => $orderedPrograms,
-    'totalRequests'         => $totalRequests,
-    'pendingRequests'       => $pendingRequests,
-    'approvedRequests'      => $approvedRequests,
-    'rejectedRequests'      => $rejectedRequests,
-    'averageProcessingTime' => $averageProcessingTime,
-    'documentsPerRole'      => $documentsPerRole,
-    'monthlyRequests'       => $monthlyRequests,
-    'budgetPerProgram'      => $orderedBudget,
-    'staffPerformance'      => $staffPerformance,
-    'bottlenecks'           => $bottlenecks,
-    'slaAnalysis'           => $slaAnalysis, // Add this line
-    'insights'              => $insights,
-];
+            'requestsPerProgram'    => $orderedPrograms,
+            'totalRequests'         => $totalRequests,
+            'pendingRequests'       => $pendingRequests,
+            'approvedRequests'      => $approvedRequests,
+            'rejectedRequests'      => $rejectedRequests,
+            'averageProcessingTime' => $averageProcessingTime,
+            'documentsPerRole'      => $documentsPerRole,
+            'monthlyRequests'       => $monthlyRequests,
+            'budgetPerProgram'      => $orderedBudget,
+            'staffPerformance' => [
+                'individual_metrics' => $staffPerformance,
+                'monthly_productivity' => $monthlyStaffProductivity,
+                'workload_by_role' => $workloadByRole,
+                'top_performers' => $topPerformers,
+                'insights' => $staffInsights
+            ],
+            'bottlenecks'           => $bottlenecks,
+            'slaAnalysis'           => $slaAnalysis,
+            'insights'              => $insights,
+        ];
+    }
+
+    /**
+     * Generate comprehensive dummy data for testing
+     */
+    protected function getDummyDashboardData()
+    {
+        // =============================================
+        // REQUESTS PER PROGRAM (Dummy Data)
+        // =============================================
+        $requestsPerProgram = collect([
+            'TUPAD' => 45,
+            'GIP'   => 32,
+            'TEV'   => 28
+        ]);
+
+        // =============================================
+        // KEY PERFORMANCE INDICATORS (Dummy Data)
+        // =============================================
+        $totalRequests = 105;
+        $pendingRequests = 15;
+        $approvedRequests = 78;
+        $rejectedRequests = 12;
+        $averageProcessingTime = $this->generateDummyAverageProcessingTime(); // hours
+
+        // =============================================
+        // DOCUMENTS PER ROLE (Dummy Data) - INCLUDING INCOMING ROLES
+        // =============================================
+        $documentsPerRole = collect([
+            'Incoming-TUPAD' => 45,
+            'Incoming-GIP' => 32,
+            'Incoming-TEV' => 28,
+            'IMSD' => 89,
+            'Budget Officer' => 92,
+            'Accountant III' => 85,
+            'Cashier' => 78,
+            'Regional Director' => 75
+        ]);
+
+        // =============================================
+        // MONTHLY REQUESTS TREND (Dummy Data)
+        // =============================================
+        $monthlyRequests = collect([
+            'January 2024' => 8,
+            'February 2024' => 12,
+            'March 2024' => 15,
+            'April 2024' => 18,
+            'May 2024' => 22,
+            'June 2024' => 30
+        ]);
+
+        // =============================================
+        // BUDGET PER PROGRAM (Dummy Data)
+        // =============================================
+        $budgetPerProgram = collect([
+            'TUPAD' => 1250000.00,
+            'GIP'   => 890000.00,
+            'TEV'   => 650000.00
+        ]);
+
+        // =============================================
+        // STAFF PERFORMANCE (Comprehensive Dummy Data) - INCLUDING INCOMING ROLES
+        // =============================================
+        $staffPerformance = $this->generateDummyStaffPerformance();
+        $monthlyStaffProductivity = $this->generateDummyMonthlyProductivity();
+        $workloadByRole = $this->generateDummyWorkloadByRole();
+        $topPerformers = $this->generateDummyTopPerformers();
+        $staffInsights = $this->generateDummyStaffInsights($staffPerformance, $topPerformers);
+
+        // =============================================
+        // BOTTLENECKS ANALYSIS (Dummy Data) - INCLUDING INCOMING ROLES
+        // =============================================
+        $bottlenecks = $this->generateDummyBottlenecks();
+
+        // =============================================
+        // SLA ANALYSIS (Dummy Data)
+        // =============================================
+        $slaAnalysis = [
+            'total_completed_requests' => 85,
+            'within_sla' => 68,
+            'sla_violations' => 17,
+            'violation_rate_percent' => 20.0,
+            'avg_working_days' => 8.5,
+            'worst_performer' => 15,
+        ];
+
+        // =============================================
+        // INSIGHTS (Dummy Data)
+        // =============================================
+        $insights = [
+            "TUPAD has the highest number of requests (45).",
+            "Requests increased by <span class='text-green-600 font-semibold'>15%</span> compared to last month.",
+            "There are <span class='font-semibold'>15</span> requests still pending.",
+            "A total of <span class='font-semibold'>78</span> requests have been approved.",
+            "SLA Compliance: <span class='text-red-600 font-semibold'>20%</span> of requests exceeded 10-working-day SLA.",
+            "Average processing time: <span class='font-semibold'>8.5 working days</span>.",
+            "Incoming-TUPAD processed 45 documents with fastest turnaround (2.5 hours).",
+            "Overall average processing time is <span class='font-semibold'>4.5 hours</span> per request."
+        ];
+
+        // =============================================
+        // RETURN ALL DUMMY DATA
+        // =============================================
+        return [
+            'requestsPerProgram'    => $requestsPerProgram,
+            'totalRequests'         => $totalRequests,
+            'pendingRequests'       => $pendingRequests,
+            'approvedRequests'      => $approvedRequests,
+            'rejectedRequests'      => $rejectedRequests,
+            'averageProcessingTime' => $averageProcessingTime,
+            'documentsPerRole'      => $documentsPerRole,
+            'monthlyRequests'       => $monthlyRequests,
+            'budgetPerProgram'      => $budgetPerProgram,
+            'staffPerformance' => [
+                'individual_metrics' => $staffPerformance,
+                'monthly_productivity' => $monthlyStaffProductivity,
+                'workload_by_role' => $workloadByRole,
+                'top_performers' => $topPerformers,
+                'insights' => $staffInsights
+            ],
+            'bottlenecks'           => $bottlenecks,
+            'slaAnalysis'           => $slaAnalysis,
+            'insights'              => $insights,
+        ];
+    }
+
+    /**
+     * Generate dummy average processing time data with realistic variations
+     */
+    private function generateDummyAverageProcessingTime()
+    {
+        // Generate realistic processing times in hours with some variation
+        $baseTime = 4.5; // Base average in hours
+        $variation = mt_rand(-10, 10) / 10; // ±1 hour variation
+        $trend = mt_rand(-5, 5) / 100; // Small trend variation
+        
+        $processingTime = $baseTime + $variation + $trend;
+        
+        // Ensure it's within reasonable bounds (1-8 hours)
+        $processingTime = max(1.0, min(8.0, $processingTime));
+        
+        // Round to 1 decimal place
+        return round($processingTime, 1);
+    }
+
+    /**
+     * Generate dummy staff performance data - INCLUDING INCOMING ROLES
+     */
+    private function generateDummyStaffPerformance()
+    {
+        return collect([
+            // Incoming Roles Staff
+            (object)[
+                'user_id' => 201,
+                'first_name' => 'Ramon',
+                'last_name' => 'Garcia',
+                'role' => 'Incoming-TUPAD',
+                'documents_processed' => 45,
+                'avg_processing_hours' => 2.5
+            ],
+            (object)[
+                'user_id' => 202,
+                'first_name' => 'Liza',
+                'last_name' => 'Mendoza',
+                'role' => 'Incoming-GIP',
+                'documents_processed' => 32,
+                'avg_processing_hours' => 2.3
+            ],
+            (object)[
+                'user_id' => 203,
+                'first_name' => 'Antonio',
+                'last_name' => 'Ramos',
+                'role' => 'Incoming-TEV',
+                'documents_processed' => 28,
+                'avg_processing_hours' => 2.1
+            ],
+            // Regular Roles Staff
+            (object)[
+                'user_id' => 101,
+                'first_name' => 'Maria',
+                'last_name' => 'Santos',
+                'role' => 'IMSD',
+                'documents_processed' => 45,
+                'avg_processing_hours' => 2.1
+            ],
+            (object)[
+                'user_id' => 102,
+                'first_name' => 'Juan',
+                'last_name' => 'Dela Cruz',
+                'role' => 'Budget Officer',
+                'documents_processed' => 38,
+                'avg_processing_hours' => 3.2
+            ],
+            (object)[
+                'user_id' => 103,
+                'first_name' => 'Ana',
+                'last_name' => 'Reyes',
+                'role' => 'Accountant III',
+                'documents_processed' => 42,
+                'avg_processing_hours' => 2.8
+            ],
+            (object)[
+                'user_id' => 104,
+                'first_name' => 'Carlos',
+                'last_name' => 'Gonzales',
+                'role' => 'Cashier',
+                'documents_processed' => 35,
+                'avg_processing_hours' => 1.9
+            ],
+            (object)[
+                'user_id' => 105,
+                'first_name' => 'Elena',
+                'last_name' => 'Torres',
+                'role' => 'Regional Director',
+                'documents_processed' => 28,
+                'avg_processing_hours' => 4.5
+            ],
+            (object)[
+                'user_id' => 106,
+                'first_name' => 'Roberto',
+                'last_name' => 'Lim',
+                'role' => 'IMSD',
+                'documents_processed' => 31,
+                'avg_processing_hours' => 2.7
+            ],
+            (object)[
+                'user_id' => 107,
+                'first_name' => 'Lorna',
+                'last_name' => 'Diaz',
+                'role' => 'Budget Officer',
+                'documents_processed' => 29,
+                'avg_processing_hours' => 3.8
+            ]
+        ]);
+    }
+
+    /**
+     * Generate dummy monthly productivity data
+     */
+    private function generateDummyMonthlyProductivity()
+    {
+        return collect([
+            (object)[
+                'month' => '2024-01',
+                'month_label' => 'January 2024',
+                'total_processed' => 120,
+                'active_staff' => 10
+            ],
+            (object)[
+                'month' => '2024-02',
+                'month_label' => 'February 2024',
+                'total_processed' => 135,
+                'active_staff' => 11
+            ],
+            (object)[
+                'month' => '2024-03',
+                'month_label' => 'March 2024',
+                'total_processed' => 158,
+                'active_staff' => 11
+            ],
+            (object)[
+                'month' => '2024-04',
+                'month_label' => 'April 2024',
+                'total_processed' => 142,
+                'active_staff' => 10
+            ],
+            (object)[
+                'month' => '2024-05',
+                'month_label' => 'May 2024',
+                'total_processed' => 165,
+                'active_staff' => 12
+            ],
+            (object)[
+                'month' => '2024-06',
+                'month_label' => 'June 2024',
+                'total_processed' => 180,
+                'active_staff' => 12
+            ]
+        ]);
+    }
+
+    /**
+     * Generate dummy workload by role data - INCLUDING INCOMING ROLES
+     */
+    private function generateDummyWorkloadByRole()
+    {
+        return collect([
+            (object)[
+                'role' => 'Incoming-TUPAD',
+                'staff_count' => 2,
+                'total_documents' => 45,
+                'avg_docs_per_staff' => 22.50
+            ],
+            (object)[
+                'role' => 'Incoming-GIP',
+                'staff_count' => 2,
+                'total_documents' => 32,
+                'avg_docs_per_staff' => 16.00
+            ],
+            (object)[
+                'role' => 'Incoming-TEV',
+                'staff_count' => 2,
+                'total_documents' => 28,
+                'avg_docs_per_staff' => 14.00
+            ],
+            (object)[
+                'role' => 'IMSD',
+                'staff_count' => 3,
+                'total_documents' => 245,
+                'avg_docs_per_staff' => 81.67
+            ],
+            (object)[
+                'role' => 'Budget Officer',
+                'staff_count' => 2,
+                'total_documents' => 198,
+                'avg_docs_per_staff' => 99.00
+            ],
+            (object)[
+                'role' => 'Accountant III',
+                'staff_count' => 2,
+                'total_documents' => 175,
+                'avg_docs_per_staff' => 87.50
+            ],
+            (object)[
+                'role' => 'Cashier',
+                'staff_count' => 1,
+                'total_documents' => 85,
+                'avg_docs_per_staff' => 85.00
+            ],
+            (object)[
+                'role' => 'Regional Director',
+                'staff_count' => 1,
+                'total_documents' => 75,
+                'avg_docs_per_staff' => 75.00
+            ]
+        ]);
+    }
+
+    /**
+     * Generate dummy top performers data - INCLUDING INCOMING ROLES STAFF
+     */
+    private function generateDummyTopPerformers()
+    {
+        return collect([
+            (object)[
+                'staff_name' => 'Maria Santos',
+                'documents_handled' => 45,
+                'avg_processing_hours' => 2.1
+            ],
+            (object)[
+                'staff_name' => 'Carlos Gonzales',
+                'documents_handled' => 35,
+                'avg_processing_hours' => 1.9
+            ],
+            (object)[
+                'staff_name' => 'Antonio Ramos',
+                'documents_handled' => 28,
+                'avg_processing_hours' => 2.1
+            ],
+            (object)[
+                'staff_name' => 'Ana Reyes',
+                'documents_handled' => 42,
+                'avg_processing_hours' => 2.8
+            ],
+            (object)[
+                'staff_name' => 'Ramon Garcia',
+                'documents_handled' => 45,
+                'avg_processing_hours' => 2.5
+            ],
+            (object)[
+                'staff_name' => 'Roberto Lim',
+                'documents_handled' => 31,
+                'avg_processing_hours' => 2.7
+            ],
+            (object)[
+                'staff_name' => 'Liza Mendoza',
+                'documents_handled' => 32,
+                'avg_processing_hours' => 2.3
+            ],
+            (object)[
+                'staff_name' => 'Juan Dela Cruz',
+                'documents_handled' => 38,
+                'avg_processing_hours' => 3.2
+            ]
+        ]);
+    }
+
+    /**
+     * Generate dummy staff insights - INCLUDING INCOMING ROLES
+     */
+    private function generateDummyStaffInsights($staffPerformance, $topPerformers)
+    {
+        return [
+            "Top performer: <span class='font-semibold'>Maria Santos</span> (IMSD) processed 45 documents.",
+            "Average documents per staff: <span class='font-semibold'>35.71</span>.",
+            "Fastest processor: <span class='font-semibold'>Carlos Gonzales</span> with avg 1.9 hours per document.",
+            "Budget Officer role has the highest workload with 99 documents per staff on average.",
+            "Productivity increased by 50% from January to June 2024.",
+            "Incoming roles processed 105 initial requests with excellent turnaround times."
+        ];
+    }
+
+    /**
+     * Generate dummy bottlenecks data - INCLUDING INCOMING ROLES
+     */
+    private function generateDummyBottlenecks()
+    {
+        return collect([
+            (object)[
+                'role_name' => 'Budget Officer',
+                'total_processed' => 92,
+                'avg_hours' => 6.8,
+                'avg_days_into_process' => 3.2
+            ],
+            (object)[
+                'role_name' => 'Regional Director',
+                'total_processed' => 75,
+                'avg_hours' => 5.2,
+                'avg_days_into_process' => 6.8
+            ],
+            (object)[
+                'role_name' => 'Accountant III',
+                'total_processed' => 85,
+                'avg_hours' => 4.1,
+                'avg_days_into_process' => 4.5
+            ],
+            (object)[
+                'role_name' => 'IMSD',
+                'total_processed' => 89,
+                'avg_hours' => 3.8,
+                'avg_days_into_process' => 2.1
+            ],
+            (object)[
+                'role_name' => 'Cashier',
+                'total_processed' => 78,
+                'avg_hours' => 2.9,
+                'avg_days_into_process' => 7.2
+            ],
+            (object)[
+                'role_name' => 'Incoming-TUPAD',
+                'total_processed' => 45,
+                'avg_hours' => 2.5,
+                'avg_days_into_process' => 1.2
+            ],
+            (object)[
+                'role_name' => 'Incoming-GIP',
+                'total_processed' => 32,
+                'avg_hours' => 2.3,
+                'avg_days_into_process' => 1.1
+            ],
+            (object)[
+                'role_name' => 'Incoming-TEV',
+                'total_processed' => 28,
+                'avg_hours' => 2.1,
+                'avg_days_into_process' => 1.0
+            ]
+        ]);
     }
 }

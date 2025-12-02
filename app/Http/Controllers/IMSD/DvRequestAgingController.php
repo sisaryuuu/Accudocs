@@ -24,7 +24,7 @@ class DvRequestAgingController extends Controller
      * Get aging documents for the IMSD dashboard
      * Documents aged 3+ days in 'submitted' or 'IMSD_received' status
      */
-        public function getAgingDocuments()
+    public function getAgingDocuments()
     {
         try {
             Log::info('Fetching aging documents');
@@ -47,7 +47,7 @@ class DvRequestAgingController extends Controller
                     
                     return [
                         'id' => $request->id,
-                        'alert_id' => $latestAlert ? $latestAlert->id : null, // ← ADD THIS
+                        'alert_id' => $latestAlert ? $latestAlert->id : null,
                         'control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) : '—',
                         'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
                         'program' => $request->program->prcode ?? 'N/A',
@@ -55,13 +55,13 @@ class DvRequestAgingController extends Controller
                         'days_old' => $daysOld,
                         'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                         'urgency' => $this->getUrgencyLevel($daysOld),
-                        'acknowledged' => $latestAlert ? $latestAlert->acknowledged : false, // ← ADD THIS
+                        'acknowledged' => $latestAlert ? $latestAlert->acknowledged : false,
                     ];
                 });
 
             Log::info('Aging documents fetched successfully', ['count' => $agingRequests->count()]);
 
-            return response()->json([   
+            return response()->json([
                 'success' => true,
                 'aging_count' => $agingRequests->count(),
                 'documents' => $agingRequests,
@@ -81,28 +81,29 @@ class DvRequestAgingController extends Controller
         }
     }
 
-        public function getAgingStatistics()
+    public function getAgingStatistics()
     {
         try {
             Log::info('Fetching aging statistics');
             
+            // Use whole numbers for date comparisons
             $tenDaysAgo = now()->subDays(10);
             $sevenDaysAgo = now()->subDays(7);
             $threeDaysAgo = now()->subDays(3);
             
             $statistics = [
-                'critical' => DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process']) // ✅ Include received
+                'critical' => DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process'])
                     ->where('created_at', '<', $tenDaysAgo)
                     ->count(),
-                'high' => DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process']) // ✅ Include received
+                'high' => DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process'])
                     ->where('created_at', '>=', $tenDaysAgo)
                     ->where('created_at', '<', $sevenDaysAgo)
                     ->count(),
-                'medium' => DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process']) // ✅ Include received
+                'medium' => DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process'])
                     ->where('created_at', '>=', $sevenDaysAgo)
                     ->where('created_at', '<', $threeDaysAgo)
                     ->count(),
-                'total_aging' => DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process']) // ✅ Include received
+                'total_aging' => DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process'])
                     ->where('created_at', '<', $threeDaysAgo)
                     ->count(),
             ];
@@ -127,7 +128,7 @@ class DvRequestAgingController extends Controller
         }
     }
 
-     public function sendAgingAlerts()
+    public function sendAgingAlerts()
     {
         try {
             $agingThreshold = 3;
@@ -178,11 +179,21 @@ class DvRequestAgingController extends Controller
         }
     }
 
+    /**
+     * Get urgency level based on whole number of days
+     */
     protected function getUrgencyLevel($daysOld)
     {
-        if ($daysOld >= 10) return 'critical';
-        if ($daysOld >= 7) return 'high';
-        if ($daysOld >= 3) return 'medium';
-        return 'low';
+        // Since $daysOld is already a whole number from diffInDays(),
+        // we can use simple integer comparisons
+        if ($daysOld >= 10) {
+            return 'critical';
+        } elseif ($daysOld >= 7) {
+            return 'high';
+        } elseif ($daysOld >= 3) {
+            return 'medium';
+        } else {
+            return 'low';
+        }
     }
 }

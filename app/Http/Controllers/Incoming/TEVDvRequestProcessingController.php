@@ -12,6 +12,7 @@ use App\Models\DocumentAgingAlert;
 use App\Models\Notification;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
+use App\Services\IprogSmsService;
 use App\Models\TEVAttachment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -23,11 +24,13 @@ class TEVDvRequestProcessingController extends Controller
       use TriggersDashboardUpdate; // ✅ This trait provides getDashboardData() and triggerDashboardUpdate()
 
       protected PusherService $pusher;
+      protected IprogSmsService $smsService;
       
 
-    public function __construct(PusherService $pusher)
+    public function __construct(PusherService $pusher, IprogSmsService $smsService)
     {
         $this->pusher = $pusher;
+        $this->smsService =$smsService;
     }
 
  public function index(Request $request)
@@ -361,6 +364,7 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
             'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
+            'particulars'  => $request->particulars,
             'amount'       => number_format($request->amount, 2),
             'status'       => $request->status,
             'date'         => $request->created_at->timezone('Asia/Manila')->format('M d, Y h:i A'),
@@ -555,8 +559,7 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
             ->with('success', 'TEV DV Request Approved.');
     }
 
-
-    public function reject(Request $request, $id)
+public function reject(Request $request, $id)
     {
         try {
             // Validate input
@@ -570,6 +573,7 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
 
             $statusBefore = $dvRequest->status;
             $currentUserId = auth()->id();
+            
             // ✅ Only allow rejection if status is currently in Incoming-TEV stage
             if ($dvRequest->status !== 'Incoming-TEV_received') {
                 return response()->json([
@@ -582,15 +586,16 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
             $focalId = $dvRequest->focalperson_id;
             $remarks = trim($request->remarks);
 
-            // ✅ Update DV request
-            $dvRequest->update([
-                'status'     => 'Incoming-TEV_rejected',
-                'locked_by'  => null,
-                'locked_at'  => null,
-            ]);
+            // ✅ PHASE 1: FAST DATABASE OPERATIONS ONLY
+            DB::transaction(function () use ($dvRequest, $statusBefore, $rejectedAt, $remarks, $focalId, $currentUserId) {
+                // ✅ Update DV request
+                $dvRequest->update([
+                    'status'     => 'Incoming-TEV_rejected',
+                    'locked_by'  => null,
+                    'locked_at'  => null,
+                ]);
 
-
-            $this->saveIncomingTEVVerificationHistory(
+                $this->saveIncomingTEVVerificationHistory(
                     $dvRequest,
                     'reject',
                     $remarks,
@@ -598,59 +603,63 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
                         'status_before'   => $statusBefore,
                         'status_after'    => 'Incoming-TEV_rejected',
                         'action'          => 'rejected',
-                        'rejected_by'     =>  $currentUserId,
+                        'rejected_by'     => $currentUserId,
                         'rejected_at'     => $rejectedAt->toISOString(),
                         'rejection_reason'=> $remarks,
                     ]
                 );
 
+                // ✅ Log rejection
+                $this->logAction(
+                    $dvRequest->id,
+                    'Incoming-TEV',
+                    'Incoming-TEV_rejected',
+                    "Rejected by Incoming-TEV: {$remarks}"
+                );
 
-            // ✅ Log rejection
-            $this->logAction(
-                $dvRequest->id,
-                'Incoming-TEV',
-                'Incoming-TEV_rejected',
-                "Rejected by Incoming-TEV: {$remarks}"
-            );
-
-              $emailSent = $this->sendRejectionEmail($dvRequest, $remarks);
-
-            // ✅ Notify focal person
-            Notification::create([
-                'focalperson_id' => $focalId,
-                'dv_request_id'  => $dvRequest->id,
-                'status'         => 'Incoming-TEV_rejected',
-                'action'         => 'Rejected',
-                'remarks'        => $remarks,
-            ]);
-
-            // ✅ Real-time push to focal person
-            if (isset($this->pusher)) {
-                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                    'dv_request_id' => $dvRequest->id,
-                    'status'        => 'Incoming-TEV_rejected',
-                    'remarks'       => $remarks,
-                    'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                // ✅ Notify focal person
+                Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => 'Incoming-TEV_rejected',
+                    'action'         => 'Rejected',
+                    'remarks'        => $remarks,
                 ]);
 
-                // ✅ Real-time push to Incoming-TEV dashboard
-                $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-rejected', [
-                    'dv_request_id' => $dvRequest->id,
-                    'status'        => 'Incoming-TEV_rejected',
-                    'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                    'action_performer_id' => $currentUserId, // ADD THIS
-                    'rejected_by_user_id' => $currentUserId, // ADD THIS
-                ]);
+                // ✅ Real-time push to focal person
+                if (isset($this->pusher)) {
+                    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                        'dv_request_id' => $dvRequest->id,
+                        'status'        => 'Incoming-TEV_rejected',
+                        'remarks'       => $remarks,
+                        'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    ]);
+
+                    // ✅ Real-time push to Incoming-TEV dashboard
+                    $this->pusher->trigger('dv-requests-incoming-tev', 'dv-request-rejected', [
+                        'dv_request_id' => $dvRequest->id,
+                        'status'        => 'Incoming-TEV_rejected',
+                        'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'action_performer_id' => $currentUserId,
+                        'rejected_by_user_id' => $currentUserId,
+                    ]);
+                }
+            });
+
+            // ✅ PHASE 2: SEND NOTIFICATIONS AFTER DB TRANSACTION (NON-BLOCKING)
+            $smsSent = $this->sendRejectionSMS($dvRequest, $remarks);
+            $emailSent = $this->sendRejectionEmail($dvRequest, $remarks);
+
+            $this->triggerDashboardUpdate();
+
+            // ✅ IMMEDIATE RESPONSE TO USER
+            $responseMessage = 'DV request has been rejected successfully.';
+            if ($smsSent) {
+                $responseMessage .= ' SMS notification sent.';
+            } else {
+                Log::warning('SMS failed but request was rejected successfully');
             }
 
-               $this->triggerDashboardUpdate();
-
-            $responseMessage = $emailSent ?? false
-                ? 'DV request has been rejected'
-                : 'DV request has been rejected';
-
-
-            // ✅ Always return JSON
             return response()->json([
                 'success' => true,
                 'message' => $responseMessage,
@@ -658,12 +667,13 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
                     'id'         => $dvRequest->id,
                     'status'     => 'Incoming-TEV_rejected',
                     'remarks'    => $remarks,
-                    'email_sent' => $emailSent,
+                    'sms_sent'   => $smsSent,
+                    'email_sent' => $emailSent
                 ]
             ], 200);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            \Log::error('DV Request not found: ' . $e->getMessage());
+            Log::error('DV Request not found: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
@@ -671,7 +681,7 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
             ], 404);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::error('Validation error: ' . json_encode($e->errors()));
+            Log::error('Validation error: ' . json_encode($e->errors()));
             
             return response()->json([
                 'success' => false,
@@ -679,13 +689,69 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $modality)
             ], 422);
 
         } catch (\Exception $e) {
-            \Log::error('Error rejecting TEV DV request: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Error rejecting TEV DV request: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
 
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while rejecting the DV request: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * ✅ SEND REJECTION SMS - For TEV rejections
+     */
+    protected function sendRejectionSMS($dvRequest, $rejectionRemarks)
+    {
+        try {
+            $focalPerson = $dvRequest->focalPerson;
+            
+            // Quick validation
+            if (!$focalPerson || empty($focalPerson->contactnumber)) {
+                Log::warning('Cannot send rejection SMS: focal person or contact number missing', [
+                    'dv_request_id' => $dvRequest->id
+                ]);
+                return false;
+            }
+
+            $phoneNumber = $focalPerson->contactnumber;
+            
+            // ⚡ SHORT MESSAGE - Faster transmission
+            $userSequence = $dvRequest->user_sequence ?? 'N/A';
+            $truncatedRemarks = strlen($rejectionRemarks) > 80 
+                ? substr($rejectionRemarks, 0, 77) . '...' 
+                : $rejectionRemarks;
+
+            $message = "Hi {$focalPerson->fname}, DV #{$userSequence} rejected: {$truncatedRemarks} - DOLE XI";
+
+            Log::info('Sending TEV rejection SMS', [
+                'phone' => $phoneNumber,
+                'dv_request_id' => $dvRequest->id,
+                'user_sequence' => $userSequence
+            ]);
+
+            // ⚡ USE QUICK SMS METHOD - 5 second timeout
+            $result = $this->smsService->sendQuickSMS($phoneNumber, $message);
+            
+            if ($result['success']) {
+                Log::info('TEV rejection SMS sent successfully', [
+                    'dv_request_id' => $dvRequest->id,
+                    'phone' => $phoneNumber
+                ]);
+                return true;
+            } else {
+                Log::warning('TEV rejection SMS failed - continuing', [
+                    'dv_request_id' => $dvRequest->id,
+                    'phone' => $phoneNumber
+                ]);
+                return false;
+            }
+            
+        } catch (\Exception $e) {
+            // ⚡ SILENT FAILURE - Don't affect user experience
+            Log::warning('TEV SMS rejection failed silently: ' . $e->getMessage());
+            return false;
         }
     }
 

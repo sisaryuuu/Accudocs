@@ -28,26 +28,6 @@ class RoleSeeder extends Seeder
                     'imsd.reject',
                 ],
             ],
-
-            'MALSU' => [
-                'guard' => 'web',
-                'permissions' => [
-                    'malsu.view',
-                    'malsu.tev.verify',
-                    'malsu.misc.verify',
-                ],
-            ],
-
-            'TSSD' => [
-                'guard' => 'web',
-                'permissions' => [
-                    'tssd.view',
-                    'tssd.tupad.verify',
-                    'tssd.gip.verify',
-                    'tssd.tev.verify',
-                ],
-            ],
-
             'Incoming-TUPAD' => [
                 'guard' => 'web',
                 'permissions' => [
@@ -102,13 +82,14 @@ class RoleSeeder extends Seeder
                 ],
             ],
 
-            'Accounting_III' => [
+            'Accountant_III' => [
                 'guard' => 'web',
                 'permissions' => [ 
                     'accunit.view',
                     'accunit.create',
                     'accunit.edit',
                     'accunit.validate',
+                    'accunit.reject',
                     'accunit.delete',
                     'viewdataanyltics',
                 ],

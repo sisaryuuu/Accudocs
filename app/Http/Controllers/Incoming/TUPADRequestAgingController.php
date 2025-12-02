@@ -7,6 +7,7 @@ use App\Models\DvRequest;
 use App\Models\DocumentAgingAlert;
 use App\Services\PusherService;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class TUPADRequestAgingController extends Controller
 {
@@ -17,57 +18,60 @@ class TUPADRequestAgingController extends Controller
         $this->pusher = $pusher;
     }
 
-        public function getAgingDocuments()
-        {
-            try {
-                $agingThreshold = 3;
-                $cutoffTime = now()->subDays($agingThreshold);
-                
-                $agingRequests = DvRequest::with(['focalPerson', 'program', 'respocenter'])
-                    ->whereHas('program', function($q) {
-                        $q->where('prcode', 'TUPAD');
-                    })
-                    ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received'])
-                    ->where('created_at', '<=', $cutoffTime)
-                    ->orderBy('created_at', 'asc')
-                    ->get()
-                    ->map(function ($request) {
-                        $daysOld = now()->diffInDays($request->created_at);
-                        
-                        $latestAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
-                            ->where('alert_date', today())
-                            ->first();
-                        
-                        return [
-                            'id' => $request->id,
-                            'alert_id' => $latestAlert ? $latestAlert->id : null, // ✅ This should not be null
-                            'control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) : '—',
-                            'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
-                            'program' => $request->program->prcode ?? 'N/A',
-                            'status' => $request->status,
-                            'days_old' => $daysOld,
-                            'urgency' => $this->getUrgencyLevel($daysOld),
-                            'acknowledged' => $latestAlert ? $latestAlert->acknowledged : false,
-                        ];
-                    });
+    public function getAgingDocuments()
+    {
+        try {
+            $agingThreshold = 3;
+            $cutoffTime = now()->subDays($agingThreshold);
+            
+            $agingRequests = DvRequest::with(['focalPerson', 'program', 'respocenter'])
+                ->whereHas('program', function($q) {
+                    $q->where('prcode', 'TUPAD');
+                })
+                ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received'])
+                ->where('created_at', '<=', $cutoffTime)
+                ->orderBy('created_at', 'asc')
+                ->get()
+                ->map(function ($request) {
+                    // FIX: Proper days calculation with timezone consideration
+                    $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
+                    
+                    // Ensure we get positive whole number
+                    $daysOld = abs((int) $daysOld);
+                    
+                    $latestAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
+                        ->where('alert_date', today())
+                        ->first();
+                    
+                    return [
+                        'id' => $request->id,
+                        'alert_id' => $latestAlert ? $latestAlert->id : null,
+                        'control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) : '—',
+                        'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+                        'program' => $request->program->prcode ?? 'N/A',
+                        'status' => $request->status,
+                        'days_old' => $daysOld, // Now this will be a positive whole number
+                        'urgency' => $this->getUrgencyLevel($daysOld),
+                        'acknowledged' => $latestAlert ? $latestAlert->acknowledged : false,
+                    ];
+                });
 
-                return response()->json([
-                    'success' => true,
-                    'aging_count' => $agingRequests->count(),
-                    'documents' => $agingRequests,
-                    'threshold_days' => $agingThreshold,
-                ]);
+            return response()->json([
+                'success' => true,
+                'aging_count' => $agingRequests->count(),
+                'documents' => $agingRequests,
+                'threshold_days' => $agingThreshold,
+            ]);
 
-            } catch (\Exception $e) {
-                Log::error('Error fetching TUPAD aging documents: ' . $e->getMessage());
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to fetch TUPAD aging documents',
-                    'error' => $e->getMessage()
-                ], 500);
-            }
+        } catch (\Exception $e) {
+            Log::error('Error fetching TUPAD aging documents: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch TUPAD aging documents',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
+    }
 
     /**
      * Get TUPAD aging statistics
@@ -118,6 +122,9 @@ class TUPADRequestAgingController extends Controller
      */
     protected function getUrgencyLevel($daysOld)
     {
+        // FIX: Ensure we're working with positive whole numbers
+        $daysOld = abs((int) $daysOld);
+        
         if ($daysOld >= 10) return 'critical';
         if ($daysOld >= 7) return 'high';
         if ($daysOld >= 3) return 'medium';
@@ -150,7 +157,9 @@ class TUPADRequestAgingController extends Controller
 
             $alertedCount = 0;
             foreach ($agingRequests as $request) {
-                $daysOld = now()->diffInDays($request->created_at);
+                // FIX: Proper days calculation with absolute value
+                $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
+                $daysOld = abs((int) $daysOld);
 
                 // Check if alert already exists for today
                 $existingAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
@@ -174,7 +183,7 @@ class TUPADRequestAgingController extends Controller
                         'program' => $request->program->prcode ?? 'N/A',
                         'document_type' => 'TUPAD',
                         'status' => $request->status,
-                        'days_old' => $daysOld,
+                        'days_old' => $daysOld, // Now this will be a positive whole number
                         'urgency' => $this->getUrgencyLevel($daysOld),
                         'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                         'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),

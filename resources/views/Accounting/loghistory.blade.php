@@ -8,12 +8,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .status-received { background-color: #dbeafe; color: #1e40af; }
-        .status-process { background-color: #fef3c7; color: #d97706; }
         .status-validate { background-color: #dcfce7; color: #16a34a; }
         .status-rejected { background-color: #fee2e2; color: #dc2626; }
         
         .status-ranca-received { background-color: #dbeafe; color: #1e40af; }
-        .status-ranca-process { background-color: #fef3c7; color: #d97706; }
         .status-ranca-validated { background-color: #dcfce7; color: #16a34a; }
         .status-ranca-rejected { background-color: #fee2e2; color: #dc2626; }
         
@@ -76,24 +74,13 @@
         <div class="bg-white shadow rounded-xl p-6">
             <!-- Header Section -->
             <div class="flex justify-between items-center mb-6">
-                <div class="mt-6">
-                <a href="{{ route('Accounting.dvrequests.index') }}" 
-                   class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg transition duration-200 inline-flex items-center">
-                   <i class="fas fa-arrow-left mr-2"></i> Back to RANCA Requests
-                </a>
-            </div>
                 <div>
+                    <a href="{{ route('Accounting.dvrequests.index') }}" 
+                       class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg transition duration-200 inline-flex items-center mb-4">
+                       <i class="fas fa-arrow-left mr-2"></i> Back to RANCA Requests
+                    </a>
                     <h1 class="text-2xl font-bold text-gray-900">📜 RANCA - Verification History</h1>
                     <p class="text-sm text-gray-600 mt-1">Showing your personal verification records with detailed DV information</p>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div class="text-right">
-                        <p class="text-sm font-medium text-gray-700">RANCA Validator</p>
-                        <p class="text-xs text-gray-500">{{ auth()->user()->name ?? 'User' }}</p>
-                    </div>
-                    <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                        <span class="text-indigo-800 font-medium">{{ substr(auth()->user()->name ?? 'RA', 0, 2) }}</span>
-                    </div>
                 </div>
             </div>
 
@@ -121,7 +108,6 @@
                         <select name="step" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <option value="">All Steps</option>
                             <option value="receive" {{ request('step') == 'receive' ? 'selected' : '' }}>Receive</option>
-                            <option value="process" {{ request('step') == 'process' ? 'selected' : '' }}>Process</option>
                             <option value="validate" {{ request('step') == 'validate' ? 'selected' : '' }}>Validate</option>
                             <option value="reject" {{ request('step') == 'reject' ? 'selected' : '' }}>Reject</option>
                         </select>
@@ -149,97 +135,86 @@
                 </div>
             </form>
 
-           <!-- Statistics Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-sm text-blue-600 font-medium">Total Records</p>
-                        <p class="text-2xl font-bold text-blue-800">{{ $verificationHistory->total() }}</p>
+            <!-- Statistics Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-sm text-blue-600 font-medium">Total Records</p>
+                            <p class="text-2xl font-bold text-blue-800">{{ $verificationHistory->total() }}</p>
+                        </div>
+                        <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <i class="fas fa-check text-blue-600"></i>
+                        </div>
                     </div>
-                    <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                        <i class="fas fa-check text-blue-600"></i>
+                </div>
+                <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-sm text-purple-600 font-medium">Received</p>
+                            <p class="text-2xl font-bold text-purple-800">
+                                {{ $verificationHistory->where('verification_step', 'receive')->count() }}
+                            </p>
+                        </div>
+                        <div class="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
+                            <i class="fas fa-inbox text-purple-600"></i>
+                        </div>
+                    </div>
+                </div>  
+                <div class="bg-green-50 p-4 rounded-lg border border-green-100">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-sm text-green-600 font-medium">Validated</p>
+                            <p class="text-2xl font-bold text-green-800">
+                                {{ $verificationHistory->where('verification_step', 'validate')->count() }}
+                            </p>
+                        </div>
+                        <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                            <i class="fas fa-clipboard-check text-green-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-red-50 p-4 rounded-lg border border-red-100">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-sm text-red-600 font-medium">Rejected</p>
+                            <p class="text-2xl font-bold text-red-800">
+                                {{ $verificationHistory->where('verification_step', 'reject')->count() }}
+                            </p>
+                        </div>
+                        <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                            <i class="fas fa-times-circle text-red-600"></i>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-sm text-purple-600 font-medium">Received</p>
-                        <p class="text-2xl font-bold text-purple-800">
-                            {{ $verificationHistory->where('verification_step', 'receive')->count() }}
-                        </p>
-                    </div>
-                    <div class="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
-                        <i class="fas fa-inbox text-purple-600"></i>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-sm text-yellow-600 font-medium">In Process</p>
-                        <p class="text-2xl font-bold text-yellow-800">
-                            {{ $verificationHistory->where('verification_step', 'process')->count() }}
-                        </p>
-                    </div>
-                    <div class="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                        <i class="fas fa-sync-alt text-yellow-600"></i>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-green-50 p-4 rounded-lg border border-green-100">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-sm text-green-600 font-medium">Validated</p>
-                        <p class="text-2xl font-bold text-green-800">
-                            {{ $verificationHistory->where('verification_step', 'validate')->count() }}
-                        </p>
-                    </div>
-                    <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                        <i class="fas fa-clipboard-check text-green-600"></i>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-red-50 p-4 rounded-lg border border-red-100">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-sm text-red-600 font-medium">Rejected</p>
-                        <p class="text-2xl font-bold text-red-800">
-                            {{ $verificationHistory->where('verification_step', 'reject')->count() }}
-                        </p>
-                    </div>
-                    <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                        <i class="fas fa-times-circle text-red-600"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
 
             <!-- Table Section -->
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left border wide-table">
                     <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
                         <tr>
-                            <th class="table-cell">DV Request ID</th>
+                            <th class="table-cell">DV Control Number</th>
                             <th class="table-cell">DV Number</th>
                             <th class="table-cell">ORS Number</th>
                             <th class="table-cell">Verification Step</th>
-                            <th class="table-cell">Status Before</th>
-                            <th class="table-cell">Status After</th>
+                            <th class="table-cell">Current Status</th>
                             <th class="table-cell">Program</th>
                             <th class="table-cell">Payee</th>
                             <th class="table-cell">Date & Time</th>
                             <th class="table-cell details-column">DV Details</th>
-                            <th class="table-cell remarks-column">Remarks</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
                         @forelse($verificationHistory as $history)
                             <tr class="hover:bg-gray-50">
                                 <!-- DV Request ID -->
-                                <td class="table-cell font-medium text-gray-900">
-                                    #{{ $history->dv_request_id }}
+                                 <td class="table-cell font-medium text-gray-900">
+                                    @if($history->dvRequest && $history->dvRequest->accounting_control_number)
+                                        CN #-{{ now()->year }}-{{ str_pad($history->dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) }}
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
                                 </td>
                                 
                                 <!-- DV Number -->
@@ -276,12 +251,6 @@
                                     </span>
                                 </td>
                                 
-                                <!-- Status Before -->
-                                <td class="table-cell">
-                                    <span class="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                                        {{ ucwords(str_replace('_', ' ', $history->status_before ?? 'N/A')) }}
-                                    </span>
-                                </td>
                                 
                                 <!-- Status After -->
                                 <td class="table-cell">
@@ -378,43 +347,43 @@
                                             @endif
 
                                             <!-- UACS Codes -->
-                                            @if($history->dvRequest->orsRequest && $history->dvRequest->orsRequest->uacsCodes->isNotEmpty())
-                                                <div class="detail-section">
-                                                    <div class="font-semibold text-gray-700 mb-1">
-                                                        <i class="fas fa-list-ol text-purple-500 mr-1"></i> UACS Codes ({{ $history->dvRequest->orsRequest->uacsCodes->count() }})
+                                        <div class="detail-section">
+                                                        <div class="font-semibold text-gray-700 mb-1">
+                                                            <i class="fas fa-list-ol text-purple-500 mr-1"></i> 
+                                                            UACS Codes ({{ $history->dvRequest->orsRequest->uacsCodes->count() }})
+                                                        </div>
+                                                        <div class="flex flex-wrap gap-1">
+                                                            @foreach($history->dvRequest->orsRequest->uacsCodes->take(3) as $uacs)
+                                                                <span class="detail-badge bg-purple-50 text-purple-700 border border-purple-200">
+                                                                    {{ $uacs->uacscode ?? 'N/A' }} 
+                                                                </span>
+                                                            @endforeach
+                                                            @if($history->dvRequest->orsRequest->uacsCodes->count() > 3)
+                                                                <span class="detail-badge bg-purple-100 text-purple-800">
+                                                                    +{{ $history->dvRequest->orsRequest->uacsCodes->count() - 3 }} more
+                                                                </span>
+                                                            @endif
+                                                        </div>
                                                     </div>
-                                                    <div class="flex flex-wrap gap-1">
-                                                        @foreach($history->dvRequest->orsRequest->uacsCodes->take(3) as $uacs)
-                                                            <span class="detail-badge bg-purple-50 text-purple-700 border border-purple-200">
-                                                                {{ $uacs->uacscode }} {{$uacs->description}}
-                                                            </span>
-                                                        @endforeach
-                                                        @if($history->dvRequest->orsRequest->uacsCodes->count() > 3)
-                                                            <span class="detail-badge bg-purple-100 text-purple-800">+{{ $history->dvRequest->orsRequest->uacsCodes->count() - 3 }} more</span>
-                                                        @endif
-                                                    </div>
-                                                </div>
-                                            @endif
 
-                                              <!-- UACS Codes -->
+                                            <!-- ADL Codes -->
                                             @if($history->dvRequest->orsRequest && $history->dvRequest->orsRequest->adlCodes->isNotEmpty())
                                                 <div class="detail-section">
                                                     <div class="font-semibold text-gray-700 mb-1">
-                                                        <i class="fas fa-list-ol text-blue-500 mr-1"></i> UACS Codes ({{ $history->dvRequest->orsRequest->adlCodes->count() }})
+                                                        <i class="fas fa-code text-blue-500 mr-1"></i> ADL Codes ({{ $history->dvRequest->orsRequest->adlCodes->count() }})
                                                     </div>
                                                     <div class="flex flex-wrap gap-1">
                                                         @foreach($history->dvRequest->orsRequest->adlCodes->take(3) as $adl)
                                                             <span class="detail-badge bg-blue-50 text-blue-700 border border-blue-200">
-                                                                {{ $uacs->adlcode }} {{$uacs->description}}
+                                                                {{ $adl->adlcode ?? 'N/A' }} 
                                                             </span>
                                                         @endforeach
-                                                        @if($history->dvRequest->orsRequest->uacsCodes->count() > 3)
-                                                            <span class="detail-badge bg-blue-100 text-blue-800">+{{ $history->dvRequest->orsRequest->uacsCodes->count() - 3 }} more</span>
+                                                        @if($history->dvRequest->orsRequest->adlCodes->count() > 3)
+                                                            <span class="detail-badge bg-blue-100 text-blue-800">+{{ $history->dvRequest->orsRequest->adlCodes->count() - 3 }} more</span>
                                                         @endif
                                                     </div>
                                                 </div>
                                             @endif
-
 
                                             <!-- Verification Data -->
                                             @if($history->verification_data)
@@ -463,13 +432,8 @@
                                     @endif
                                 </td>
                                 
-                                <!-- Remarks -->
-                                <td class="table-cell remarks-column text-gray-700">
-                                    <div class="max-h-24 overflow-y-auto text-xs">
-                                        {{ $history->remarks ?? '—' }}
-                                    </div>
-                                </td>
-                                
+                                <!-- Action Column -->
+                               
                             </tr>
                         @empty
                             <tr>
@@ -519,7 +483,7 @@
             if (!dateFrom.value && !dateTo.value) {
                 const today = new Date();
                 const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(today.getDate() - 30);
+                thirtyDaysAgo.setDate(today.getgetDate() - 30);
                 
                 dateFrom.valueAsDate = thirtyDaysAgo;
                 dateTo.valueAsDate = today;

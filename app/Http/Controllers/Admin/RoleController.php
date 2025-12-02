@@ -15,13 +15,13 @@ class RoleController extends Controller
     public function index()
     {
         $roles = Role::with('permissions')->get();
-        return view('admin.roles.index', compact('roles'));
+        return view('Admin.Roles.index', compact('roles'));
     }
 
     public function create()
     {
         $permissions = Permission::all();
-        return view('admin.roles.create', compact('permissions'));
+        return view('Admin.Roles.create', compact('permissions'));
     }
 
     public function store(Request $request)
@@ -42,7 +42,7 @@ class RoleController extends Controller
     public function edit(Role $role)
     {
         $permissions = Permission::all();
-        return view('admin.roles.edit', compact('role','permissions'));
+        return view('Admin.Roles.edit', compact('role', 'permissions')); // Fixed: consistent case
     }
 
     public function update(Request $request, Role $role)
@@ -55,13 +55,13 @@ class RoleController extends Controller
         $role->update(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
 
-        return redirect()->route('admin.roles.index')->with('success', 'Role updated successfully.');
+        return redirect()->route('admin.roles.index')->with('success', 'Role updated successfully.'); // Fixed: lowercase
     }
 
     public function destroy(Role $role)
     {
         $role->delete();
-        return redirect()->route('admin.roles.index')->with('success', 'Role deleted successfully.');
+        return redirect()->route('admin.roles.index')->with('success', 'Role deleted successfully.'); // Fixed: lowercase
     }
 
     // -------------------
@@ -71,14 +71,13 @@ class RoleController extends Controller
     public function permissionsIndex()
     {
         $permissions = Permission::all();
-        return view('admin.permissions.index', compact('permissions'));
+        return view('Admin.Permissions.index', compact('permissions'));
     }
 
     public function permissionsCreate()
     {
-          $roles = Role::all(); // fetch all roles
-        return view('admin.permissions.create', compact('roles'));
-
+        $roles = Role::all();
+        return view('Admin.Permissions.create', compact('roles'));
     }
 
     public function permissionsStore(Request $request)
@@ -87,10 +86,8 @@ class RoleController extends Controller
             'name' => 'required|unique:permissions,name',
         ]);
 
-        // Create the permission and store it in a variable
         $permission = Permission::create(['name' => $request->name]);
         
-        // Assign the permission to selected roles if any
         if ($request->roles) {
             foreach ($request->roles as $roleId) {
                 $role = Role::find($roleId);
@@ -105,7 +102,8 @@ class RoleController extends Controller
 
     public function permissionsEdit(Permission $permission)
     {
-        return view('admin.permissions.edit', compact('permission'));
+        $roles = Role::all(); // Add this line to get roles for the view
+        return view('Admin.Permissions.edit', compact('permission', 'roles'));
     }
 
     public function permissionsUpdate(Request $request, Permission $permission)

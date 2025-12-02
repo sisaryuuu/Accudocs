@@ -48,7 +48,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Name of Payee</label>
-                        <input type="text" value="{{ $dvRequest->focalPerson->fname ?? '' }} {{ $dvRequest->focalPerson->lname ?? '' }}"
+                        <input type="text" value="{{ $dvRequest->payeefname ?? '' }} {{ $dvRequest->payee_lname ?? '' }}"
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>
                     </div>
                     <div>
@@ -65,39 +65,103 @@
                 </div>
 
                 <!-- Particulars -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Particulars</label>
-                    <textarea rows="2" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm" readonly>{{ $dvRequest->particulars ?? '' }}</textarea>
+             <!-- Amount + Received Info -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Particulars</label>
+                        <textarea 
+                            class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm h-48" 
+                            readonly>{{ $dvRequest->particulars ?? '' }}
+                        </textarea>
+                    </div>
                 </div>
+                
 
                 <!-- GIP Attachments Checklist -->
                 <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">GIP Attachments Checklist</h3>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">GIP Attachments Checklist</h3>
+                        
+                        @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0 && $dvRequest->status === 'Incoming-GIP_received')
+                            <div class="flex items-center space-x-3">
+                                <button type="button" 
+                                        onclick="checkAllAttachments()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    Check All
+                                </button>
+                                <button type="button" 
+                                        onclick="uncheckAllAttachments()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                    Uncheck All
+                                </button>
+                            </div>
+                        @endif
+                    </div>
 
                     @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0)
-                        <ul class="space-y-2">
+                        <ul class="space-y-2" id="attachments-list">
                             @foreach($dvRequest->gipAttachments as $attachment)
-                                <li class="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 transition">
+                                <li class="flex items-center p-3 rounded-lg transition-all duration-200 
+                                    {{ $attachment->is_present ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200' }}">
                                     <input type="checkbox"
                                         name="gip_attachments[{{ $attachment->id }}]"
                                         id="gip_attachment_{{ $attachment->id }}"
-                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
-                                        {{ $attachment->is_present ? 'checked' : '' }}>
+                                        value="1"
+                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3 attachment-checkbox"
+                                        {{ $attachment->is_present ? 'checked' : '' }}
+                                        {{ $dvRequest->status === 'Incoming-GIP_received' ? '' : 'disabled' }}>
                                     <label for="gip_attachment_{{ $attachment->id }}" class="text-sm text-gray-900 cursor-pointer flex-1">
                                         {{ $attachment->name }}
                                     </label>
-                                    @if($attachment->is_present)
-                                        <span class="text-xs text-green-600 font-medium">✓ Present</span>
-                                    @endif
+                                    <span class="text-xs font-medium px-2 py-1 rounded-full 
+                                        {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                        {{ $attachment->is_present ? '✓ Present' : '✗ N/A' }}
+                                    </span>
                                 </li>
                             @endforeach
                         </ul>
+                        
+                        <!-- Summary -->
+                        <div class="mt-4 flex items-center justify-between text-sm">
+                            <div class="flex items-center space-x-4">
+                                <span class="flex items-center">
+                                    <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+                                    <span class="text-green-700" id="present-count">Present: {{ $dvRequest->gipAttachments->where('is_present', true)->count() }}</span>
+                                </span>
+                                <span class="flex items-center">
+                                    <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                                    <span class="text-red-700" id="missing-count">N/A: {{ $dvRequest->gipAttachments->where('is_present', false)->count() }}</span>
+                                </span>
+                            </div>
+                            <span class="text-gray-600" id="total-count">Total: {{ $dvRequest->gipAttachments->count() }}</span>
+                        </div>
                         
                         <p class="text-xs text-gray-500 mt-4">
                             <strong>Note:</strong> Check/uncheck items to update attachment status when new physical documents arrive.
                         </p>
                     @else
-                        <p class="text-gray-400">No attachments available.</p>
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                </svg>
+                                <span class="text-yellow-800">No attachments available for this GIP request.</span>
+                            </div>
+                            <p class="text-sm text-yellow-700 mt-2">
+                                The attachments checklist should be initialized automatically. 
+                                @if($dvRequest->status === 'IMSD_verified')
+                                    Please receive this document first to initialize the checklist.
+                                @else
+                                    Please contact system administrator if this issue persists.
+                                @endif
+                            </p>
+                        </div>
                     @endif
                 </div>
 
@@ -326,6 +390,32 @@
 <script>
 let currentRejectId = null;
 
+// Check All Attachments
+function checkAllAttachments() {
+    const checkboxes = document.querySelectorAll('.attachment-checkbox:not(:disabled)');
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.checked) {
+            checkbox.checked = true;
+            // Trigger change event to update UI
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All attachments marked as present', 'success');
+}
+
+// Uncheck All Attachments
+function uncheckAllAttachments() {
+    const checkboxes = document.querySelectorAll('.attachment-checkbox:not(:disabled)');
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            checkbox.checked = false;
+            // Trigger change event to update UI
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    showMessage('All attachments marked as missing', 'success');
+}
+
 // Update character count
 function updateCharCount() {
     const textarea = document.getElementById('rejectRemarks');
@@ -464,33 +554,55 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Handle GIP attachment checkboxes
-    const gipCheckboxes = document.querySelectorAll('input[name^="gip_attachments["]');
+    // Handle GIP attachment checkboxes - Update colors when changed
+    const gipCheckboxes = document.querySelectorAll('.attachment-checkbox');
     gipCheckboxes.forEach(cb => {
         cb.addEventListener('change', (e) => {
             const listItem = e.target.closest('li');
-            let statusSpan = listItem.querySelector('span.text-xs');
-
-            // If there's no existing span (for unchecked ones), create it
-            if (!statusSpan) {
-                statusSpan = document.createElement('span');
-                statusSpan.classList.add('text-xs', 'ml-2');
-                listItem.appendChild(statusSpan);
-            }
-
+            const statusSpan = listItem.querySelector('span.text-xs');
+            
             if (e.target.checked) {
-                // ✅ Mark as Present
+                // ✅ Present - Green
+                listItem.classList.remove('bg-red-50', 'border-red-200');
+                listItem.classList.add('bg-green-50', 'border-green-200');
                 statusSpan.textContent = '✓ Present';
-                statusSpan.classList.remove('text-gray-400');
-                statusSpan.classList.add('text-green-600', 'font-medium');
+                statusSpan.classList.remove('bg-red-100', 'text-red-800');
+                statusSpan.classList.add('bg-green-100', 'text-green-800');
             } else {
-                // ❌ Mark as Missing
-                statusSpan.textContent = 'Missing';
-                statusSpan.classList.remove('text-green-600', 'font-medium');
-                statusSpan.classList.add('text-gray-400');
+                // ❌ Missing - Red
+                listItem.classList.remove('bg-green-50', 'border-green-200');
+                listItem.classList.add('bg-red-50', 'border-red-200');
+                statusSpan.textContent = '✗ N/A';
+                statusSpan.classList.remove('bg-green-100', 'text-green-800');
+                statusSpan.classList.add('bg-red-100', 'text-red-800');
             }
+            
+            // Update summary counts
+            updateAttachmentSummary();
         });
     });
+    
+    // Function to update attachment summary
+    function updateAttachmentSummary() {
+        const total = gipCheckboxes.length;
+        const present = Array.from(gipCheckboxes).filter(cb => cb.checked).length;
+        const missing = total - present;
+        
+        // Update the summary display
+        const presentSpan = document.getElementById('present-count');
+        const missingSpan = document.getElementById('missing-count');
+        const totalSpan = document.getElementById('total-count');
+        
+        if (presentSpan) {
+            presentSpan.textContent = `Present: ${present}`;
+        }
+        if (missingSpan) {
+            missingSpan.textContent = `N/A: ${missing}`;
+        }
+        if (totalSpan) {
+            totalSpan.textContent = `Total: ${total}`;
+        }
+    }
 });
 
 // Function to show toast messages

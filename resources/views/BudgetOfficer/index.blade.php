@@ -31,61 +31,61 @@
         </div>
 
          <!-- ORS Aging Statistics Cards -->
-        <!-- Update the statistics card tooltips -->
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-    <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border-l-4 border-red-500">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-red-700 text-sm font-semibold">Critical</p>
-                <p id="stat-critical" class="text-2xl font-bold text-red-600">0</p>
-                <p class="text-xs text-red-600">10+ days old</p> <!-- Already shows whole number -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border-l-4 border-red-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-red-700 text-sm font-semibold">Critical</p>
+                        <p id="ors-stat-critical" class="text-2xl font-bold text-red-600">0</p>
+                        <p class="text-xs text-red-600">7+ days old</p>
+                    </div>
+                    <svg class="w-8 h-8 text-red-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"></path>
+                    </svg>
+                </div>
             </div>
-            <svg class="w-8 h-8 text-red-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"></path>
-            </svg>
-        </div>
-    </div>
 
-    <div class="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border-l-4 border-orange-500">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-orange-700 text-sm font-semibold">High</p>
-                <p id="stat-high" class="text-2xl font-bold text-orange-600">0</p>
-                <p class="text-xs text-orange-600">7-9 days old</p> <!-- Updated to whole numbers -->
+            <div class="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border-l-4 border-orange-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-orange-700 text-sm font-semibold">High</p>
+                        <p id="ors-stat-high" class="text-2xl font-bold text-orange-600">0</p>
+                        <p class="text-xs text-orange-600">5-7 days old</p>
+                    </div>
+                    <svg class="w-8 h-8 text-orange-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3m0 0v.01M2 15v3m0 0v.01"></path>
+                    </svg>
+                </div>
             </div>
-            <svg class="w-8 h-8 text-orange-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3m0 0v.01M2 15v3m0 0v.01"></path>
-            </svg>
-        </div>
-    </div>
 
-    <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border-l-4 border-yellow-500">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-yellow-700 text-sm font-semibold">Medium</p>
-                <p id="stat-medium" class="text-2xl font-bold text-yellow-600">0</p>
-                <p class="text-xs text-yellow-600">3-6 days old</p> <!-- Updated to whole numbers -->
+            <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border-l-4 border-yellow-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-yellow-700 text-sm font-semibold">Medium</p>
+                        <p id="ors-stat-medium" class="text-2xl font-bold text-yellow-600">0</p>
+                        <p class="text-xs text-yellow-600">3-5 days old</p>
+                    </div>
+                    <svg class="w-8 h-8 text-yellow-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13 16H5v-4m0-5V7a1 1 0 012-1h6a1 1 0 012 1v1m0 5v4m0 0h2a1 1 0 001-1v-4a1 1 0 00-1-1h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 00-.293.707V12m0 0H9a1 1 0 001-1V9a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm0 5V9m0 8a2 2 0 100-4 2 2 0 000 4z"></path>
+                    </svg>
+                </div>
             </div>
-            <svg class="w-8 h-8 text-yellow-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M13 16H5v-4m0-5V7a1 1 0 012-1h6a1 1 0 012 1v1m0 5v4m0 0h2a1 1 0 001-1v-4a1 1 0 00-1-1h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 00-.293.707V12m0 0H9a1 1 0 001-1V9a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm0 5V9m0 8a2 2 0 100-4 2 2 0 000 4z"></path>
-            </svg>
-        </div>
-    </div>
 
-    <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border-l-4 border-blue-500">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-blue-700 text-sm font-semibold">Total Aging</p>
-                <p id="stat-total" class="text-2xl font-bold text-blue-600">0</p>
-                <p class="text-xs text-blue-600">3+ days old</p> <!-- Already shows whole number -->
+            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border-l-4 border-blue-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-blue-700 text-sm font-semibold">Total Aging</p>
+                        <p id="ors-stat-total" class="text-2xl font-bold text-blue-600">0</p>
+                        <p class="text-xs text-blue-600">3+ days old</p>
+                    </div>
+                    <svg class="w-8 h-8 text-blue-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path>
+                        <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 1 1 0 000-2H6a6 6 0 100 12H4a2 2 0 01-2-2V5zm11.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path>
+                    </svg>
+                </div>
             </div>
-            <svg class="w-8 h-8 text-blue-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path>
-                <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 1 1 0 000-2H6a6 6 0 100 12H4a2 2 0 01-2-2V5zm11.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path>
-            </svg>
         </div>
-    </div>
-</div>
+
         <!-- Search -->
         <div class="mb-4">
             <input type="text" id="searchInput" 
@@ -493,7 +493,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         switch(eventType) {
             case 'dv-request-verified':
-                showToast(`New DV request from ${data.submitted_by || 'Incoming'} ready for processing`, 'success');
                 fetchOrsAgingDocuments();
                 updateOrsStatistics();
                 break;
@@ -616,18 +615,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return `
                 <tr class="hover:bg-gray-50 transition-colors duration-150">
                     <td class="px-6 py-4 text-sm font-medium text-gray-900">${req.control_no ?? '—'}</td>
-                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">${req.ors_number ?? '—'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                        <span class="font-mono text-xs">${req.uacs_codes}</span>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                        <span class="font-mono text-xs">${req.adl_code}</span>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                        <span class="font-mono text-xs">${req.mfopap_code}</span>
-                    </td>
                     <td class="px-6 py-4 text-sm text-gray-900">${req.submitted_by}</td>
                     <td class="px-6 py-4 text-sm text-gray-600">${req.program}</td>
+                     <td class="px-6 py-4 text-sm text-gray-600">${req.particulars}</td>
                     <td class="px-6 py-4 text-sm text-gray-600">${req.respocenter}</td>
                     <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${req.amount}</td>
                     <td class="px-6 py-4 whitespace-nowrap">
@@ -661,12 +651,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Control No.</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ORS Number</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">UACS Code</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ADL Code</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">MFO/PAP</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted By</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Particulars</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Responsibility Center</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gross Amount</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>

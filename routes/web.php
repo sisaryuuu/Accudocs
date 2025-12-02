@@ -26,12 +26,15 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\RoleSwitchController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\FocalPerson\NotificationController;
 use App\Http\Controllers\AccountingUnitProfileController;
+use App\Http\Controllers\SMSController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use App\Http\Requests\FocalEmailVerificationRequest;
 use App\Http\Requests\AccountingUnitEmailVerificationRequest;
+use App\Models\AccountingUnit;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use App\Http\Controllers\AnalyticsController;
@@ -62,6 +65,34 @@ Route::get('login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::post('login', [LoginController::class, 'login'])->name('login.submit');
 Route::post('logout', [LoginController::class, 'logout'])->name('logout');
 
+// Concurrent login handling
+Route::get('/login/redirect', [LoginController::class, 'redirectToDashboard'])->name('login.redirect');
+Route::post('/login/force-logout', [LoginController::class, 'forceLogoutOtherSessions'])->name('login.force-logout');
+
+Route::post('/switch-role', [RoleSwitchController::class, 'switchRole'])
+    ->name('switch-role')
+    ->middleware('auth');
+
+Route::get('/current-role', [RoleSwitchController::class, 'getCurrentRole'])
+    ->name('current-role')
+    ->middleware('auth');
+
+// Resend verification email
+Route::post('/email/verification-resend', function (Request $request) {
+    $request->validate(['email' => 'required|email']);
+
+    $user = AccountingUnit::where('email', $request->email)->first();
+
+    if ($user && empty($user->email_verified_at)) {
+        $user->sendEmailVerificationNotification();
+        return back()->with('success', 'Verification email sent!');
+    }
+
+    return back()->with('error', 'Unable to resend verification email.');
+})->name('verification.resend');
+
+
+
 Route::get('/auth/focalpersonregister', [FocalPersonRegisterController::class, 'showRegistrationForm'])->name('focalperson.register.form');
 Route::post('/auth/focalpersonregister', [FocalPersonRegisterController::class, 'register'])->name('focalperson.register');
 
@@ -74,12 +105,17 @@ Route::middleware(['auth:web', 'verified'])->group(function (){
 
 
 
-Route::middleware(['auth:web','verified', 'role:Admin|Accounting_III'])->group(function () {
+Route::middleware(['auth:web','verified', 'role:Admin|Accountant_III'])->group(function () {
     Route::get('/Admin/dashboard', [DashboardController::class, 'index'])
         ->name('Admin.dashboard');
 
     Route::resource('admin/accountingunits', AccountingUnitController::class)
         ->names('admin.accountingunits');
+
+    Route::get('/document-tracking', [AdminController::class, 'documentTracking'])->name('admin.document-tracking');
+    Route::get('/document-tracking/{dvRequest}', [AdminController::class, 'documentTrackingShow'])->name('admin.document-tracking.show');
+    Route::get('/document-tracking/{dvRequest}/logs', [AdminController::class, 'getRequestLogs'])->name('admin.document-tracking.logs');
+    Route::get('/document-tracking/{dvRequest}/latest-step', [AdminController::class, 'getLatestStep'])->name('admin.document-tracking.latest-step');
 });
 Route::middleware(['auth:web', 'verified', 'role:Admin'])->group(function () {
     
@@ -92,12 +128,17 @@ Route::middleware(['auth:web', 'verified', 'role:Admin'])->group(function () {
         ->name('admin.accountingunits.search');
     Route::put('/admin/accountingunits/{accountingunit}', [AccountingUnitController::class, 'update'])
         ->name('admin.accountingunits.update');
+    Route::post('/admin/accountingunits/{accountingunit}/add-role', [AccountingUnitController::class, 'addRole'])
+    ->name('admin.accountingunits.add-role');
     
-    // ✅ Add resend verification route
-    Route::post('/admin/accountingunits/{accountingunit}/resend-verification', 
-        [AccountingUnitController::class, 'resendVerification'])
-        ->name('admin.accountingunits.resend-verification');
-
+Route::post('/admin/accountingunits/{accountingunit}/remove-role', [AccountingUnitController::class, 'removeRole'])
+    ->name('admin.accountingunits.remove-role');
+    
+Route::post('/admin/accountingunits/{accountingunit}/set-primary-role', [AccountingUnitController::class, 'setPrimaryRole'])
+    ->name('admin.accountingunits.set-primary-role');
+    
+Route::post('/admin/accountingunits/bulk-action', [AccountingUnitController::class, 'bulkAction'])
+    ->name('admin.accountingunits.bulk-action');
     // ✅ Roles routes
     Route::resource('admin/roles', RoleController::class)
         ->names('admin.roles');
@@ -116,6 +157,11 @@ Route::middleware(['auth:web', 'verified', 'role:Admin'])->group(function () {
     Route::delete('admin/permissions/{permission}', [RoleController::class, 'permissionsDestroy'])
         ->name('admin.permissions.destroy');
     
+    
+    
+    
+    
+    
     // Settings routes
     Route::get('admin/settings', [SettingsController::class, 'edit'])
         ->name('admin.settings.edit');
@@ -132,22 +178,27 @@ Route::middleware(['auth', 'role:Admin'])->prefix('admin')->group(function () {
 
 
 
-Route::middleware(['auth:web'])->group(function () {
-    Route::get('/accountingunit/email/verify', function () {
-        return view('auth.accunitverifyemail');
-    })->name('accountingunit.verification.notice');
-
-    Route::post('/accountingunit/email/verification-notification', function (Request $request) {
-        $request->user('web')->sendEmailVerificationNotification();
-        return back()->with('success', 'Verification link sent!');
-    })->middleware('throttle:6,1')->name('accountingunit.verification.send');
-});
-
+// Public verification route (NO AUTH REQUIRED)
 Route::get('/accountingunit/email/verify/{id}/{hash}', function (AccountingUnitEmailVerificationRequest $request) {
     $request->fulfill();
     return redirect()->route('login')
-        ->with('success', 'Email verified successfully!');
-})->middleware(['auth:web'])->name('accountingunit.verification.verify');
+        ->with('success', 'Email verified successfully! You can now log in.');
+})->middleware(['signed'])->name('accountingunit.verification.verify'); // ✅ Use 'signed' instead of 'auth'
+
+// Protected routes (require login)
+Route::middleware(['auth:web'])->group(function () {
+    // Resend verification email
+    Route::post('/accountingunit/email/verification-notification', function (Request $request) {
+        $user = $request->user();
+        
+        if ($user->hasVerifiedEmail()) {
+            return back()->with('info', 'Email already verified.');
+        }
+        
+        $user->sendEmailVerificationNotification();
+        return back()->with('success', 'Verification link sent!');
+    })->middleware('throttle:6,1')->name('accountingunit.verification.send');
+});
 
 
 
@@ -300,6 +351,7 @@ Route::prefix('regional-director')->name('regional.director.')->middleware(['aut
     Route::post('/bulk-sign-approve', [DOLEQRController::class, 'bulkSignApproveDVs'])->name('bulk-sign-approve'); // ✅ ADDED
     Route::get('/history', [DOLEQRController::class, 'regionalDirectorHistory'])->name('history');
     Route::get('/stats', [DOLEQRController::class, 'getRegionalDirectorStats'])->name('stats'); // ✅ ADDED if not exists
+    Route::get('/regional-director/dvs/fetch', [DOLEQRController::class, 'fetchRegionalDirectorDVs'])->name('dvs.fetch');
 });
 
 // Cashier Routes  
@@ -312,6 +364,7 @@ Route::prefix('cashier')->name('cashier.')->middleware(['auth:web', 'verified', 
     Route::post('/bulk-release', [DOLEQRController::class, 'cashierBulkRelease'])->name('bulk-release'); // ✅ ADDED
     Route::get('/history', [DOLEQRController::class, 'cashierHistory'])->name('history');
     Route::get('/stats', [DOLEQRController::class, 'getCashierStats'])->name('stats'); // ✅ ADDED if not exists
+    Route::get('/cashier/dvs/fetch', [DOLEQRController::class, 'fetchDVs'])->name('dvs.fetch');
 });
 
 Route::get('/qr/scanner', function () {
@@ -327,31 +380,46 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|IMSD'])->prefix('Regional
 
     // Index page — list all DV requests for IMSD
     Route::get('/index', [DvRequestProcessingController::class, 'index'])
+        ->middleware('permission:imsd.view')
         ->name('RegionalOffices.IMSD.index');
     
     Route::get('/dvrequests/fetchimsdRecent', [DvRequestProcessingController::class, 'fetchimsdRecent'])
+        
         ->name('RegionalOffices.IMSD.dvrequests.fetchimsdRecent');
    
     Route::get('/fetchAll', [DvRequestProcessingController::class, 'fetchAll'])
+    
         ->name('RegionalOffices.IMSD.fetchAll');
     
     Route::get('/dvrequests/{id}', [DvRequestProcessingController::class, 'show'])
+        ->middleware('permission:imsd.view')
         ->name('RegionalOffices.IMSD.verifydv');
     
     // Receive action - now directly sets status to IMSD_received (ready for verification)
     Route::post('/dvrequests/{id}/receive', [DvRequestProcessingController::class, 'receive'])
+        ->middleware('permission:imsd.verify')
         ->name('IMSD.dvrequests.receive');
     
     // Verify action
     Route::post('/dvrequests/{id}/verify', [DvRequestProcessingController::class, 'verify'])
+        ->middleware('permission:imsd.verify')
         ->name('IMSD.dvrequests.verify');
     
     // Reject action
     Route::post('/dvrequests/{id}/reject', [DvRequestProcessingController::class, 'reject'])
+        ->middleware('permission:imsd.reject')
         ->name('IMSD.dvrequests.reject');
-   
+        
+    Route::post('/dvrequests/bulk-receive', [DvRequestProcessingController::class, 'bulkReceive'])
+    ->middleware('permission:imsd.verify')
+    ->name('bulkReceive');
+        
+    Route::post('/dvrequests/bulk-verify', [DvRequestProcessingController::class, 'bulkVerify'])
+    ->middleware('permission:imsd.verify')
+    ->name('bulkVerify');
     // Verification history
     Route::get('/history', [DvRequestProcessingController::class, 'verificationHistory'])
+        ->middleware('permission:imsd.view')
         ->name('RegionalOffices.IMSD.history');
     
     // Load form
@@ -360,6 +428,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|IMSD'])->prefix('Regional
     
     // Redirect to first pending
     Route::get('/redirect-to-first', [DvRequestProcessingController::class, 'redirectToFirstPending'])
+    
         ->name('RegionalOffices.IMSD.redirectFirst');
     
     // Edit attachments
@@ -496,22 +565,31 @@ Route::post('/aging-alerts/{alert}/acknowledge', [TUPADRequestAgingController::c
 });
 Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TEV'])->prefix('Incoming/TEV')->group(function () {
     Route::get('/index', [TEVDvRequestProcessingController::class, 'index'])
+    ->middleware('permission:tev.view')
     ->name('Incoming.TEV.index');
     Route::get('/dvrequests/verify', [TEVDvRequestProcessingController::class, 'redirectToFirstPending'])
+    ->middleware('permission:tev.view')
     ->name('Incoming.TEV.verifytevdv');
     Route::get('/dvrequests/fetchtevRecent', [TEVDvRequestProcessingController::class, 'fetchtevRecent'])
+    ->middleware('permission:tev.view')
     ->name('Incoming.TEV.dvrequests.fetchtevRecent');
     Route::get('/dvrequests/{id}', [TEVDvRequestProcessingController::class, 'show']) 
+     ->middleware('permission:tev.view')
     ->name('Incoming.TEV.dvrequests.withid');
-       Route::post('/dvrequests/{id}/receive', [TEVDvRequestProcessingController::class, 'receive'])
+    Route::post('/dvrequests/{id}/receive', [TEVDvRequestProcessingController::class, 'receive'])
+    ->middleware('permission:tev.approve')
     ->name('Incoming.TEV.dvrequests.receive');      
     Route::get('/history', [TEVDvRequestProcessingController::class, 'history'])
+     ->middleware('permission:tev.view')
     ->name('dvrequests.tevhistory');
     Route::get('/fetch-all', [TEVDvRequestProcessingController::class, 'fetchAll'])
+    ->middleware('permission:tev.view')
     ->name('Incoming.TEV.fetchAll');
     Route::post('/dvrequests/{id}/verify', [TEVDvRequestProcessingController::class, 'verify'])
+     ->middleware('permission:tev.approve')
     ->name('Incoming.TEV.dvrequests.verify');
     Route::post('/dvrequests/{id}/reject', [TEVDvRequestProcessingController::class, 'reject'])
+     ->middleware('permission:tev.reject')
     ->name('Incoming.TEV.dvrequests.reject');
     Route::get('/dvrequests/{id}/fetch', [TEVDvRequestProcessingController::class, 'fetch'])
     ->name('Incoming.TEV.dvrequests.fetch');
@@ -558,7 +636,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
         ->name('dvrequests.withid');
  
     Route::post('/dvrequests/{id}/receive', [ObligateDVORSController::class, 'receive'])
-        ->middleware('permission:budget.edit')
+        ->middleware('permission:budget.approve')
         ->name('dvrequests.receive');
         
     Route::post('/dvrequests/{id}/start-processing', [ObligateDVORSController::class, 'startProcessing'])
@@ -698,7 +776,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Outgoing'])->prefix('/Out
         ->name('dvrequests.finalize');
     
     Route::post('/dvrequests/{id}/reject', [OutgoingDvController::class, 'reject'])
-        ->middleware('permission:outgoing.reject')
+        ->middleware('permission:outgoing.rejected')
         ->name('dvrequests.reject');
     
     Route::put('/dvrequests/{id}/attachments', [OutgoingDvController::class, 'updateAttachments'])
@@ -728,24 +806,31 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Outgoing'])->prefix('/Out
 
 
 //Accountant III
-Route::middleware(['auth:web', 'verified', 'role:Admin|Accounting_III'])->prefix('Accounting')->name('Accounting.')->group(function () {
+Route::middleware(['auth:web', 'verified', 'role:Admin|Accountant_III'])->prefix('Accounting')->name('Accounting.')->group(function () {
     // Fix the history route - remove duplicate prefix
     Route::get('/history', [RANCAController::class, 'history'])->name('history');
     
     // Your existing routes
     Route::get('/dvrequests', [RANCAController::class, 'index'])
+    ->middleware('permission:accunit.view')
     ->name('dvrequests.index');
     Route::get('/dvrequests/fetch', [RANCAController::class, 'fetchDvRequests'])
+    ->middleware('permission:accunit.view')
     ->name('dvrequests.fetch');
     Route::get('/dvrequests/{id}', [RANCAController::class, 'show'])
+    ->middleware('permission:accunit.view')
     ->name('dvrequests.show');
     Route::get('/redirect-first-pending', [RANCAController::class, 'redirectToFirstPending'])
+    ->middleware('permission:accunit.view')
     ->name('dvrequest.redirectFirstPending');
     Route::post('/dvrequests/{id}/receive', [RANCAController::class, 'receive'])
+    ->middleware('permission:accunit.validate')
     ->name('dvrequests.receive');
     Route::put('/dvrequests/{id}/update-amount', [RANCAController::class, 'updateAmount'])
+    ->middleware('permission:accunit.edit')
     ->name('dvrequests.updateAmount');
     Route::post('/dvrequests/{id}/validate', [RANCAController::class, 'validateDV'])
+    ->middleware('permission:accunit.validate')
     ->name('dvrequests.validate'); 
     Route::post('/dvrequests/{id}/reject', [RANCAController::class, 'reject'])
     ->name('dvrequests.reject');
@@ -770,3 +855,14 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Accounting_III'])->prefix
     Route::post('/aging/alerts/cleanup', [RANCARequestAgingController::class, 'cleanupOldAlerts'])
     ->name('aging.alerts.cleanup');
 });
+
+Route::prefix('sms')->group(function () {
+    Route::get('/test-endpoints', [SMSController::class, 'testEndpoints']);
+    Route::get('/test-connection', [SMSController::class, 'testConnection']);
+    Route::get('/test-send', [SMSController::class, 'testSMS']);
+    Route::post('/send-notification', [SMSController::class, 'sendNotification']);
+});
+
+
+
+

@@ -13,7 +13,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(IprogSMSService::class, function ($app) {
+            return new IprogSMSService();
+        });
+
+        $this->app->bind('iprogsms', function ($app) {
+            return new IprogSMSService();
+        });
     }
 
     /**
@@ -22,7 +28,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // ✅ Always force HTTPS (most reliable solution)
-        URL::forceScheme('http');
+       if ($this->app->environment('local')) {
+        \URL::forceScheme('https');
+    }
         
         // Alternative: Check environment
         // if ($this->app->environment('production') || 

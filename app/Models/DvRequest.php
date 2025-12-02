@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+
 class DvRequest extends Model
 {
     use HasFactory;
@@ -15,8 +16,8 @@ class DvRequest extends Model
         'qr_code_path',
         'qr_code_token',
         'qr_code_generated_at',
-         'qr_status',
-         'qr_code_data',
+        'qr_status',
+        'qr_code_data',
         'reference_number',
         'accounting_control_number',
         'user_sequence',     
@@ -34,30 +35,42 @@ class DvRequest extends Model
         'confirmed_at',
         'locked_at',
         'locked_by',
+        
+        // ✅ ADD PAYEE FIELDS TO FILLABLE
+        'payee_fname',
+        'payee_mi',
+        'payee_lname',
+        'payee_tin_number',
+        'payee_address',
+        'multiple_payees',
+        'payee_data',
     ];
 
-      protected $casts = [
+    protected $casts = [
         'qr_code_generated_at' => 'datetime',
         'locked_at' => 'datetime',
         'amount' => 'decimal:2',
         'confirmed_by_focal_person' => 'boolean',
         'confirmed_at' => 'datetime',
+        'multiple_payees' => 'boolean',
+        'payee_data' => 'array', // Cast JSON to array
     ];
-
-
 
     public function logs()
     {
         return $this->hasMany(DvRequestLog::class, 'dv_request_id');
     }
+
     public function gipAttachments()
     {
         return $this->hasMany(GIPAttachment::class, 'dv_request_id');
     }
+
     public function tupadAttachments()
     {
         return $this->hasMany(TUPADAttachment::class, 'dv_request_id');
     }
+
     public function getTupadAttachmentsForModality($modality)
     {
         return $this->tupadAttachments()
@@ -66,9 +79,6 @@ class DvRequest extends Model
             ->get();
     }
 
-    /**
-     * Check if all TUPAD attachments are present for current modality
-     */
     public function allTupadAttachmentsPresent()
     {
         if (!$this->tupad_modality) {
@@ -86,9 +96,6 @@ class DvRequest extends Model
         return $attachments->every(fn($attachment) => $attachment->is_present);
     }
     
-    /**
-     * Get count of present TUPAD attachments
-     */
     public function presentTupadAttachmentsCount()
     {
         if (!$this->tupad_modality) {
@@ -106,9 +113,6 @@ class DvRequest extends Model
         return $this->hasMany(TEVAttachment::class, 'dv_request_id');
     }
 
-        /**
-     * Get TEV attachments for a specific modality
-     */
     public function getTevAttachmentsForModality($modality)
     {
         return $this->tevAttachments()
@@ -117,9 +121,6 @@ class DvRequest extends Model
             ->get();
     }
     
-    /**
-     * Check if all TEV attachments are present for current modality
-     */
     public function allTevAttachmentsPresent()
     {
         if (!$this->tev_modality) {
@@ -137,9 +138,6 @@ class DvRequest extends Model
         return $attachments->every(fn($attachment) => $attachment->is_present);
     }
     
-    /**
-     * Get count of present TEV attachments
-     */
     public function presentTevAttachmentsCount()
     {
         if (!$this->tev_modality) {
@@ -152,9 +150,6 @@ class DvRequest extends Model
             ->count();
     }
     
-    /**
-     * Get total count of required TEV attachments for current modality
-     */
     public function totalTevAttachmentsCount()
     {
         if (!$this->tev_modality) {
@@ -166,9 +161,6 @@ class DvRequest extends Model
             ->count();
     }
     
-    /**
-     * Get TEV attachment completion percentage
-     */
     public function tevAttachmentCompletionPercentage()
     {
         $total = $this->totalTevAttachmentsCount();
@@ -181,6 +173,7 @@ class DvRequest extends Model
         
         return round(($present / $total) * 100, 2);
     }
+
     public function focalperson()
     {
         return $this->belongsTo(FocalPerson::class, 'focalperson_id');
@@ -191,82 +184,178 @@ class DvRequest extends Model
         return $this->hasOne(OrsRequest::class, 'dv_request_id');
     }
 
-
-
-    
-        public function modeOfPayments()
-        {
-            return $this->belongsToMany(
-                ModeOfPayment::class,
-                'dv_request_mode_of_payment',
-                'dv_request_id',
-                'mode_of_payment_id'
-            )
-            ->using(DvRequestModeOfPayment::class)
-            ->withPivot('id', 'created_at', 'updated_at')
-            ->withTimestamps();
-        }
+    public function modeOfPayments()
+    {
+        return $this->belongsToMany(
+            ModeOfPayment::class,
+            'dv_request_mode_of_payment',
+            'dv_request_id',
+            'mode_of_payment_id'
+        )
+        ->using(DvRequestModeOfPayment::class)
+        ->withPivot('id', 'created_at', 'updated_at')
+        ->withTimestamps();
+    }
 
     public function paymentDetails()
     {
         return $this->hasManyThrough(
             PaymentDetail::class,
             DvRequestModeOfPayment::class,
-            'dv_request_id', // FK on pivot
-            'dv_request_mode_of_payment_id', // FK on details
-            'id', // local DV id
-            'id'  // pivot id
+            'dv_request_id',
+            'dv_request_mode_of_payment_id',
+            'id',
+            'id'
         );
     }
-public function modeOfPaymentsWithDetails()
-{
-    return $this->modeOfPayments()->withPivotValue(['id'])->get()->each(function ($mop) {
-        $mop->pivot->load('paymentDetail');
-    });
-}
+
+    public function modeOfPaymentsWithDetails()
+    {
+        return $this->modeOfPayments()->withPivotValue(['id'])->get()->each(function ($mop) {
+            $mop->pivot->load('paymentDetail');
+        });
+    }
+
     public function program()
     {
         return $this->belongsTo(Program::class, 'program_id');
     }
+
     public function respocenter()
     {
         return $this->belongsTo(ResponCenter::class, 'respocenter_id');
     }
+
     public function receivedBy() 
     { 
         return $this->belongsTo(AccountingUnit::class, 'received_by_id');
     }
 
-    // Workflow stage relationships
     public function accountingUnit()
     {
         return $this->belongsTo(AccountingUnit::class, 'accountingunit_id');
     }
 
-
     public function verificationHistories()
-{
-    return $this->hasMany(BudgetObligationHistory::class, 'dv_request_id');
-}
+    {
+        return $this->hasMany(BudgetObligationHistory::class, 'dv_request_id');
+    }
 
-     public function regionalDirectorHistory()
+    public function regionalDirectorHistory()
     {
         return $this->hasMany(RegionalDirectorApprovedHistory::class);
     }
 
-    /**
-     * Cashier release history
-     */
     public function cashierHistory()
     {
         return $this->hasMany(CashierReleasedHistory::class);
     }
 
-    /**
-     * RANCA validation history
-     */
     public function rancaHistory()
     {
         return $this->hasMany(RANCAValidationHistory::class);
+    }
+
+    // ✅ HELPER METHOD: Get full payee name (with et al. if multiple)
+    public function getPayeeFullNameAttribute()
+    {
+        if (!$this->payee_fname) {
+            return null;
+        }
+
+        $name = trim(
+            $this->payee_fname . ' ' . 
+            ($this->payee_mi ? $this->payee_mi . '. ' : '') . 
+            $this->payee_lname
+        );
+
+        // Add "et al." if multiple payees
+        if ($this->multiple_payees && $this->payee_data) {
+            $payees = is_string($this->payee_data) 
+                ? json_decode($this->payee_data, true) 
+                : $this->payee_data;
+                
+            if (is_array($payees) && count($payees) > 1) {
+                $name .= ' et al.';
+            }
+        }
+
+        return $name;
+    }
+
+    // ✅ HELPER METHOD: Get all payees as array
+    public function getAllPayeesAttribute()
+    {
+        if (!$this->multiple_payees || !$this->payee_data) {
+            return [[
+                'fname' => $this->payee_fname,
+                'mi' => $this->payee_mi,
+                'lname' => $this->payee_lname,
+                'tin' => $this->payee_tin_number,
+                'address' => $this->payee_address,
+            ]];
+        }
+
+        $payees = is_string($this->payee_data) 
+            ? json_decode($this->payee_data, true) 
+            : $this->payee_data;
+
+        return is_array($payees) ? $payees : [];
+    }
+
+    // ✅ HELPER METHOD: Get payee count
+    public function getPayeeCountAttribute()
+    {
+        if (!$this->multiple_payees) {
+            return 1;
+        }
+
+        $payees = $this->all_payees;
+        return count($payees);
+    }
+
+    // ✅ HELPER METHOD: Get formatted payee list for display
+    public function getPayeeListFormattedAttribute()
+    {
+        $payees = $this->all_payees;
+        
+        if (count($payees) === 1) {
+            $p = $payees[0];
+            return trim($p['fname'] . ' ' . ($p['mi'] ?? '') . ' ' . $p['lname']);
+        }
+
+        $names = array_map(function($p) {
+            return trim($p['fname'] . ' ' . ($p['mi'] ?? '') . ' ' . $p['lname']);
+        }, $payees);
+
+        if (count($names) <= 3) {
+            return implode(', ', $names);
+        }
+
+        // Show first 2 names + "and X others"
+        $first = array_slice($names, 0, 2);
+        $remaining = count($names) - 2;
+        
+        return implode(', ', $first) . " and {$remaining} other" . ($remaining > 1 ? 's' : '');
+    }
+
+    // ✅ HELPER METHOD: Get full focal person name (encoder)
+    public function getEncoderFullNameAttribute()
+    {
+        if (!$this->focalperson) {
+            return 'Unknown';
+        }
+
+        return trim(
+            $this->focalperson->fname . ' ' . 
+            ($this->focalperson->mi ? $this->focalperson->mi . '. ' : '') . 
+            $this->focalperson->lname
+        );
+    }
+
+    // ✅ HELPER METHOD: Check if has payee data (vs using focal person data)
+    public function hasPayeeData()
+    {
+        return !empty($this->payee_fname) && !empty($this->payee_lname);
     }
 }

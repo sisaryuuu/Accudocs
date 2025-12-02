@@ -18,7 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'auth.focal' => \App\Http\Middleware\AuthenticateFocal::class,
             'signed.focal' => \App\Http\Middleware\ValidateFocalSignature::class,
-            'session.timeout' => \App\Http\Middleware\CheckSessionTimeout::class, // ✅ Add this
+            'session.timeout' => \App\Http\Middleware\CheckSessionTimeout::class,
         ]);
         
         // Add to web middleware group globally

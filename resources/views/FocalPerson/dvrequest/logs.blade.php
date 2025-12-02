@@ -294,112 +294,112 @@
                         @endforeach
                     </div>
                 </div>
-
-                <!-- Desktop Table View -->
-                <div class="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between">
-                        <h3 class="text-lg font-semibold text-gray-900">
-                            Activity Timeline — Ref Number: {{ $dvRequest->reference_number }}
-                        </h3>
-                        <span id="logCount" class="text-sm text-gray-500">{{ $logs->count() }} {{ Str::plural('entry', $logs->count()) }}</span>
-                    </div>
-
-                    <div class="overflow-x-auto">
-                        <table class="w-full divide-y divide-gray-200" id="logsTable">
-                            <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actor</th>
-                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
-                                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
-                            </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200" id="logsBody">
-                            @foreach($logs as $log)
-                                <tr class="hover:bg-gray-50 transition-colors duration-150">
-                                    <td class="px-6 py-4">
-                                        <div class="flex items-center">
-                                            <div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">
-                                                @if($log->focalPerson)
-                                                    <img src="{{ $log->focalPerson->profile_image 
-                                                        ? asset('storage/profiles/' . $log->focalPerson->profile_image) 
-                                                        : asset('storage/profiles/default.png') }}" 
-                                                        class="w-10 h-10 object-cover"
-                                                        onerror="this.src='{{ asset('storage/profiles/default.png') }}'">
-                                                @elseif($log->accountingUnit)
-                                                    <img src="{{ $log->accountingUnit->profile_image 
-                                                        ? asset('storage/profiles/' . $log->accountingUnit->profile_image) 
-                                                        : asset('storage/profiles/default.png') }}" 
-                                                        class="w-10 h-10 object-cover"
-                                                        onerror="this.src='{{ asset('storage/profiles/default.png') }}'">
-                                                @else
-                                                    <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center rounded-full">
-                                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                                                        </svg>
-                                                    </div>
-                                                @endif
-                                            </div>
-                                            <div class="ml-3">
-                                                <div class="text-sm font-medium text-gray-900">
-                                                    @if($log->focalPerson)
-                                                        {{ trim($log->focalPerson->fname . ' ' . ($log->focalPerson->mi ? $log->focalPerson->mi . ' ' : '') . $log->focalPerson->lname) }}
-                                                    @elseif($log->accountingUnit)
-                                                        {{ $log->accountingUnit->fname }} {{ $log->accountingUnit->lname }}
-                                                    @elseif($log->external_actor)
-                                                        {{ $log->external_actor }}
-                                                    @else
-                                                        System
-                                                    @endif
-                                                </div>
-                                                <div class="text-xs text-gray-500">
-                                                    @php
-                                                        $role = null;
-                                                        if ($log->focalPerson && $log->focalPerson->roles->first()) {
-                                                            $role = $log->focalPerson->roles->first()->name;
-                                                        } elseif ($log->accountingUnit && $log->accountingUnit->roles->first()) {
-                                                            $role = $log->accountingUnit->roles->first()->name;
-                                                        }
-                                                    @endphp
-                                                    
-                                                    @if($role)
-                                                        {{ $role }}
-                                                    @else
-                                                        {{ $log->department ?? 'System' }}
-                                                    @endif
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td class="px-6 py-4">
-                                        @if($log->remarks && trim($log->remarks) !== '')
-                                            <div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">
-                                                <p class="text-gray-700">{{ ucfirst($log->remarks) }}</p>
-                                            </div>
-                                        @else
-                                            <div class="bg-gray-50 rounded-lg p-3 border-l-4 border-gray-300">
-                                                <p class="text-gray-500 italic">Document was {{ strtolower($log->action) }}</p>
-                                            </div>
-                                        @endif
-                                    </td>
-
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900 font-medium">{{ $log->created_at->format('M d, Y') }}</div>
-                                        <div class="text-xs text-gray-500">{{ $log->created_at->format('h:i A') }}</div>
-                                        <div class="text-xs text-gray-400 mt-1">{{ $log->created_at->diffForHumans() }}</div>
-                                    </td>
+                    <!-- Desktop Table View -->
+                    <div class="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between">
+                            <h3 class="text-lg font-semibold text-gray-900">
+                                Activity Timeline — Ref Number: {{ $dvRequest->reference_number }}
+                            </h3>
+                            <span id="logCount" class="text-sm text-gray-500">{{ $logs->count() }} {{ Str::plural('entry', $logs->count()) }}</span>
+                        </div>
+                    
+                        <div class="overflow-x-auto">
+                            <table class="w-full divide-y divide-gray-200" id="logsTable">
+                                <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actor</th>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
                                 </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200" id="logsBody">
+                                @foreach($logs as $log)
+                                    <tr class="hover:bg-gray-50 transition-colors duration-150">
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center">
+                                                <div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden">
+                                                    @if($log->focalPerson)
+                                                        <img src="{{ $log->focalPerson->profile_image 
+                                                            ? asset('storage/profiles/' . $log->focalPerson->profile_image) 
+                                                            : asset('storage/profiles/default.png') }}" 
+                                                            class="w-10 h-10 object-cover"
+                                                            onerror="this.src='{{ asset('storage/profiles/default.png') }}'">
+                                                    @elseif($log->accountingUnit)
+                                                        <img src="{{ $log->accountingUnit->profile_image 
+                                                            ? asset('storage/profiles/' . $log->accountingUnit->profile_image) 
+                                                            : asset('storage/profiles/default.png') }}" 
+                                                            class="w-10 h-10 object-cover"
+                                                            onerror="this.src='{{ asset('storage/profiles/default.png') }}'">
+                                                    @else
+                                                        <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center rounded-full">
+                                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                                            </svg>
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                                <div class="ml-3">
+                                                    <div class="text-sm font-medium text-gray-900">
+                                                        @if($log->focalPerson)
+                                                            {{ trim($log->focalPerson->fname . ' ' . ($log->focalPerson->mi ? $log->focalPerson->mi . ' ' : '') . $log->focalPerson->lname) }}
+                                                        @elseif($log->accountingUnit)
+                                                            {{ $log->accountingUnit->fname }} {{ $log->accountingUnit->lname }}
+                                                        @elseif($log->external_actor)
+                                                            {{ $log->external_actor }}
+                                                        @else
+                                                            System
+                                                        @endif
+                                                    </div>
+                                                    <div class="text-xs text-gray-500">
+                                                        @php
+                                                            $role = null;
+                                                            // FIXED: Use primary_role instead of first role
+                                                            if ($log->focalPerson) {
+                                                                $role = $log->focalPerson->primary_role ?? ($log->focalPerson->roles->first()->name ?? 'Focal Person');
+                                                            } elseif ($log->accountingUnit) {
+                                                                $role = $log->accountingUnit->primary_role ?? ($log->accountingUnit->roles->first()->name ?? 'Accounting Unit');
+                                                            }
+                                                        @endphp
+                                                        
+                                                        @if($role)
+                                                            {{ $role }}
+                                                        @else
+                                                            {{ $log->department ?? 'System' }}
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                    
+                                        <td class="px-6 py-4">
+                                            @if($log->remarks && trim($log->remarks) !== '')
+                                                <div class="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-400">
+                                                    <p class="text-gray-700">{{ ucfirst($log->remarks) }}</p>
+                                                </div>
+                                            @else
+                                                <div class="bg-gray-50 rounded-lg p-3 border-l-4 border-gray-300">
+                                                    <p class="text-gray-500 italic">Document was {{ strtolower($log->action) }}</p>
+                                                </div>
+                                            @endif
+                                        </td>
+                    
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm text-gray-900 font-medium">{{ $log->created_at->format('M d, Y') }}</div>
+                                            <div class="text-xs text-gray-500">{{ $log->created_at->format('h:i A') }}</div>
+                                            <div class="text-xs text-gray-400 mt-1">{{ $log->created_at->diffForHumans() }}</div>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    
+                        <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
+                            <span class="text-sm text-gray-500">Total activity entries: <span id="totalEntries">{{ $logs->count() }}</span></span>
+                            <span class="text-xs text-gray-400">Last updated: {{ $logs->first()?->created_at->diffForHumans() ?? 'Never' }}</span>
+                        </div>
                     </div>
-
-                    <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
-                        <span class="text-sm text-gray-500">Total activity entries: <span id="totalEntries">{{ $logs->count() }}</span></span>
-                        <span class="text-xs text-gray-400">Last updated: {{ $logs->first()?->created_at->diffForHumans() ?? 'Never' }}</span>
-                    </div>
-                </div>
             </div>
 
             <!-- RIGHT SIDE (Vertical Stepper Sidebar) - Desktop Only -->

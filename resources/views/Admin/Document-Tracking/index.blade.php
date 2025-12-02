@@ -7,12 +7,13 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Header -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+            
             <div>
                 <h1 class="text-3xl font-bold text-gray-900">Document Tracking</h1>
                 <p class="mt-2 text-sm text-gray-600">Monitor all DV requests across the system</p>
             </div>
         </div>
-
+    
         <!-- Statistics Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -141,9 +142,15 @@
 
         <!-- Requests Table -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                <h3 class="text-lg font-semibold text-gray-900">All DV Requests</h3>
+                   @if($dvRequests->hasPages())
+            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                {{ $dvRequests->links() }}
             </div>
+            @endif
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h3 class="text-lg font-semibold text-gray-900">All DV Requests</h3> <!-- Pagination -->
+            </div>
+            
 
             <div class="overflow-x-auto">
                 <table class="w-full divide-y divide-gray-200">

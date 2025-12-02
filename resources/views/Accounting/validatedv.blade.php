@@ -8,7 +8,7 @@
         
         <!-- Left Section - RANCA Processing -->
         <div class="lg:col-span-2 bg-white shadow rounded-xl p-6">
-            <h1 class="text-2xl font-bold text-gray-900 mb-6">RANCA - Accounting Unit III</h1>
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">RANCA - Accountant III</h1>
 
             <form action="{{ route('Accounting.dvrequests.validate', $dvRequest->id) }}" method="POST" class="space-y-6">
                 @csrf
@@ -281,7 +281,7 @@
                     </div>
                             <div>
                                 <label class="block text-xs font-medium text-blue-700">Allotment Class</label>
-                                <input type="text" value="{{ $dvRequest->orsRequest->allotment_class_id ?? 'N/A' }}" 
+                                <input type="text" value="{{ $dvRequest->orsRequest->allotmentClass->allotcode ?? 'N/A' }} - {{ $dvRequest->orsRequest->allotmentClass->description ?? 'N/A' }}" 
                                        class="mt-1 w-full rounded-lg border-blue-300 shadow-sm text-xs bg-blue-50" readonly>
                             </div>
                             <div>

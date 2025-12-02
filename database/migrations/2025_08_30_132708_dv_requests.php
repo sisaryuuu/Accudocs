@@ -43,27 +43,42 @@ return new class extends Migration
             $table->string('tev_modality')->nullable();
             $table->unsignedBigInteger('locked_by')->nullable();
             $table->timestamp('locked_at')->nullable();
+            
+            // ============ ADD PAYEE FIELDS ============
+            $table->string('payee_fname')->nullable(); // Payee first name
+            $table->string('payee_mi', 1)->nullable(); // Payee middle initial
+            $table->string('payee_lname')->nullable(); // Payee last name
+            $table->string('payee_tin_number')->nullable(); // Payee TIN number
+            $table->text('payee_address')->nullable(); // Payee address
+            
+            // Multiple payees support
+            $table->boolean('multiple_payees')->default(false); // Flag for multiple payees
+            $table->json('payee_data')->nullable(); // Store multiple payees as JSON
+            
             $table->timestamps();
-           
         });
     }
 
     public function down(): void
     {
-         Schema::table('dv_requests', function (Blueprint $table) {
-              $table->dropUnique(['focalperson_id', 'user_sequence']);
-        $table->dropColumn(['control_number', 'user_sequence']);
-        $table->dropForeign(['respocenter_id']);
-        $table->dropColumn('respocenter_id');
-                $table->dropForeign(['focalperson_id']);
-        $table->dropColumn('focalperson_id');
-                $table->dropForeign(['program_id']);
-        $table->dropColumn('program_id');
-         $table->dropForeign(['accountingunit_id']);
-        $table->dropColumn('accountingunit_id');
-           $table->dropColumn('reference_number');
-              $table->dropColumn('tupad_modality');
-
-    });
+        Schema::table('dv_requests', function (Blueprint $table) {
+            $table->dropUnique(['focalperson_id', 'user_sequence']);
+            $table->dropColumn(['control_number', 'user_sequence']);
+            $table->dropForeign(['respocenter_id']);
+            $table->dropColumn('respocenter_id');
+            $table->dropForeign(['focalperson_id']);
+            $table->dropColumn('focalperson_id');
+            $table->dropForeign(['program_id']);
+            $table->dropColumn('program_id');
+            $table->dropForeign(['accountingunit_id']);
+            $table->dropColumn('accountingunit_id');
+            $table->dropColumn('reference_number');
+            $table->dropColumn('tupad_modality');
+            
+            // Drop payee fields
+            $table->dropColumn(['payee_fname', 'payee_mi', 'payee_lname', 'payee_tin_number', 'payee_address', 'multiple_payees', 'payee_data']);
+        });
+        
+        Schema::dropIfExists('dv_requests');
     }
 };
