@@ -118,42 +118,49 @@ class DvRequestProcessingController extends Controller
 
         return response()->json($result);
     }
-
     public function show($id)
-    {
-        $dvRequest = DvRequest::with([
-            'accountingUnit',
-            'program',
-            'focalPerson',
-            'logs'
-        ])
-        ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD', 'TEV']))
-        ->findOrFail($id);
+{
+    $dvRequest = DvRequest::with([
+        'accountingUnit',
+        'program',
+        'focalPerson',
+        'logs',
+        'paymentDetails', // Load through pivot table
+        'modeOfPayments', // Load mode of payments
+        'respocenter'
+    ])
+    ->whereHas('program', fn($q) => $q->whereIn('prcode', ['GIP', 'TUPAD', 'TEV']))
+    ->findOrFail($id);
 
-        $lockDuration   = now()->subMinutes(10);
-        $currentUserId  = auth()->id();
+    $lockDuration   = now()->subMinutes(10);
+    $currentUserId  = auth()->id();
 
-        if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
-            return redirect()->route('RegionalOffices.IMSD.index')
-                ->with('error', 'This DV Request is currently being processed by another user.');
-        }
-
-        if (!$dvRequest->locked_by || $dvRequest->locked_at <= $lockDuration) {
-            $dvRequest->update([
-                'locked_by' => $currentUserId,
-                'locked_at' => now(),
-            ]);
-        }
-
-        $lastLog = $dvRequest->logs()->latest()->first();
-        $lastStep = $lastLog ? $lastLog->action : 'Submitted';
-
-        return view('RegionalOffices.IMSD.verifydv', compact(
-            'dvRequest',
-            'lastStep'
-        ));
+    if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at > $lockDuration) {
+        return redirect()->route('RegionalOffices.IMSD.index')
+            ->with('error', 'This DV Request is currently being processed by another user.');
     }
-    
+
+    if (!$dvRequest->locked_by || $dvRequest->locked_at <= $lockDuration) {
+        $dvRequest->update([
+            'locked_by' => $currentUserId,
+            'locked_at' => now(),
+        ]);
+    }
+
+    $lastLog = $dvRequest->logs()->latest()->first();
+    $lastStep = $lastLog ? $lastLog->action : 'Submitted';
+
+    // Get logo URL for preview
+     $logo_url = asset('storage/logo/DOLE.png');
+     
+    return view('RegionalOffices.IMSD.verifydv', compact(
+        'dvRequest',
+        'lastStep',
+        'logo_url' // Pass logo URL to the view
+    ));
+}
+
+
 public function bulkReceive(Request $request)
 {
     try {

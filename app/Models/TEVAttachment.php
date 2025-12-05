@@ -17,13 +17,48 @@ class TEVAttachment extends Model
         'modality',
         'is_present',
         'sort_order',
+        'remarks', // Added remarks field
+        
     ];
 
     protected $casts = [
-        'is_present' => 'boolean',
+        'is_present' => 'boolean', 
         'sort_order' => 'integer',
     ];
 
+
+     public function getStatusLabelAttribute()
+    {
+        if ($this->is_present === true) {
+            return 'Present';
+        } elseif ($this->is_present === false) {
+            return 'Not Present';
+        } else {
+            return 'N/A';
+        }
+    }
+
+    /**
+     * ✅ Accessor to get status color
+     */
+    public function getStatusColorAttribute()
+    {
+        if ($this->is_present === true) {
+            return 'green';
+        } elseif ($this->is_present === false) {
+            return 'red';
+        } else {
+            return 'gray';
+        }
+    }
+
+    /**
+     * ✅ Check if attachment needs remarks
+     */
+    public function needsRemarks()
+    {
+        return $this->is_present === false;
+    }
     /**
      * Relationship: Belongs to DV Request
      */

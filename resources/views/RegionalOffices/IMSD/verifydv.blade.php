@@ -4,7 +4,7 @@
 
 @section('content')
 <div class="min-h-screen flex items-center justify-center py-8 px-4">
-    <div class="w-full max-w-6xl"> <!-- Increased max-width to accommodate original layout -->
+    <div class="w-full max-w-6xl">
         
         <!-- Main Content Container -->
         <div class="bg-white shadow rounded-xl p-6">
@@ -14,6 +14,78 @@
             <form action="{{ route('IMSD.dvrequests.verify', $dvRequest->id) }}" method="POST" class="space-y-6">
                 @csrf
 
+                <!-- Document Preview Section -->
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-gray-800">DV/ORS Document Previews</h2>
+                        <div class="space-x-2">
+                            <button type="button" 
+                                    onclick="previewDV()"
+                                    class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                Preview DV Form
+                            </button>
+                            
+                            <button type="button" 
+                                    onclick="previewORS()"
+                                    class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                Preview ORS Form
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Document Information -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div class="bg-white p-4 rounded-lg border border-gray-300 hover:border-blue-400 transition-colors cursor-pointer" onclick="previewDV()">
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="font-medium text-gray-900">Disbursement Voucher (DV)</p>
+                                    <p class="text-xs text-gray-500 mt-1">Standard DV form with payment details, signatories, and program information</p>
+                                    <div class="mt-2 flex items-center text-xs text-blue-600">
+                                        <span>Click to preview</span>
+                                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white p-4 rounded-lg border border-gray-300 hover:border-green-400 transition-colors cursor-pointer" onclick="previewORS()">
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="font-medium text-gray-900">Obligation Request & Status (ORS)</p>
+                                    <p class="text-xs text-gray-500 mt-1">ORS form with budget allocation, project codes, and obligation details</p>
+                                    <div class="mt-2 flex items-center text-xs text-green-600">
+                                        <span>Click to preview</span>
+                                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rest of the form remains the same -->
                 <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Mode of Payment</label>
 
@@ -155,8 +227,186 @@
     </div>
 </div>
 
-<!-- Reject Modal -->
+<!-- Document Preview Modal -->
+<div id="documentPreviewModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-2 mx-auto p-2 border w-full max-w-7xl shadow-lg rounded-lg bg-white">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-2 px-4 pt-3 border-b">
+            <div class="flex items-center space-x-3">
+                <button onclick="closeDocumentPreview()" 
+                        class="text-gray-400 hover:text-gray-600 transition p-1 rounded-full hover:bg-gray-100">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                </button>
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-900" id="documentPreviewTitle">Document Preview</h3>
+                    <p class="text-xs text-gray-500" id="documentPreviewSubtitle">Live preview of the form</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="printPreview()" 
+                        class="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm transition-colors duration-200">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print
+                </button>
+                <button onclick="closeDocumentPreview()" 
+                        class="text-gray-400 hover:text-gray-600 transition p-1 rounded-full hover:bg-gray-100">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="mt-2">
+            <!-- Document Type Tabs -->
+            <div class="border-b border-gray-200 mb-2 px-4">
+                <nav class="flex space-x-2" aria-label="Document types">
+                    <button type="button"
+                            onclick="switchToDVPreview()"
+                            id="dvPreviewTab"
+                            class="px-3 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+                        DV Form
+                    </button>
+                    <button type="button"
+                            onclick="switchToORSPreview()"
+                            id="orsPreviewTab"
+                            class="px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        ORS Form
+                    </button>
+                </nav>
+            </div>
+
+<!-- Preview Content -->
+<div class="h-[calc(100vh-180px)] overflow-auto bg-gray-100 p-2">
+    <div id="dvPreviewContent" class="bg-white shadow-lg">
+        <!-- DV Preview will be loaded here -->
+        @php
+            // Prepare DV data from the controller
+            $modeOfPayment = $dvRequest->modeOfPayments->first();
+            
+            // Get payment details correctly
+            $paymentDetail = null;
+            if ($modeOfPayment) {
+                // Access through the pivot relationship
+                $dvRequestMop = $dvRequest->ModeOfPayments()
+                    ->where('mode_of_payment_id', $modeOfPayment->id)
+                    ->first();
+                
+                if ($dvRequestMop) {
+                    $paymentDetail = $dvRequestMop->paymentDetail;
+                }
+            }
+            
+            $focalPerson = $dvRequest->focalPerson;
+            
+            $payee = trim($focalPerson->fname . ' ' . ($focalPerson->mi ? $focalPerson->mi . '. ' : '') . $focalPerson->lname);
+            $date = $dvRequest->created_at->format('F d, Y');
+            $address = $focalPerson->Address;
+            $tin = $focalPerson->TIN_number;
+            $mode_of_payment = $modeOfPayment?->mopname ?? 'Not specified';
+            $particulars = $dvRequest->particulars;
+            $amount = number_format($dvRequest->amount, 2);
+            $respocenter_code = $dvRequest->respocenter->rccode ?? '';
+            $respocenter_desc = $dvRequest->respocenter->description ?? '';
+            $program_code = $dvRequest->program->prcode ?? '';
+            $program_desc = $dvRequest->program->description ?? '';
+            $bank_name = $paymentDetail?->bank_name ?? '';
+            $bank_accnum = $paymentDetail?->bank_accnum ?? '';
+            $bank_address = $paymentDetail?->bank_address ?? '';
+            $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
+            $accountant_name = \App\Models\Setting::get('accountant_name', 'NAME OF ACCOUNTANT');
+            $regional_director = \App\Models\Setting::get('regional_director', 'NAME OF REGIONAL DIRECTOR');
+            $budget_officer = \App\Models\Setting::get('budget_officer', 'NAME OF BUDGET OFFICER');
+        @endphp
+        
+        <!-- Include DV Template -->
+        @include('pdf.initdv', [
+            'payee' => $payee,
+            'date' => $date,
+            'address' => $address,
+            'tin' => $tin,
+            'mode_of_payment' => $mode_of_payment,
+            'particulars' => $particulars,
+            'amount' => $amount,
+            'respocenter_code' => $respocenter_code,
+            'respocenter_desc' => $respocenter_desc,
+            'program_code' => $program_code,
+            'program_desc' => $program_desc,
+            'bank_name' => $bank_name,
+            'bank_accnum' => $bank_accnum,
+            'bank_address' => $bank_address,
+            'ors_no' => $dvRequest->ors_number ?? '',
+            'dv_no' => $dvRequest->dv_number ?? '',
+            'logo_url' => $logo_url, // PASS THE ACTUAL $logo_url VARIABLE
+            'imsd_head' => $imsd_head,
+            'accountant_name' => $accountant_name,
+            'regional_director' => $regional_director,
+            'budget_officer' => $budget_officer
+        ])
+    </div>
+    
+    <div id="orsPreviewContent" class="bg-white shadow-lg hidden">
+        <!-- ORS Preview will be loaded here -->
+        @php
+            $data = [
+                'payee' => $payee,
+                'ors_no' => $dvRequest->ors_number ?? '',
+                'date' => $date,
+                'address' => $address,
+                'tin' => $tin,
+                'particulars' => $particulars,
+                'mfo' => '',
+                'uacs' => '',
+                'amount' => $dvRequest->amount,
+            ];
+        @endphp
+        
+        <!-- Include ORS Template -->
+        @include('pdf.initors', [
+            'data' => $data,
+            'respocenter_code' => $respocenter_code,
+            'respocenter_desc' => $respocenter_desc,
+            'imsd_head' => $imsd_head,
+            'budget_officer' => $budget_officer,
+            'logo_url' => $logo_url // PASS THE ACTUAL $logo_url VARIABLE
+        ])
+    </div>
+</div>  
+            <!-- Footer Actions -->
+            <div class="border-t border-gray-200 px-4 py-3">
+                <div class="flex justify-between items-center">
+                    <div class="text-sm text-gray-500">
+                        <span id="currentDocumentInfo">Previewing DV Form</span>
+                        <span class="mx-2">•</span>
+                        <span>Generated: {{ now()->format('M d, Y h:i A') }}</span>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="downloadAsPDF()" 
+                                class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors duration-200">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Download PDF
+                        </button>
+                        <button onclick="closeDocumentPreview()" 
+                                class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg text-sm transition-colors duration-200">
+                            Close Preview
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reject Modal (keep existing) -->
 <div id="rejectModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <!-- Existing reject modal content... -->
     <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-lg bg-white">
         <!-- Modal Header -->
         <div class="flex items-center justify-between pb-3 border-b">
@@ -231,11 +481,11 @@
 </div>
 
 <style>
-#rejectModal {
+#documentPreviewModal, #rejectModal {
     transition: opacity 0.3s ease-in-out;
 }
 
-#rejectModal > div {
+#documentPreviewModal > div, #rejectModal > div {
     animation: slideDown 0.3s ease-out;
 }
 
@@ -249,6 +499,31 @@
         opacity: 1;
     }
 }
+
+/* PDF template styles */
+.pdf-template {
+    font-family: 'Times New Roman', Times, serif;
+}
+
+.pdf-template table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.pdf-template th, .pdf-template td {
+    border: 1px solid #000;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.pdf-template .header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.pdf-template .section {
+    margin-bottom: 15px;
+}
 </style>
 
 <!-- Success/Error Messages -->
@@ -258,63 +533,163 @@
 
 <script>
 let currentRejectId = null;
+let currentPreviewType = 'dv'; // 'dv' or 'ors'
 
-// Update character count
-function updateCharCount() {
-    const textarea = document.getElementById('rejectRemarks');
-    const charCount = document.getElementById('char-count');
-    const remarksError = document.getElementById('remarksError');
-    const length = textarea.value.length;
+// Document Preview Functions
+function previewDV() {
+    currentPreviewType = 'dv';
+    showDocumentPreview('dv', 'Disbursement Voucher (DV) Form');
+}
+
+function previewORS() {
+    currentPreviewType = 'ors';
+    showDocumentPreview('ors', 'Obligation Request & Status (ORS) Form');
+}
+
+function showDocumentPreview(type, title) {
+    const modal = document.getElementById('documentPreviewModal');
+    const titleElement = document.getElementById('documentPreviewTitle');
+    const subtitleElement = document.getElementById('documentPreviewSubtitle');
+    const currentDocumentInfo = document.getElementById('currentDocumentInfo');
     
-    charCount.textContent = `${length} / 1000`;
+    // Update UI
+    titleElement.textContent = title;
+    subtitleElement.textContent = 'Live preview - ' + (type === 'dv' ? 'DV Form' : 'ORS Form');
+    currentDocumentInfo.textContent = 'Previewing ' + (type === 'dv' ? 'DV Form' : 'ORS Form');
     
-    if (length < 10) {
-        charCount.classList.add('text-red-500');
-        charCount.classList.remove('text-gray-400', 'text-green-600', 'text-yellow-600');
-        if (length > 0) {
-            remarksError.classList.remove('hidden');
-        }
-    } else if (length > 900) {
-        charCount.classList.add('text-yellow-600');
-        charCount.classList.remove('text-gray-400', 'text-green-600', 'text-red-500');
-        remarksError.classList.add('hidden');
+    // Switch to the appropriate tab
+    if (type === 'dv') {
+        switchToDVPreview();
     } else {
-        charCount.classList.add('text-green-600');
-        charCount.classList.remove('text-gray-400', 'text-red-500', 'text-yellow-600');
-        remarksError.classList.add('hidden');
+        switchToORSPreview();
     }
-}
-
-// Open reject modal
-function openRejectModal() {
-    console.log('🔴 openRejectModal called for IMSD');
     
-    currentRejectId = {{ $dvRequest->id }};
-    const modal = document.getElementById('rejectModal');
-    
+    // Show modal
     modal.classList.remove('hidden');
-    document.getElementById('rejectRemarks').value = '';
-    document.getElementById('remarksError').classList.add('hidden');
     document.body.style.overflow = 'hidden';
-    updateCharCount();
     
-    console.log('🔴 Modal opened for DV Request ID:', currentRejectId);
+    // Scroll to top
+    const previewContent = type === 'dv' ? 
+        document.getElementById('dvPreviewContent') : 
+        document.getElementById('orsPreviewContent');
+    previewContent.scrollTop = 0;
 }
 
-// Close reject modal
-function closeRejectModal() {
-    console.log('🟢 closeRejectModal called');
-    document.getElementById('rejectModal').classList.add('hidden');
-    document.getElementById('rejectRemarks').value = '';
-    document.getElementById('remarksError').classList.add('hidden');
-    currentRejectId = null;
+function switchToDVPreview() {
+    currentPreviewType = 'dv';
+    document.getElementById('dvPreviewTab').classList.add('border-blue-600', 'text-blue-600');
+    document.getElementById('dvPreviewTab').classList.remove('border-transparent', 'text-gray-500');
+    document.getElementById('orsPreviewTab').classList.remove('border-blue-600', 'text-blue-600');
+    document.getElementById('orsPreviewTab').classList.add('border-transparent', 'text-gray-500');
+    
+    document.getElementById('dvPreviewContent').classList.remove('hidden');
+    document.getElementById('orsPreviewContent').classList.add('hidden');
+    
+    document.getElementById('currentDocumentInfo').textContent = 'Previewing DV Form';
+}
+
+function switchToORSPreview() {
+    currentPreviewType = 'ors';
+    document.getElementById('orsPreviewTab').classList.add('border-blue-600', 'text-blue-600');
+    document.getElementById('orsPreviewTab').classList.remove('border-transparent', 'text-gray-500');
+    document.getElementById('dvPreviewTab').classList.remove('border-blue-600', 'text-blue-600');
+    document.getElementById('dvPreviewTab').classList.add('border-transparent', 'text-gray-500');
+    
+    document.getElementById('orsPreviewContent').classList.remove('hidden');
+    document.getElementById('dvPreviewContent').classList.add('hidden');
+    
+    document.getElementById('currentDocumentInfo').textContent = 'Previewing ORS Form';
+}
+
+function closeDocumentPreview() {
+    const modal = document.getElementById('documentPreviewModal');
+    
+    // Hide modal
+    modal.classList.add('hidden');
     document.body.style.overflow = 'auto';
 }
 
-// Handle reject form submission
-document.addEventListener('DOMContentLoaded', () => {
-    const rejectForm = document.getElementById('rejectForm');
+function printPreview() {
+    const printContent = currentPreviewType === 'dv' ? 
+        document.getElementById('dvPreviewContent').innerHTML : 
+        document.getElementById('orsPreviewContent').innerHTML;
     
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Print ${currentPreviewType === 'dv' ? 'DV' : 'ORS'} Form</title>
+            <style>
+                body { margin: 0; padding: 20px; font-family: 'Times New Roman', Times, serif; }
+                @media print {
+                    body { padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            ${printContent}
+            <script>
+                window.onload = function() {
+                    window.print();
+                    setTimeout(function() {
+                        window.close();
+                    }, 100);
+                }
+            <\/script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
+function downloadAsPDF() {
+    // Redirect to the actual PDF generation endpoint
+    if (currentPreviewType === 'dv') {
+        window.open('/focalperson/dvrequests/{{ $dvRequest->id }}/generate-pdf', '_blank');
+    } else {
+        window.open('/focalperson/dvrequests/{{ $dvRequest->id }}/generate-ors-pdf', '_blank');
+    }
+}
+
+// Close document preview when clicking outside
+document.addEventListener('DOMContentLoaded', () => {
+    const documentModal = document.getElementById('documentPreviewModal');
+    const rejectModal = document.getElementById('rejectModal');
+    
+    // Close document preview when clicking outside
+    if (documentModal) {
+        documentModal.addEventListener('click', function(e) {
+            // Only close if clicking on the backdrop (not the content)
+            if (e.target === this && !e.target.closest('.bg-white')) {
+                closeDocumentPreview();
+            }
+        });
+    }
+    
+    // Close reject modal when clicking outside
+    if (rejectModal) {
+        rejectModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeRejectModal();
+            }
+        });
+    }
+    
+    // Close modals with Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            if (documentModal && !documentModal.classList.contains('hidden')) {
+                closeDocumentPreview();
+            }
+            if (rejectModal && !rejectModal.classList.contains('hidden')) {
+                closeRejectModal();
+            }
+        }
+    });
+
+    // Handle reject form submission
+    const rejectForm = document.getElementById('rejectForm');
     if (rejectForm) {
         rejectForm.addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -374,29 +749,64 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error('❌ Reject error:', error);
                 showMessage('An error occurred while rejecting the request.', 'error');
                 confirmBtn.disabled = false;
-                btnText.textContent = 'Reject Request';
+                    btnText.textContent = 'Reject Request';
                 spinner.classList.add('hidden');
             }
         });
     }
-
-    // Close modal when clicking outside
-    const rejectModal = document.getElementById('rejectModal');
-    if (rejectModal) {
-        rejectModal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeRejectModal();
-            }
-        });
-    }
-
-    // Close modal with Escape key
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && rejectModal && !rejectModal.classList.contains('hidden')) {
-            closeRejectModal();
-        }
-    });
 });
+
+// Update character count
+function updateCharCount() {
+    const textarea = document.getElementById('rejectRemarks');
+    const charCount = document.getElementById('char-count');
+    const remarksError = document.getElementById('remarksError');
+    const length = textarea.value.length;
+    
+    charCount.textContent = `${length} / 1000`;
+    
+    if (length < 10) {
+        charCount.classList.add('text-red-500');
+        charCount.classList.remove('text-gray-400', 'text-green-600', 'text-yellow-600');
+        if (length > 0) {
+            remarksError.classList.remove('hidden');
+        }
+    } else if (length > 900) {
+        charCount.classList.add('text-yellow-600');
+        charCount.classList.remove('text-gray-400', 'text-green-600', 'text-red-500');
+        remarksError.classList.add('hidden');
+    } else {
+        charCount.classList.add('text-green-600');
+        charCount.classList.remove('text-gray-400', 'text-red-500', 'text-yellow-600');
+        remarksError.classList.add('hidden');
+    }
+}
+
+// Open reject modal
+function openRejectModal() {
+    console.log('🔴 openRejectModal called for IMSD');
+    
+    currentRejectId = {{ $dvRequest->id }};
+    const modal = document.getElementById('rejectModal');
+    
+    modal.classList.remove('hidden');
+    document.getElementById('rejectRemarks').value = '';
+    document.getElementById('remarksError').classList.add('hidden');
+    document.body.style.overflow = 'hidden';
+    updateCharCount();
+    
+    console.log('🔴 Modal opened for DV Request ID:', currentRejectId);
+}
+
+// Close reject modal
+function closeRejectModal() {
+    console.log('🟢 closeRejectModal called');
+    document.getElementById('rejectModal').classList.add('hidden');
+    document.getElementById('rejectRemarks').value = '';
+    document.getElementById('remarksError').classList.add('hidden');
+    currentRejectId = null;
+    document.body.style.overflow = 'auto';
+}
 
 // Function to show toast messages
 function showMessage(message, type = 'success') {

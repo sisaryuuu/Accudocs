@@ -531,6 +531,9 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TUPAD'])->prefix
     Route::get('/dvrequests/{id}', [TupadDvRequestProcessingController::class, 'show'])
     ->middleware('permission:tupad.view')
     ->name('Incoming.TUPAD.dvrequests.withid');
+    Route::post('/dvrequests/{id}/change-modality', [TupadDvRequestProcessingController::class, 'changeModality'])
+    ->middleware('permission:tupad.view')
+    ->name('Incoming.TUPAD.dvrequests.changeModality');
        Route::post('/dvrequests/{id}/receive', [TupadDvRequestProcessingController::class, 'receive'])
     ->middleware('permission:tupad.approve')
     ->name('Incoming.TUPAD.dvrequests.receive');
@@ -576,6 +579,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TEV'])->prefix('
     Route::get('/dvrequests/{id}', [TEVDvRequestProcessingController::class, 'show']) 
      ->middleware('permission:tev.view')
     ->name('Incoming.TEV.dvrequests.withid');
+    Route::post('/dvrequests/{id}/change-modality', [TEVDvRequestProcessingController::class, 'changeModality'])->name('dvrequests.change-modality');
     Route::post('/dvrequests/{id}/receive', [TEVDvRequestProcessingController::class, 'receive'])
     ->middleware('permission:tev.approve')
     ->name('Incoming.TEV.dvrequests.receive');      
@@ -597,6 +601,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TEV'])->prefix('
     ->name('Incoming.TEV.dvrequests.refreshLock');
     Route::post('/dvrequests/{id}/release-lock', [TEVDvRequestProcessingController::class, 'releaseLock'])
     ->name('Incoming.TEV.dvrequests.releaseLock');
+   
 
       // ============ TEV AGING ROUTES ============
     Route::get('/aging/documents', [TEVRequestAgingController::class, 'getAgingDocuments'])

@@ -27,7 +27,7 @@
     <div class="bg-white shadow-md rounded-lg p-6">
         <form action="{{ route('FocalPerson.dvrequest.store') }}" method="POST" class="space-y-6" id="dv-request-form">
             @csrf
-
+            
             <!-- Mode of Payment -->
             <div class="border rounded-lg p-4 bg-gray-50">
                 <label class="block text-sm font-medium text-gray-700 mb-3">Mode of Payment</label>
@@ -141,8 +141,18 @@
                            value="{{ old('amount') }}" required
                            class="w-full mt-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400">
                 </div>
+                
             </div>
-
+                <div class="mt-8 pt-6 border-t border-gray-200 text-sm text-gray-500">
+    <p class="font-medium text-gray-700 mb-2">Legend:</p>
+    <ul class="list-disc ml-5 space-y-1">
+        <li><span class="font-medium">DV</span> - Disbursement Voucher</li>
+        <li><span class="font-medium">MDS Check</span> - Modified Disbursement System</li>
+        <li><span class="font-medium">ADA</span> - Authority to Debit Account</li>
+        <li><span class="font-medium">ORS</span> - Obligation Request and Status</li>
+    </ul>
+    <p class="mt-2 italic text-gray-400">Note: MDS Check refers to government-issued checks listed in the Monthly Disbursement Statement. ADA is the bank payment instruction.</p>
+</div>
             <!-- Actions -->
             <div class="flex justify-end">
                 <a href="{{ route('FocalPerson.dvrequest.index') }}" 
@@ -154,6 +164,7 @@
                     Submit Request
                 </button>
             </div>
+            
         </form>
     </div>
 </div>

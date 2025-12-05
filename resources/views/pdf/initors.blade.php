@@ -114,7 +114,7 @@
 <table class="header-table compact-table no-bottom-margin tight-table">
     <tr>
     <td style="width: 12%; text-align: left; border: 1px solid #000; border-right: none; padding: 10px;">
-            <img src="{{ public_path('storage/logo/DOLE.png') }}" alt="DOLE Logo"  style="display: block; margin: 5px auto; width: 120px; height: auto; max-height: 120px;">
+            <img src="{{ $logo_url ?? asset('storage/logo/DOLE.png') }}" style="display: block; margin: 5px auto; width: 120px; height: auto; max-height: 120px;">
         </td>
         </td>
         <td style="width: 88%; border: 1px solid #000; border-left: none; padding: 10px;">

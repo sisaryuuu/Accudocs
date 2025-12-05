@@ -75,7 +75,7 @@
             <tr>
             <!-- Left: Logo -->
             <td rowspan="2" style="width: 15%; text-align: center; border: 1px solid #000; border-right: none;">
-            <img src="{{ public_path('storage/logo/DOLE.png') }}"
+            <img src="{{ $logo_url ?? asset('storage/logo/DOLE.png') }}"
                 alt="DOLE Logo"
                 style="display: block; margin: 5px auto; width: 120px; height: auto; max-height: 120px;">
         </td>

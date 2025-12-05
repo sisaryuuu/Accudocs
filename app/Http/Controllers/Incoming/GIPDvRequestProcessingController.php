@@ -102,7 +102,10 @@ class GIPDvRequestProcessingController extends Controller
             foreach ($checklistItems as $item) {
                 $dvRequest->gipAttachments()->firstOrCreate(
                     ['name' => $item], 
-                    ['is_present' => false]
+                   [
+                'is_present' => null,  // ✅ Changed from false to null (N/A by default)
+                'remarks' => null
+                   ]
                 );
             }
             // Reload the relationship to get the newly created attachments
@@ -174,7 +177,11 @@ class GIPDvRequestProcessingController extends Controller
                 foreach ($checklistItems as $item) {
                     $dvRequest->gipAttachments()->firstOrCreate(
                         ['name' => $item], 
-                        ['is_present' => false]
+                                [
+            'is_present' => null,  // ✅ Changed from false to null (N/A by default)
+            'remarks' => null
+        ]
+
                     );
                 }
                 
@@ -362,189 +369,262 @@ class GIPDvRequestProcessingController extends Controller
         ]);
     }
 
-    public function updateAttachments(Request $request, $id)
-    {
-        try {
-            $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
-                                  ->findOrFail($id);
+   public function verify(Request $request, $id)
+{
+    try {
+        $request->validate([
+            'remarks' => 'nullable|string|max:1000',
+            'gip_attachment_status_value' => 'required|array',
+            'gip_attachment_status_value.*' => 'nullable|in:0,1,null',
+            'gip_attachment_remarks' => 'nullable|array',
+            'gip_attachment_remarks.*' => 'nullable|string|max:500',
+        ]);
 
-            if ($dvRequest->locked_by !== auth()->id()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You do not have permission to update this request.'
-                ], 403);
-            }
+        $dvRequest = DvRequest::whereHas('program', fn($q) => 
+            $q->where('prcode', 'GIP')
+        )->findOrFail($id);
 
-            $checkedAttachments = $request->input('gip_attachments', []);
+        $statusBefore = $dvRequest->status;
+        $verifiedAt = now();
+        $newStatus = 'Incoming-GIP_verified';
+        $currentUserId = auth()->id();
+
+        // Validation checks
+        if ($statusBefore === $newStatus) {
+            return redirect()->back()->with('error', 'This request has already been verified.');
+        }
+
+        if ($statusBefore !== 'Incoming-GIP_received') {
+            return redirect()->back()->with('error', 'Request must be received first before verification.');
+        }
+
+        DB::transaction(function () use ($dvRequest, $statusBefore, $verifiedAt, $request, $newStatus, $currentUserId) {
+            $dvRequest->update([
+                'status'    => $newStatus,
+                'locked_by' => null,
+                'locked_at' => null,
+            ]);
+
+            // ✅ UPDATED: Read from hidden inputs instead of checkbox array
+            $attachmentStatuses = $request->input('gip_attachment_status_value', []);
+            $attachmentRemarks = $request->input('gip_attachment_remarks', []);
+            $attachmentData = [];
 
             foreach ($dvRequest->gipAttachments as $attachment) {
-                $attachment->is_present = isset($checkedAttachments[$attachment->id]);
-                $attachment->save();
+                $status = $attachmentStatuses[$attachment->id] ?? null;
+                
+                // Convert status to proper format
+                if ($status === 'null' || $status === null) {
+                    $isPresent = null;
+                } else {
+                    $isPresent = (int)$status === 1 ? true : false;
+                }
+
+                // Get remarks (only relevant for "Not Present" status)
+                $remarks = $attachmentRemarks[$attachment->id] ?? null;
+                
+                // Special handling for Present status
+                if ($isPresent === true) {
+                    $remarks = 'The attachment is present';
+                }
+
+                // Update attachment
+                $attachment->update([
+                    'is_present' => $isPresent,
+                    'remarks' => $remarks,
+                ]);
+
+                // Collect data for history
+                $attachmentData[] = [
+                    'attachment_id' => $attachment->id,
+                    'name'          => $attachment->name,
+                    'is_present'    => $isPresent,
+                    'status_label'  => $isPresent === true ? 'Present' : ($isPresent === false ? 'Not Present' : 'N/A'),
+                    'remarks'       => $remarks,
+                ];
             }
+
+            $this->saveIncomingGIPVerificationHistory(
+                $dvRequest,
+                'verify',
+                $request->remarks ?? 'Request verified by Incoming-GIP',
+                [
+                    'status_before'        => $statusBefore,
+                    'status_after'         => $newStatus,
+                    'attachments_checked'  => $attachmentData,
+                    'verified_by'          => $currentUserId,
+                    'verified_at'          => $verifiedAt->toISOString(),
+                ]
+            );
 
             $this->logAction(
                 $dvRequest->id,
                 'Incoming',
-                $dvRequest->status,
-                'Attachment checklist updated by Incoming-GIP'
+                $newStatus,
+                $request->remarks ?? 'Request verified by Incoming-GIP'
             );
 
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Attachments updated successfully.',
-                    'data' => [
-                        'updated_count' => $dvRequest->gipAttachments->count(),
-                        'present_count' => $dvRequest->gipAttachments->where('is_present', true)->count()
-                    ]
-                ]);
-            }
-
-            return redirect()->back()->with('success', 'Attachments updated successfully.');
-
-        } catch (\Exception $e) {
-            Log::error('Error updating attachments: ' . $e->getMessage());
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An error occurred while updating attachments.'
-                ], 500);
-            }
-
-            return redirect()->back()->with('error', 'An error occurred while updating attachments.');
-        }
-    }
-
-        public function verify(Request $request, $id)
-    {
-        try {
-            $request->validate([
-                'remarks' => 'nullable|string|max:1000',
+            Notification::create([
+                'focalperson_id' => $dvRequest->focalperson_id,
+                'dv_request_id'  => $dvRequest->id,
+                'status'         => $newStatus,
+                'action'         => 'Verified',
+                'remarks'        => $request->remarks ?? 'Request verified by Incoming-GIP',
             ]);
-    
-            $dvRequest = DvRequest::whereHas('program', fn($q) => 
-                $q->where('prcode', 'GIP')
-            )->findOrFail($id);
-    
-            $statusBefore = $dvRequest->status;
-            $verifiedAt = now();
-            $newStatus = 'Incoming-GIP_verified';
-            $currentUserId = auth()->id();
-    
-            // Validation checks
-            if ($statusBefore === $newStatus) {
-                return redirect()->back()->with('error', 'This request has already been verified.');
-            }
-    
-            if ($statusBefore !== 'Incoming-GIP_received') {
-                return redirect()->back()->with('error', 'Request must be received first before verification.');
-            }
-    
-            DB::transaction(function () use ($dvRequest, $statusBefore, $verifiedAt, $request, $newStatus, $currentUserId) {
-                $dvRequest->update([
-                    'status'    => $newStatus,
-                    'locked_by' => null,
-                    'locked_at' => null,
-                ]);
-    
-                // Update attachment checks and collect data with names
-                $checkedAttachments = $request->input('gip_attachments', []);
-                $attachmentData = [];
-    
-                foreach ($dvRequest->gipAttachments as $attachment) {
-                    $isPresent = isset($checkedAttachments[$attachment->id]);
-                    $attachment->update(['is_present' => $isPresent]);
-    
-                    // ✅ FIX: Include attachment name in verification data
-                    $attachmentData[] = [
-                        'attachment_id' => $attachment->id,
-                        'name'          => $attachment->name, // Add the name
-                        'is_present'    => $isPresent,
-                    ];
-                }
-    
-                $this->saveIncomingGIPVerificationHistory(
-                    $dvRequest,
-                    'verify',
-                    $request->remarks ?? 'Request verified by Incoming-GIP',
-                    [
-                        'status_before'        => $statusBefore,
-                        'status_after'         => $newStatus,
-                        'attachments_checked'  => $attachmentData, // Now includes names
-                        'verified_by'          => $currentUserId,
-                        'verified_at'          => $verifiedAt->toISOString(),
-                    ]
-                );
-    
-                $this->logAction(
-                    $dvRequest->id,
-                    'Incoming',
-                    $newStatus,
-                    $request->remarks ?? 'Request verified by Incoming-GIP'
-                );
-    
-                Notification::create([
-                    'focalperson_id' => $dvRequest->focalperson_id,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $newStatus,
-                    'action'         => 'Verified',
-                    'remarks'        => $request->remarks ?? 'Request verified by Incoming-GIP',
-                ]);
-    
-                if (isset($this->pusher)) {
-                    $timestamp = $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A');
-                    $focalId = $dvRequest->focalperson_id;
-                    $remarks = $request->remarks ?? 'Request verified by Incoming-GIP';
-    
-                    $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
-                        'dv_request_id' => $dvRequest->id,
-                        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-                        'program'       => $dvRequest->program->prcode ?? 'N/A',
-                        'status'        => $newStatus,
-                        'timestamp'     => $timestamp,
-                        'action_performer_id' => $currentUserId,
-                    ]);
-    
-                    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                        'dv_request_id' => $dvRequest->id,
-                        'status'        => $newStatus,
-                        'remarks'       => $remarks,
-                        'timestamp'     => $timestamp,
-                    ]);
-    
-                    $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-verified', [
-                        'dv_request_id' => $dvRequest->id,
-                        'status'        => $newStatus,
-                        'timestamp'     => $timestamp,
-                        'action_performer_id' => $currentUserId,
-                        'verified_by_user_id' => $currentUserId,
-                    ]);
-                }
-            });
-    
-            // ✅ TRIGGER DASHBOARD UPDATE
-            $this->triggerDashboardUpdate();
-    
-            return redirect()
-                ->route('Incoming.GIP.index')
-                ->with('success', 'DV Request has been verified successfully.');
-    
-        } catch (\Exception $e) {
-            Log::error('Error verifying DV request: ' . $e->getMessage(), [
-                'dv_request_id' => $id,
-                'user_id'       => auth()->id(),
-                'file'          => $e->getFile(),
-                'line'          => $e->getLine(),
-            ]);
-    
-            return redirect()
-                ->back()
-                ->withInput()
-                ->with('error', 'An error occurred while verifying the request.');
-        }
-    }
 
+            if (isset($this->pusher)) {
+                $timestamp = $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A');
+                $focalId = $dvRequest->focalperson_id;
+                $remarks = $request->remarks ?? 'Request verified by Incoming-GIP';
+
+                $this->pusher->trigger('dv-requests-budget-officer', 'dv-request-verified', [
+                    'dv_request_id' => $dvRequest->id,
+                    'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                    'program'       => $dvRequest->program->prcode ?? 'N/A',
+                    'status'        => $newStatus,
+                    'timestamp'     => $timestamp,
+                    'action_performer_id' => $currentUserId,
+                ]);
+
+                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+                    'dv_request_id' => $dvRequest->id,
+                    'status'        => $newStatus,
+                    'remarks'       => $remarks,
+                    'timestamp'     => $timestamp,
+                ]);
+
+                $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-verified', [
+                    'dv_request_id' => $dvRequest->id,
+                    'status'        => $newStatus,
+                    'timestamp'     => $timestamp,
+                    'action_performer_id' => $currentUserId,
+                    'verified_by_user_id' => $currentUserId,
+                ]);
+            }
+        });
+
+        // ✅ TRIGGER DASHBOARD UPDATE
+        $this->triggerDashboardUpdate();
+
+        return redirect()
+            ->route('Incoming.GIP.index')
+            ->with('success', 'DV Request has been verified successfully.');
+
+    } catch (\Exception $e) {
+        Log::error('Error verifying DV request: ' . $e->getMessage(), [
+            'dv_request_id' => $id,
+            'user_id'       => auth()->id(),
+            'file'          => $e->getFile(),
+            'line'          => $e->getLine(),
+        ]);
+
+        return redirect()
+            ->back()
+            ->withInput()
+            ->with('error', 'An error occurred while verifying the request.');
+    }
+}
+
+/**
+ * ✅ UPDATED: Handle attachment updates with three-state status and remarks
+ */
+public function updateAttachments(Request $request, $id)
+{
+    try {
+        $request->validate([
+            'gip_attachment_status_value' => 'required|array',
+            'gip_attachment_status_value.*' => 'nullable|in:0,1,null',
+            'gip_attachment_remarks' => 'nullable|array',
+            'gip_attachment_remarks.*' => 'nullable|string|max:500',
+        ]);
+
+        $dvRequest = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
+                              ->findOrFail($id);
+
+        if ($dvRequest->locked_by !== auth()->id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You do not have permission to update this request.'
+            ], 403);
+        }
+
+        $attachmentStatuses = $request->input('gip_attachment_status_value', []);
+        $attachmentRemarks = $request->input('gip_attachment_remarks', []);
+        $updatedCount = 0;
+        $presentCount = 0;
+        $notPresentCount = 0;
+        $naCount = 0;
+
+        foreach ($dvRequest->gipAttachments as $attachment) {
+            $status = $attachmentStatuses[$attachment->id] ?? null;
+            
+            // Convert status to proper format
+            if ($status === 'null' || $status === null) {
+                $isPresent = null;
+                $naCount++;
+            } elseif ((int)$status === 1) {
+                $isPresent = true;
+                $presentCount++;
+            } else {
+                $isPresent = false;
+                $notPresentCount++;
+            }
+
+            // Get remarks (only relevant for "Not Present" status)
+            $remarks = $attachmentRemarks[$attachment->id] ?? null;
+            
+            // Special handling for Present status
+            if ($isPresent === true) {
+                $remarks = 'The attachment is present';
+            }
+
+            // Update attachment
+            $attachment->update([
+                'is_present' => $isPresent,
+                'remarks' => $remarks,
+            ]);
+
+            $updatedCount++;
+        }
+
+        $this->logAction(
+            $dvRequest->id,
+            'Incoming',
+            $dvRequest->status,
+            "Attachment checklist updated: {$presentCount} present, {$notPresentCount} not present, {$naCount} N/A"
+        );
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Attachments updated successfully.',
+                'data' => [
+                    'updated_count' => $updatedCount,
+                    'present_count' => $presentCount,
+                    'not_present_count' => $notPresentCount,
+                    'na_count' => $naCount,
+                ]
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Attachments updated successfully.');
+
+    } catch (\Exception $e) {
+        Log::error('Error updating attachments: ' . $e->getMessage(), [
+            'dv_request_id' => $id,
+            'error' => $e->getTraceAsString()
+        ]);
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating attachments.'
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'An error occurred while updating attachments.');
+    }
+}
          public function reject(Request $request, $id)
     {
         try {
