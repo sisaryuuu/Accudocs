@@ -40,60 +40,117 @@ class OutgoingDvController extends Controller
         return view('Outgoing.index');
     }
 
-    public function fetchDvRequests(Request $request)
-    {
+public function fetchDvRequests(Request $request)
+{
+    try {
         $currentUserId = auth()->id();
         $lockDuration  = now()->subMinutes(10);
         
         // Get search parameter from request
         $searchTerm = $request->input('search', '');
 
-        $dvRequests = DvRequest::with(['program', 'focalPerson', 'respocenter', 'orsRequest'])
-            ->whereIn('status', ['ORS_obligated','Outgoing_received']) // REMOVED: Outgoing_in_process
+        $query = DvRequest::with([
+                'program', 
+                'focalPerson', 
+                'respocenter',
+                'orsRequest',
+            ])
+            ->whereIn('status', ['ORS_obligated','Outgoing_received']) // Outgoing_in_process removed
             ->where(function ($q) use ($currentUserId, $lockDuration) {
-                $q->whereNull('locked_by')              
-                ->orWhere('locked_by', $currentUserId)  
-                ->orWhere('locked_at', '<=', $lockDuration); 
+                $q->whereNull('locked_by')
+                  ->orWhere('locked_by', $currentUserId)
+                  ->orWhere('locked_at', '<=', $lockDuration);
             })
             ->when($searchTerm, function ($query) use ($searchTerm) {
                 $query->where(function ($q) use ($searchTerm) {
                     // Search in control number
                     $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
-                    // Search in focal person name
-                    ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
-                        $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
-                                    ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
-                    })
-                    // Search in program code
-                    ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
-                        $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
-                    })
-                    // Search in respocenter
-                    ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
-                        $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
-                                    ->orWhere('description', 'LIKE', "%{$searchTerm}%");
-                    })
-                    // Search in particulars
-                    ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
-                    // Search in amount (handle numeric search)
-                    ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
-                    // Search in status
-                    ->orWhere('status', 'LIKE', "%{$searchTerm}%")
-                    // Search in ORS number
-                    ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
-                        $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
-                    })
-                    // Search in DV number
-                    ->orWhere('dv_number', 'LIKE', "%{$searchTerm}%");
+                      // Search in focal person name
+                      ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
+                          $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
+                                     ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
+                      })
+                      // Search in program code
+                      ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
+                          $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
+                      })
+                      // Search in respocenter
+                      ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
+                          $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
+                                     ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+                      })
+                      // Search in particulars
+                      ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
+                      // Search in amount (handle numeric search)
+                      ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
+                      // Search in status
+                      ->orWhere('status', 'LIKE', "%{$searchTerm}%")
+                      // Search in ORS number
+                      ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
+                          $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
+                      })
+                      // Search in DV number
+                      ->orWhere('dv_number', 'LIKE', "%{$searchTerm}%");
                 });
-            })
-            ->latest()
-            ->get();
+            });
+
+        // Get all DV requests with created_at for age calculation
+        $dvRequests = $query->select('dv_requests.*')
+                            ->addSelect(DB::raw('TIMESTAMPDIFF(DAY, dv_requests.created_at, NOW()) as days_old'))
+                            ->get();
+        
+        // Calculate priority for Outgoing
+        $dvRequests = $dvRequests->map(function ($request) {
+            // Calculate days old
+            $daysOld = now()->diffInDays($request->created_at);
+            
+            // Priority scoring system for Outgoing:
+            // - Critical (10+ days): 1000 points
+            // - High (7-9 days): 500 points
+            // - Medium (3-6 days): 200 points
+            // - Recent (0-2 days): 0 points
+            
+            $priorityScore = 0;
+            
+            if ($daysOld >= 10) {
+                $priorityScore += 1000; // Critical priority
+            } elseif ($daysOld >= 7) {
+                $priorityScore += 500; // High priority
+            } elseif ($daysOld >= 3) {
+                $priorityScore += 200; // Medium priority
+            }
+            
+            // Higher priority for pending receipt (ORS_obligated)
+            if ($request->status === 'ORS_obligated') {
+                $priorityScore += 100; // Extra priority for unreceived documents
+            }
+            
+            // Higher priority for in-process documents
+            if ($request->status === 'Outgoing_received' || $request->status === 'Outgoing_in_process') {
+                $priorityScore += 50; // Medium priority for documents being processed
+            }
+            
+            // Add small random factor to prevent exact ties
+            $priorityScore += rand(0, 10);
+            
+            $request->days_old = $daysOld;
+            $request->priority_score = $priorityScore;
+            $request->urgency = $this->getOutgoingUrgencyLevel($daysOld);
+            
+            return $request;
+        });
+        
+        // Sort by priority score (descending) so highest priority comes first
+        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
         return response()->json($dvRequests->map(function ($req) {
             return [
                 'id'           => $req->id,
-                'control_no' => $req->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT): '—',
+                'control_no'   => $req->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
+                    '—',
+                'dv_number'    => $req->dv_number ?? null,
+                'ors_number'   => $req->orsRequest->ors_number ?? null,
                 'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
                 'program'      => $req->program->prcode ?? 'N/A',
                 'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
@@ -101,12 +158,38 @@ class OutgoingDvController extends Controller
                 'amount'       => number_format($req->amount, 2),
                 'status'       => $req->status,
                 'date'         => $req->created_at->format('M d, Y'),
-                'ors_number'   => $req->orsRequest->ors_number ?? null,
-                'dv_number'    => $req->dv_number ?? null,
+                'created_at_timestamp' => $req->created_at->toISOString(),
+                'days_old'     => $req->days_old,
+                'urgency'      => $req->urgency,
+                'priority_score' => $req->priority_score,
             ];
         }));
-    }
 
+    } catch (\Exception $e) {
+        \Log::error('Error in Outgoing fetchDvRequests: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Get Outgoing urgency level based on whole number of days old
+ */
+protected function getOutgoingUrgencyLevel($daysOld)
+{
+    if ($daysOld >= 10) {
+        return 'critical';
+    } elseif ($daysOld >= 7) {
+        return 'high';
+    } elseif ($daysOld >= 3) {
+        return 'medium';
+    } else {
+        return 'low';
+    }
+}
     public function fetchDvRecent()
     {
         $currentUserId = auth()->id();
@@ -126,56 +209,84 @@ class OutgoingDvController extends Controller
 
         return response()->json($recentDvRequests);
     }
-    
-    public function show($id)
-    {
-        $dvRequest = DvRequest::with(['respocenter','focalPerson','orsRequest','tupadAttachments','tevAttachments','logs'])
-            ->findOrFail($id);
+   public function show($id)
+{
+    $dvRequest = DvRequest::with([
+        'respocenter',
+        'focalPerson',
+        'orsRequest',
+        'gipAttachments', // Make sure this relationship exists
+        'tupadAttachments',
+        'tevAttachments',
+        'logs',
+    ])->findOrFail($id);
 
-        $currentUserId = auth()->id();
-        $lockDuration  = now()->subMinutes(10);
+    $currentUserId = auth()->id();
+    $lockDuration  = now()->subMinutes(10);
 
-        // Prevent access if locked by another active user
-        if ($dvRequest->locked_by 
-            && $dvRequest->locked_by !== $currentUserId 
-            && $dvRequest->locked_at >= $lockDuration) {
-            return redirect()->route('Outgoing.dvrequests.index')
-                ->with('error', 'This DV Request is currently being processed by another user.');
-        }
+    // Prevent access if locked by another active user
+    if ($dvRequest->locked_by 
+        && $dvRequest->locked_by !== $currentUserId 
+        && $dvRequest->locked_at >= $lockDuration) {
+        return redirect()->route('Outgoing.dvrequests.index')
+            ->with('error', 'This DV Request is currently being processed by another user.');
+    }
 
-        // Acquire lock if expired or owned
-        if (!$dvRequest->locked_by || $dvRequest->locked_at < $lockDuration || $dvRequest->locked_by === $currentUserId) {
-            $dvRequest->update([
-                'locked_by' => $currentUserId,
-                'locked_at' => now(),
-            ]);
-        }
+    // Acquire lock if expired or owned
+    if (!$dvRequest->locked_by || $dvRequest->locked_at < $lockDuration || $dvRequest->locked_by === $currentUserId) {
+        $dvRequest->update([
+            'locked_by' => $currentUserId,
+            'locked_at' => now(),
+        ]);
+    }
 
-        $selectedModality = $dvRequest->tupad_modality;
+    // For GIP: Get GIP attachments
+    $gipAttachments = collect();
+    if ($dvRequest->program->prcode === 'GIP') {
+        $gipAttachments = $dvRequest->gipAttachments()->get();
         
-        $attachments = collect();
-        if ($selectedModality) {
-            $attachments = $dvRequest->tupadAttachments()
-                ->where('modality', $selectedModality)
-                ->orderBy('sort_order')
-                ->get();
-        }
-        $tevSelectedModality= $dvRequest->tev_modality;
+        // Define which attachments should be N/A based on your checklist
+        $naAttachmentNames = ['DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance', 'Birth Certificate'];
+        
+        // Add is_na property to each attachment
+        $gipAttachments->each(function($attachment) use ($naAttachmentNames) {
+            $attachment->is_na = in_array($attachment->name, $naAttachmentNames);
+        });
+    }
 
-        $tevAttachments = collect();
-        if($tevSelectedModality){
-            $tevAttachments = $dvRequest->tevAttachments()
+    // For TUPAD: Get selected modality and attachments
+    $selectedModality = $dvRequest->tupad_modality;
+    $tupadAttachments = collect();
+    if ($selectedModality) {
+        $tupadAttachments = $dvRequest->tupadAttachments()
+            ->where('modality', $selectedModality)
+            ->orderBy('sort_order')
+            ->get();
+    }
+
+    // For TEV: Get selected modality and attachments
+    $tevSelectedModality = $dvRequest->tev_modality;
+    $tevAttachments = collect();
+    if ($tevSelectedModality) {
+        $tevAttachments = $dvRequest->tevAttachments()
             ->where('modality', $tevSelectedModality)
             ->orderBy('sort_order')
             ->get();
-        }
-
-        $lastLog  = $dvRequest->logs()->latest()->first();
-        $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
-
-        return view('Outgoing.finalizedv', compact('dvRequest', 'lastStep' ,'attachments',
-            'selectedModality','tevSelectedModality','tevAttachments'));
     }
+
+    $lastLog  = $dvRequest->logs()->latest()->first();
+    $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
+
+    return view('Outgoing.finalizedv', compact(
+        'dvRequest', 
+        'lastStep',
+        'gipAttachments', // This is CRITICAL - pass it to the view
+        'tupadAttachments',
+        'selectedModality',
+        'tevSelectedModality',
+        'tevAttachments'
+    ));
+}
 
     public function receive(Request $request, $id)
     {
@@ -313,6 +424,100 @@ class OutgoingDvController extends Controller
                          ->with('info', 'All pending GIP DV requests are currently locked by other users.');
     }
 
+    // Add this method to your OutgoingDvController class
+
+/**
+ * Update attachment status via AJAX
+ */
+public function updateAttachment(Request $request, $id)
+{
+    $request->validate([
+        'attachment_id' => 'required|integer',
+        'attachment_type' => 'required|string|in:gip,tupad,tev',
+        'is_present' => 'required|boolean',
+        'remarks' => 'nullable|string|max:500'
+    ]);
+
+    try {
+        $dvRequest = DvRequest::findOrFail($id);
+        
+        // Check if user has permission to update
+        if ($dvRequest->locked_by && $dvRequest->locked_by !== auth()->id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This DV request is locked by another user.'
+            ], 403);
+        }
+
+        $attachmentId = $request->attachment_id;
+        $attachmentType = $request->attachment_type;
+        $isPresent = $request->is_present;
+        
+        $attachment = null;
+        
+        // Find the attachment based on type
+        switch ($attachmentType) {
+            case 'gip':
+                $attachment = $dvRequest->gipAttachments()->find($attachmentId);
+                break;
+            case 'tupad':
+                $attachment = $dvRequest->tupadAttachments()->find($attachmentId);
+                break;
+            case 'tev':
+                $attachment = $dvRequest->tevAttachments()->find($attachmentId);
+                break;
+        }
+        
+        if (!$attachment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Attachment not found.'
+            ], 404);
+        }
+        
+        // Update the attachment
+        $attachment->update([
+            'is_present' => $isPresent,
+            'remarks' => $request->remarks ?? ($isPresent ? 'Marked as present by Outgoing' : 'Marked as missing by Outgoing'),
+            'updated_at' => now()
+        ]);
+        
+        // Log this action
+        \Log::info('Attachment status updated', [
+            'dv_request_id' => $id,
+            'attachment_id' => $attachmentId,
+            'attachment_type' => $attachmentType,
+            'attachment_name' => $attachment->name,
+            'is_present' => $isPresent,
+            'updated_by' => auth()->id()
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Attachment status updated successfully.',
+            'data' => [
+                'attachment_id' => $attachmentId,
+                'is_present' => $isPresent,
+                'updated_at' => $attachment->updated_at->timezone('Asia/Manila')->format('M d, Y h:i A')
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Error updating attachment: ' . $e->getMessage(), [
+            'dv_request_id' => $id,
+            'attachment_id' => $request->attachment_id,
+            'error' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred while updating the attachment.'
+        ], 500);
+    }
+}
+
+
+
     public function finalize(Request $request, $id)
     {
         $request->validate([
@@ -349,107 +554,112 @@ class OutgoingDvController extends Controller
         // Collect attachment data for verification history
         $attachmentData = [];
 
-        // ✅ Handle GIP Attachments
-        if ($dvRequest->program->prcode === 'GIP' && $request->has('gip_attachments')) {
-            foreach ($request->input('gip_attachments', []) as $attachmentId => $value) {
+        // ✅ CORRECTED: Handle GIP Attachments
+        if ($dvRequest->program->prcode === 'GIP') {
+            $gipInput = $request->input('gip_attachments', []);
+            
+            // Get all GIP attachment IDs for this DV request
+            $allGipIds = $dvRequest->gipAttachments()->pluck('id')->toArray();
+            
+            foreach ($allGipIds as $attachmentId) {
                 $attachment = $dvRequest->gipAttachments()->find($attachmentId);
+                
                 if ($attachment) {
-                    $attachment->update(['is_present' => true]);
+                    // Check if this attachment was marked as present
+                    // The value from the form is a STRING 'true' or 'false'
+                    $isPresent = isset($gipInput[$attachmentId]) && $gipInput[$attachmentId] === 'true';
                     
-                    // Collect attachment data
-                    $attachmentData[] = [
-                        'id' => $attachment->id,
+                    $attachment->update([
+                        'is_present' => $isPresent,
+                        'remarks' => $isPresent 
+                            ? 'Marked as present by Outgoing' 
+                            : 'Marked as not present by Outgoing',
+                        'updated_at' => now()
+                    ]);
+                    
+                    // Log for debugging
+                    \Log::info('GIP Attachment updated', [
+                        'attachment_id' => $attachmentId,
                         'name' => $attachment->name,
-                        'is_present' => true,
-                        'type' => 'gip'
-                    ];
+                        'is_present' => $isPresent,
+                        'raw_value' => $gipInput[$attachmentId] ?? 'not set'
+                    ]);
                 }
             }
-            
-            // Mark unchecked as not present and collect data
-            $checkedIds = array_keys($request->input('gip_attachments', []));
-            $dvRequest->gipAttachments()
-                ->whereNotIn('id', $checkedIds)
-                ->each(function($attachment) use (&$attachmentData) {
-                    $attachment->update(['is_present' => false]);
-                    
-                    $attachmentData[] = [
-                        'id' => $attachment->id,
-                        'name' => $attachment->name,
-                        'is_present' => false,
-                        'type' => 'gip'
-                    ];
-                });
         }
 
-        // ✅ Handle TUPAD Attachments
-        if ($dvRequest->program->prcode === 'TUPAD' && $dvRequest->tupad_modality && $request->has('attachments')) {
-            foreach ($request->input('attachments', []) as $attachmentId => $value) {
-                $attachment = $dvRequest->tupadAttachments()->find($attachmentId);
-                if ($attachment) {
-                    $attachment->update(['is_present' => true]);
-                    
-                    $attachmentData[] = [
-                        'id' => $attachment->id,
-                        'name' => $attachment->name,
-                        'is_present' => true,
-                        'type' => 'tupad',
-                        'modality' => $attachment->modality
-                    ];
-                }
-            }
+        // ✅ CORRECTED: Handle TUPAD Attachments
+        if ($dvRequest->program->prcode === 'TUPAD' && $dvRequest->tupad_modality) {
+            $tupadInput = $request->input('attachments', []);
             
-            // Mark unchecked as not present
-            $checkedIds = array_keys($request->input('attachments', []));
-            $dvRequest->tupadAttachments()
+            // Get all TUPAD attachment IDs for this modality
+            $allTupadIds = $dvRequest->tupadAttachments()
                 ->where('modality', $dvRequest->tupad_modality)
-                ->whereNotIn('id', $checkedIds)
-                ->each(function($attachment) use (&$attachmentData) {
-                    $attachment->update(['is_present' => false]);
-                    
-                    $attachmentData[] = [
-                        'id' => $attachment->id,
-                        'name' => $attachment->name,
-                        'is_present' => false,
-                        'type' => 'tupad',
-                        'modality' => $attachment->modality
-                    ];
-                });
-        }
-
-        // ✅ Handle TEV Attachments
-        if ($dvRequest->program->prcode === 'TEV' && $dvRequest->tev_modality && $request->has('tev_attachments')) {
-            foreach ($request->input('tev_attachments', []) as $attachmentId => $value) {
-                $attachment = $dvRequest->tevAttachments()->find($attachmentId);
+                ->pluck('id')
+                ->toArray();
+            
+            foreach ($allTupadIds as $attachmentId) {
+                $attachment = $dvRequest->tupadAttachments()->find($attachmentId);
+                
                 if ($attachment) {
-                    $attachment->update(['is_present' => true]);
+                    // Check if this attachment was marked as present
+                    $isPresent = isset($tupadInput[$attachmentId]) && $tupadInput[$attachmentId] === 'true';
                     
-                    $attachmentData[] = [
-                        'id' => $attachment->id,
+                    $attachment->update([
+                        'is_present' => $isPresent,
+                        'remarks' => $isPresent 
+                            ? 'Marked as present by Outgoing' 
+                            : 'Marked as not present by Outgoing',
+                        'updated_at' => now()
+                    ]);
+                    
+                    // Log for debugging
+                    \Log::info('TUPAD Attachment updated', [
+                        'attachment_id' => $attachmentId,
                         'name' => $attachment->name,
-                        'is_present' => true,
-                        'type' => 'tev',
-                        'modality' => $attachment->modality
-                    ];
+                        'modality' => $dvRequest->tupad_modality,
+                        'is_present' => $isPresent,
+                        'raw_value' => $tupadInput[$attachmentId] ?? 'not set'
+                    ]);
                 }
             }
+        }
+
+        // ✅ CORRECTED: Handle TEV Attachments
+        if ($dvRequest->program->prcode === 'TEV' && $dvRequest->tev_modality) {
+            $tevInput = $request->input('tev_attachments', []);
             
-            // Mark unchecked as not present
-            $checkedIds = array_keys($request->input('tev_attachments', []));
-            $dvRequest->tevAttachments()
+            // Get all TEV attachment IDs for this modality
+            $allTevIds = $dvRequest->tevAttachments()
                 ->where('modality', $dvRequest->tev_modality)
-                ->whereNotIn('id', $checkedIds)
-                ->each(function($attachment) use (&$attachmentData) {
-                    $attachment->update(['is_present' => false]);
+                ->pluck('id')
+                ->toArray();
+            
+            foreach ($allTevIds as $attachmentId) {
+                $attachment = $dvRequest->tevAttachments()->find($attachmentId);
+                
+                if ($attachment) {
+                    // Check if this attachment was marked as present
+                    $isPresent = isset($tevInput[$attachmentId]) && $tevInput[$attachmentId] === 'true';
                     
-                    $attachmentData[] = [
-                        'id' => $attachment->id,
+                    $attachment->update([
+                        'is_present' => $isPresent,
+                        'remarks' => $isPresent 
+                            ? 'Marked as present by Outgoing' 
+                            : 'Marked as not present by Outgoing',
+                        'updated_at' => now()
+                    ]);
+                    
+                    // Log for debugging
+                    \Log::info('TEV Attachment updated', [
+                        'attachment_id' => $attachmentId,
                         'name' => $attachment->name,
-                        'is_present' => false,
-                        'type' => 'tev',
-                        'modality' => $attachment->modality
-                    ];
-                });
+                        'modality' => $dvRequest->tev_modality,
+                        'is_present' => $isPresent,
+                        'raw_value' => $tevInput[$attachmentId] ?? 'not set'
+                    ]);
+                }
+            }
         }
 
         // ✅ UPDATE DV REQUEST STATUS FIRST

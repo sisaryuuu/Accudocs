@@ -85,6 +85,34 @@
             </div>
         </div>
 
+        <!-- Sorting Controls -->
+        <div class="flex gap-2 mb-6">
+            <button id="sort-by-priority" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"></path>
+                </svg>
+                🚨 Sort by Priority
+            </button>
+            <button id="sort-by-date" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                Sort by Date
+            </button>
+            <button id="show-critical-only" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.954-.833-2.724 0L4.348 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>
+                Show Critical Only (10+ days)
+            </button>
+            <button id="show-all" class="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+                </svg>
+                Show All
+            </button>
+        </div>
+
         <!-- Bulk Actions Bar -->
         <div id="bulk-actions-bar" class="mb-4 hidden">
             <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
@@ -238,6 +266,9 @@
 let selectedRequests = new Set();
 let allRequests = []; // Store all requests
 let filteredRequests = []; // Store filtered requests for display
+let originalFilteredRequests = []; // Store original filtered requests for reset
+let isCriticalOnlyView = false; // Track if we're showing critical only
+let currentSort = 'priority'; // Current sort type: 'priority', 'date', or 'none'
 
 // ============ GLOBAL FUNCTIONS (MUST BE OUTSIDE DOMContentLoaded) ============
 window.dismissToast = function(toastId) {
@@ -694,6 +725,11 @@ window.refreshAllData = function() {
     
     clearSelection();
     
+    // Reset view
+    isCriticalOnlyView = false;
+    currentSort = 'priority';
+    updateSortButtonStyles();
+    
     if (window.fetchDvRequests) window.fetchDvRequests();
     if (window.fetchAgingDocuments) window.fetchAgingDocuments();
     if (window.updateStatistics) window.updateStatistics();
@@ -1137,14 +1173,124 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function performSearch() {
-        filteredRequests = filterRequests(allRequests, searchTerm);
-        totalRecords = filteredRequests.length;
-        totalPages = Math.ceil(totalRecords / perPage);
-        currentPage = 1;
+   // Update the performSearch function to include sorting by days_old
+function performSearch() {
+    filteredRequests = filterRequests(allRequests, searchTerm);
+    
+    // Ensure days_old is positive for all requests
+    filteredRequests = filteredRequests.map(req => ({
+        ...req,
+        days_old: Math.abs(req.days_old) || 0
+    }));
+    
+    // Apply priority sort by default (sort by days_old descending)
+    if (currentSort === 'priority') {
+        filteredRequests.sort((a, b) => b.days_old - a.days_old);
+    } else if (currentSort === 'date') {
+        // Sort by date (created_at)
+        filteredRequests.sort((a, b) => new Date(a.created_at_timestamp || a.date) - new Date(b.created_at_timestamp || b.date));
+    }
+    
+    // Apply critical filter if active
+    if (isCriticalOnlyView) {
+        filteredRequests = filteredRequests.filter(req => req.days_old >= 10);
+    }
+    
+    totalRecords = filteredRequests.length;
+    totalPages = Math.ceil(totalRecords / perPage);
+    currentPage = 1;
+    
+    renderTable(getPaginatedData());
+    updatePaginationInfo();
+}
+// Update the sortByPriority function
+function sortByPriority() {
+    filteredRequests.sort((a, b) => {
+        // Critical (10+ days) comes first
+        const aCritical = a.days_old >= 10;
+        const bCritical = b.days_old >= 10;
         
-        renderTable(getPaginatedData());
-        updatePaginationInfo();
+        if (aCritical && !bCritical) return -1;
+        if (!aCritical && bCritical) return 1;
+        
+        // Then high priority (7-9 days)
+        const aHigh = a.days_old >= 7;
+        const bHigh = b.days_old >= 7;
+        
+        if (aHigh && !bHigh) return -1;
+        if (!aHigh && bHigh) return 1;
+        
+        // Then medium priority (3-6 days)
+        const aMedium = a.days_old >= 3;
+        const bMedium = b.days_old >= 3;
+        
+        if (aMedium && !bMedium) return -1;
+        if (!aMedium && bMedium) return 1;
+        
+        // Then by days old descending within same priority
+        return b.days_old - a.days_old;
+    });
+}
+
+// Update the sortByDate function
+function sortByDate() {
+    filteredRequests.sort((a, b) => {
+        // Use created_at_timestamp if available, otherwise parse the date string
+        const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
+        const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
+        return aDate - bDate;
+    });
+}
+    
+    function updateSortButtonStyles() {
+        const priorityBtn = document.getElementById('sort-by-priority');
+        const dateBtn = document.getElementById('sort-by-date');
+        const criticalBtn = document.getElementById('show-critical-only');
+        const showAllBtn = document.getElementById('show-all');
+        
+        if (priorityBtn) {
+            if (currentSort === 'priority') {
+                priorityBtn.className = 'px-4 py-2 bg-blue-700 text-white rounded-lg text-sm font-medium hover:bg-blue-800 transition flex items-center gap-2';
+            } else {
+                priorityBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-2';
+            }
+        }
+        
+        if (dateBtn) {
+            if (currentSort === 'date') {
+                dateBtn.className = 'px-4 py-2 bg-gray-300 text-gray-800 rounded-lg text-sm font-medium hover:bg-gray-400 transition flex items-center gap-2';
+            } else {
+                dateBtn.className = 'px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition flex items-center gap-2';
+            }
+        }
+        
+        if (criticalBtn) {
+            if (isCriticalOnlyView) {
+                criticalBtn.className = 'px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition flex items-center gap-2';
+                criticalBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.954-.833-2.724 0L4.348 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                    </svg>
+                    Showing Critical Only (10+ days)
+                `;
+            } else {
+                criticalBtn.className = 'px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition flex items-center gap-2';
+                criticalBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.954-.833-2.724 0L4.348 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                    </svg>
+                    Show Critical Only (10+ days)
+                `;
+            }
+        }
+        
+        if (showAllBtn) {
+            if (isCriticalOnlyView) {
+                showAllBtn.style.display = 'flex';
+            } else {
+                showAllBtn.style.display = 'none';
+            }
+        }
     }
 
     // ============ DATA FETCHING FUNCTIONS ============
@@ -1201,218 +1347,309 @@ document.addEventListener('DOMContentLoaded', function() {
     window.fetchAgingDocuments = fetchAgingDocuments;
     window.updateStatistics = updateStatistics;
 
-    // ============ RENDERING FUNCTIONS ============
-    function renderTable(dvRequests) {
-        // Don't clear the select all checkbox state here - let updateSelectAllCheckbox handle it
-        
-        if (dvRequests.length === 0) {
-            tableContainer.innerHTML = `
-                <div class="text-center py-16">
-                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
-                    <p class="text-gray-500">${searchTerm ? 'Try adjusting your search filter.' : 'No requests available.'}</p>
+function renderTable(dvRequests) {
+    if (dvRequests.length === 0) {
+        tableContainer.innerHTML = `
+            <div class="text-center py-16">
+                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
                 </div>
-            `;
-            
-            // Update select all checkbox for empty state
-            updateSelectAllCheckbox();
-            return;
-        }
-
-        function formatToPHT(dateString) {
-            if (!dateString) return 'N/A';
-            try {
-                const date = new Date(dateString);
-                return date.toLocaleString('en-US', {
-                    timeZone: 'Asia/Manila',
-                    month: 'short',
-                    day: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true
-                });
-            } catch (error) {
-                return dateString;
-            }
-        }
-
-        let html = `
-            <div class="overflow-x-auto">
-                <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
-                    <thead class="bg-gray-50 text-[13px]">
-                        <tr>
-                            <th class="px-5 py-3 w-[5%] text-center">
-                                <input type="checkbox" id="select-all-checkbox" onclick="toggleSelectAll(this)" class="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500">
-                            </th>
-                            <th class="px-5 py-3 w-[13%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                            <th class="px-5 py-3 w-[11%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                            <th class="px-5 py-3 w-[13%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
-                            <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
-        `;
-
-        dvRequests.forEach(request => {
-            const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
-            const formattedDate = formatToPHT(request.date);
-            
-            // Check if this specific request is in the selectedRequests Set
-            const isSelected = Array.from(selectedRequests).some(req => req.id === request.id);
-            
-            html += `
-                <tr class="hover:bg-gray-50 transition-colors duration-150" data-dv-id="${request.id}">
-                    <td class="px-5 py-4 text-center">
-                        <input type="checkbox" class="request-checkbox w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500" 
-                               data-request-id="${request.id}" 
-                               data-status="${request.status}"
-                               ${isSelected ? 'checked' : ''}
-                               onclick="toggleSelectRequest(${request.id}, '${request.status}')">
-                    </td>
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${request.accounting_control_number}</td>
-                    <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                        <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${request.program}</span>
-                    </td>
-                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
-                    <td class="px-6 py-4">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgClass}">
-                            <span class="w-2 h-2 mr-2 rounded-full ${dotClass}"></span>${label}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">${formattedDate}</td>
-                    <td class="px-5 py-4 text-center text-sm font-medium">
-                        ${request.status === 'submitted' 
-                            ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" class="inline-flex px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-[13px] font-medium rounded-md transition-colors duration-200">Receive</button>`    
-                            : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" class="inline-flex px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-md transition-colors duration-200">View / Process</a>`
-                        }
-                    </td>
-                </tr>`;
-        });
-
-        html += `</tbody></table></div>`;
-        tableContainer.innerHTML = html;
-        
-        // Update select all checkbox state after rendering
-        updateSelectAllCheckbox();
-    }
-
-    function renderAgingAlerts(documents, count) {
-        if (!agingAlertsContainer || !documents || documents.length === 0) {
-            if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
-            return;
-        }
-
-        const agingDocs = documents.filter(doc => !['IMSD_verified', 'completed'].includes(doc.status));
-        if (agingDocs.length === 0) {
-            agingAlertsContainer.innerHTML = '';
-            return;
-        }
-
-        // Ensure whole numbers for urgency calculation
-        agingDocs.forEach(doc => {
-            const days = Math.floor(Math.abs(Number(doc.days_old))) || 0; // Ensure whole number
-            doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
-        });
-
-        const highestUrgency = agingDocs.reduce((highest, doc) => {
-            const order = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
-            return order[doc.urgency] > order[highest] ? doc.urgency : highest;
-        }, 'low');
-
-        const config = {
-            'critical': { icon: '🚨', bg: 'bg-red-50 border-red-500', text: 'text-red-900' },
-            'high': { icon: '⚠️', bg: 'bg-orange-50 border-orange-500', text: 'text-orange-900' },
-            'medium': { icon: '⏰', bg: 'bg-yellow-50 border-yellow-500', text: 'text-yellow-900' },
-            'low': { icon: 'ℹ️', bg: 'bg-blue-50 border-blue-500', text: 'text-blue-900' }
-        };
-
-        const c = config[highestUrgency];
-
-        // Check if we have a saved state for the alert container
-        const alertState = JSON.parse(localStorage.getItem('agingAlertMinimized') || 'false');
-        const isMinimized = alertState === true;
-
-        agingAlertsContainer.innerHTML = `
-            <div class="rounded-lg border-l-4 p-5 ${c.bg} shadow-md aging-alert-container">
-                <div class="flex items-start justify-between mb-3">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">${c.icon}</span>
-                        <div>
-                            <h3 class="font-bold text-lg ${c.text}">Documents Need Processing</h3>
-                            <p class="text-sm opacity-80 ${c.text}">${agingDocs.length} document(s) older than 3 days</p>
-                        </div>
-                    </div>
-                    <button class="minimize-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50" 
-                            title="${isMinimized ? 'Expand' : 'Minimize'}">
-                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                             style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                  d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
-                        </svg>
-                    </button>
-                </div>
-                <div class="alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
-                    <div class="space-y-2 mt-4">
-                        ${agingDocs.slice(0, 5).map(doc => {
-                            const daysOld = Math.floor(doc.days_old);
-                            return `
-                                <div class="p-3 bg-white/50 border rounded-lg">
-                                    <p class="font-semibold text-sm ${c.text}">${doc.control_number}</p>
-                                    <p class="text-xs opacity-70 ${c.text}">${doc.submitted_by} • ${doc.program}</p>
-                                    <p class="text-xs font-medium mt-1 text-red-700">${daysOld} days old</p>
-                                </div>
-                            `;
-                        }).join('')}
-                        ${agingDocs.length > 5 ? `<p class="text-xs mt-3 opacity-75 ${c.text}">+${agingDocs.length - 5} more documents</p>` : ''}
-                    </div>
-                </div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                <p class="text-gray-500">${searchTerm ? 'Try adjusting your search filter.' : 'No requests available.'}</p>
+                ${isCriticalOnlyView ? '<p class="text-sm text-red-600 mt-2">No critical documents (10+ days) found.</p>' : ''}
             </div>
         `;
-
-        // Add event listener for the minimize button
-        const minimizeBtn = agingAlertsContainer.querySelector('.minimize-alert-btn');
-        const alertContent = agingAlertsContainer.querySelector('.alert-content');
-        
-        if (minimizeBtn && alertContent) {
-            minimizeBtn.addEventListener('click', function() {
-                const isCurrentlyMinimized = alertContent.classList.contains('hidden');
-                
-                if (isCurrentlyMinimized) {
-                    // Expand
-                    alertContent.classList.remove('hidden');
-                    alertContent.classList.add('block');
-                    this.innerHTML = `
-                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                    `;
-                    this.setAttribute('title', 'Minimize');
-                    localStorage.setItem('agingAlertMinimized', 'false');
-                } else {
-                    // Minimize
-                    alertContent.classList.remove('block');
-                    alertContent.classList.add('hidden');
-                    this.innerHTML = `
-                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                        </svg>
-                    `;
-                    this.setAttribute('title', 'Expand');
-                    localStorage.setItem('agingAlertMinimized', 'true');
-                }
-            });
-        }
+        updateSelectAllCheckbox();
+        return;
     }
+
+    let html = `
+        <div class="overflow-x-auto">
+            <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
+                <thead class="bg-gray-50 text-[13px]">
+                    <tr>
+                        <th class="px-5 py-3 w-[5%] text-center">
+                            <input type="checkbox" id="select-all-checkbox" onclick="toggleSelectAll(this)" class="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500">
+                        </th>
+                        <th class="px-5 py-3 w-[13%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                        <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                        <th class="px-5 py-3 w-[11%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                        <th class="px-5 py-3 w-[13%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                        <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
+    `;
+
+    dvRequests.forEach(request => {
+        const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
+        const formattedDate = request.date;
+        
+        const isSelected = Array.from(selectedRequests).some(req => req.id === request.id);
+        
+        // ✅ Get days_old from the API response
+        const daysOld = Math.round(request.days_old) || 0;
+        
+        // SIMPLIFIED: Determine row styling based on age - LESS INTENSE
+        let rowClasses = 'hover:bg-gray-50 transition-colors duration-150';
+        let textColorClass = 'text-gray-900';
+        let urgencyBadge = '';
+        let rowBgClass = '';
+        
+        if (daysOld >= 10) {
+            // CRITICAL: 10+ days - Subtle red tint, NO pulsing
+            rowBgClass = 'bg-red-50/50 hover:bg-red-100/50';
+            rowClasses = 'border-l-4 border-red-400'; // Removed animate-pulse
+            textColorClass = 'text-gray-900'; // Keep text normal color
+            urgencyBadge = `
+                <div class="inline-flex items-center ml-2">
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-full">
+                        ${daysOld} DAYS
+                    </span>
+                </div>
+            `;
+        } else if (daysOld >= 7) {
+            // HIGH: 7-9 days - Subtle orange tint
+            rowBgClass = 'bg-orange-50/50 hover:bg-orange-100/50';
+            rowClasses = 'border-l-4 border-orange-300';
+            textColorClass = 'text-gray-900';
+            urgencyBadge = `
+                <div class="inline-flex items-center ml-2">
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 border border-orange-200 rounded-full">
+                        ${daysOld} DAYS
+                    </span>
+                </div>
+            `;
+        } else if (daysOld >= 3) {
+            // MEDIUM: 3-6 days - Subtle yellow tint
+            rowBgClass = 'bg-yellow-50/50 hover:bg-yellow-100/50';
+            rowClasses = 'border-l-4 border-yellow-300';
+            textColorClass = 'text-gray-900';
+            urgencyBadge = `
+                <div class="inline-flex items-center ml-2">
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-yellow-700 bg-yellow-100 border border-yellow-200 rounded-full">
+                        ${daysOld} DAYS
+                    </span>
+                </div>
+            `;
+        } else {
+            // LOW: 0-2 days - Normal
+            rowBgClass = 'bg-white hover:bg-gray-50';
+            rowClasses = '';
+            textColorClass = 'text-gray-900';
+        }
+        
+        // SIMPLIFIED: Button styling based on age
+        let buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700';
+        let buttonText = 'Receive';
+        
+        if (request.status === 'submitted') {
+            if (daysOld >= 10) {
+                buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700 border border-green-300 font-medium'; // No animation, less intense
+                buttonText = 'RECEIVE';
+            } else if (daysOld >= 7) {
+                buttonClass = 'bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300';
+                buttonText = 'Receive';
+            } else if (daysOld >= 3) {
+                buttonClass = 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border border-yellow-300';
+                buttonText = 'Receive';
+            }
+        }
+        
+        html += `
+            <tr class="${rowClasses} ${rowBgClass}" data-dv-id="${request.id}">
+                <td class="px-5 py-4 text-center">
+                    <input type="checkbox" class="request-checkbox w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500" 
+                           data-request-id="${request.id}" 
+                           data-status="${request.status}"
+                           ${isSelected ? 'checked' : ''}
+                           onclick="toggleSelectRequest(${request.id}, '${request.status}')">
+                </td>
+                <td class="px-6 py-4 text-sm font-medium ${textColorClass}">
+                    <div class="flex items-center">
+                        <span>${request.accounting_control_number}</span>
+                    </div>
+                </td>
+                <td class="px-6 py-4 text-sm ${textColorClass}">${request.submitted_by}</td>
+                <td class="px-6 py-4 text-sm">
+                    <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        daysOld >= 10 ? 'bg-red-100 text-red-800' : 
+                        daysOld >= 7 ? 'bg-orange-100 text-orange-800' : 
+                        daysOld >= 3 ? 'bg-yellow-100 text-yellow-800' : 
+                        'bg-blue-100 text-blue-800'
+                    }">
+                        ${request.program}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-sm font-semibold ${textColorClass}">
+                    ₱${request.amount}
+                </td>
+                <td class="px-6 py-4">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                        daysOld >= 10 ? 'bg-red-100 text-red-800 border border-red-200' : 
+                        daysOld >= 7 ? 'bg-orange-100 text-orange-800 border border-orange-200' : 
+                        daysOld >= 3 ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
+                        bgClass
+                    }">
+                        <span class="w-2 h-2 mr-2 rounded-full ${
+                            daysOld >= 10 ? 'bg-red-500' : 
+                            daysOld >= 7 ? 'bg-orange-400' : 
+                            daysOld >= 3 ? 'bg-yellow-400' : 
+                            dotClass
+                        }"></span>
+                        ${label}
+                    </span>
+                </td>
+                <td class="px-6 py-4">
+                    <div class="text-sm ${textColorClass}">${formattedDate}</div>
+                    <div class="text-xs ${
+                        daysOld >= 10 ? 'text-red-600' : 
+                        daysOld >= 7 ? 'text-orange-600' : 
+                        daysOld >= 3 ? 'text-yellow-600' : 
+                        'text-gray-500'
+                    } font-medium mt-1">
+                        ${daysOld} ${daysOld === 1 ? 'day' : 'days'} ago
+                    </div>
+                </td>
+                <td class="px-5 py-4 text-center text-sm font-medium">
+                    ${request.status === 'submitted' 
+                        ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" 
+                           class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-[13px] font-medium rounded-md transition-all duration-200 min-w-[120px]">
+                           ${buttonText}
+                           </button>`    
+                        : `<a href="/RegionalOffices/IMSD/dvrequests/${request.id}" 
+                           class="inline-flex items-center justify-center px-3 py-2 ${
+                               daysOld >= 10 ? 'bg-red-100 hover:bg-red-200 text-red-700 border border-red-300' : 
+                               daysOld >= 7 ? 'bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300' : 
+                               daysOld >= 3 ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border border-yellow-300' : 
+                               'bg-blue-100 hover:bg-blue-200 text-blue-700'
+                           } text-xs font-medium rounded-md transition-colors duration-200 min-w-[120px]">
+                           View / Process
+                           </a>`
+                    }
+                </td>
+            </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    tableContainer.innerHTML = html;
+    
+    updateSelectAllCheckbox();
+
+}
+   function renderAgingAlerts(documents, count) {
+    if (!agingAlertsContainer || !documents || documents.length === 0) {
+        if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
+        return;
+    }
+
+    const agingDocs = documents.filter(doc => !['IMSD_verified', 'completed'].includes(doc.status));
+    if (agingDocs.length === 0) {
+        agingAlertsContainer.innerHTML = '';
+        return;
+    }
+
+    // ✅ FIX: Use absolute value for days_old throughout
+    agingDocs.forEach(doc => {
+        const days = Math.abs(Math.floor(Number(doc.days_old))) || 0; // Ensure positive whole number
+        doc.days_old = days; // Update the document with positive value
+        doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
+    });
+
+    const highestUrgency = agingDocs.reduce((highest, doc) => {
+        const order = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
+        return order[doc.urgency] > order[highest] ? doc.urgency : highest;
+    }, 'low');
+
+    const config = {
+        'critical': { icon: '🚨', bg: 'bg-red-50 border-red-500', text: 'text-red-900' },
+        'high': { icon: '⚠️', bg: 'bg-orange-50 border-orange-500', text: 'text-orange-900' },
+        'medium': { icon: '⏰', bg: 'bg-yellow-50 border-yellow-500', text: 'text-yellow-900' },
+        'low': { icon: 'ℹ️', bg: 'bg-blue-50 border-blue-500', text: 'text-blue-900' }
+    };
+
+    const c = config[highestUrgency];
+
+    // Check if we have a saved state for the alert container
+    const alertState = JSON.parse(localStorage.getItem('agingAlertMinimized') || 'false');
+    const isMinimized = alertState === true;
+
+    agingAlertsContainer.innerHTML = `
+        <div class="rounded-lg border-l-4 p-5 ${c.bg} shadow-md aging-alert-container">
+            <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">${c.icon}</span>
+                    <div>
+                        <h3 class="font-bold text-lg ${c.text}">Documents Need Processing</h3>
+                        <p class="text-sm opacity-80 ${c.text}">${agingDocs.length} document(s) older than 3 days</p>
+                    </div>
+                </div>
+                <button class="minimize-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50" 
+                        title="${isMinimized ? 'Expand' : 'Minimize'}">
+                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                         style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
+                <div class="space-y-2 mt-4">
+                    ${agingDocs.slice(0, 5).map(doc => {
+                        const daysOld = Math.abs(Math.floor(doc.days_old)) || 0; // ✅ Ensure positive whole number
+                        return `
+                            <div class="p-3 bg-white/50 border rounded-lg">
+                                <p class="font-semibold text-sm ${c.text}">${doc.control_number}</p>
+                                <p class="text-xs opacity-70 ${c.text}">${doc.submitted_by} • ${doc.program}</p>
+                                <p class="text-xs font-medium mt-1 text-red-700">${daysOld} days old</p>
+                            </div>
+                        `;
+                    }).join('')}
+                    ${agingDocs.length > 5 ? `<p class="text-xs mt-3 opacity-75 ${c.text}">+${agingDocs.length - 5} more documents</p>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Add event listener for the minimize button
+    const minimizeBtn = agingAlertsContainer.querySelector('.minimize-alert-btn');
+    const alertContent = agingAlertsContainer.querySelector('.alert-content');
+    
+    if (minimizeBtn && alertContent) {
+        minimizeBtn.addEventListener('click', function() {
+            const isCurrentlyMinimized = alertContent.classList.contains('hidden');
+            
+            if (isCurrentlyMinimized) {
+                // Expand
+                alertContent.classList.remove('hidden');
+                alertContent.classList.add('block');
+                this.innerHTML = `
+                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                `;
+                this.setAttribute('title', 'Minimize');
+                localStorage.setItem('agingAlertMinimized', 'false');
+            } else {
+                // Minimize
+                alertContent.classList.remove('block');
+                alertContent.classList.add('hidden');
+                this.innerHTML = `
+                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                `;
+                this.setAttribute('title', 'Expand');
+                localStorage.setItem('agingAlertMinimized', 'true');
+            }
+        });
+    }
+}
 
     // ============ EVENT LISTENERS ============
     perPageSelect.addEventListener('change', function() {
@@ -1438,6 +1675,54 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 300);
     });
 
+    // Sorting buttons
+    document.getElementById('sort-by-priority')?.addEventListener('click', function() {
+        currentSort = 'priority';
+        sortByPriority();
+        currentPage = 1;
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+        updateSortButtonStyles();
+        window.showToast('Sorted by priority (most delayed first)', 'info');
+    });
+
+    document.getElementById('sort-by-date')?.addEventListener('click', function() {
+        currentSort = 'date';
+        sortByDate();
+        currentPage = 1;
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+        updateSortButtonStyles();
+        window.showToast('Sorted by submission date (oldest first)', 'info');
+    });
+
+    document.getElementById('show-critical-only')?.addEventListener('click', function() {
+        if (!isCriticalOnlyView) {
+            isCriticalOnlyView = true;
+            const criticalCount = filteredRequests.filter(req => req.days_old >= 10).length;
+            
+            if (criticalCount === 0) {
+                window.showToast('No critical documents (10+ days) found', 'warning');
+                isCriticalOnlyView = false;
+            } else {
+                window.showToast(`Showing ${criticalCount} critical document(s) only`, 'info');
+            }
+        } else {
+            isCriticalOnlyView = false;
+            window.showToast('Showing all documents', 'info');
+        }
+        
+        performSearch();
+        updateSortButtonStyles();
+    });
+
+    document.getElementById('show-all')?.addEventListener('click', function() {
+        isCriticalOnlyView = false;
+        performSearch();
+        updateSortButtonStyles();
+        window.showToast('Showing all documents', 'info');
+    });
+
     // Modal event handlers
     const bulkActionModal = document.getElementById('bulkActionModal');
     if (bulkActionModal) {
@@ -1454,6 +1739,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(fetchDvRequests, 5 * 60 * 1000); // Every 5 minutes
 
     // ============ INITIALIZATION ============
+    updateSortButtonStyles();
     updatePaginationInfo();
     fetchDvRequests();
     fetchAgingDocuments();

@@ -40,7 +40,7 @@ class ObligateDVORSController extends Controller
         return view('BudgetOfficer.index');
     }
 
-   public function fetchDvRequests(Request $request)
+  public function fetchDvRequests(Request $request)
 {
     try {
         $currentUserId = auth()->id();
@@ -49,7 +49,7 @@ class ObligateDVORSController extends Controller
         // Get search parameter from request
         $searchTerm = $request->input('search', '');
 
-        $dvRequests = DvRequest::with([
+        $query = DvRequest::with([
                 'program', 
                 'focalPerson', 
                 'respocenter',
@@ -63,7 +63,9 @@ class ObligateDVORSController extends Controller
                 'Incoming-GIP_verified',
                 'Incoming-TEV_verified',
                 'ORS_received',
+                'ORS_in_process',
                 'ORS_onhold',
+                'ORS_for_revision',
             ])
             ->where(function ($q) use ($currentUserId, $lockDuration) {
                 $q->whereNull('locked_by')
@@ -93,11 +95,81 @@ class ObligateDVORSController extends Controller
                       // Search in amount (handle numeric search)
                       ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
                       // Search in status
-                      ->orWhere('status', 'LIKE', "%{$searchTerm}%");
+                      ->orWhere('status', 'LIKE', "%{$searchTerm}%")
+                      // Search in ORS number
+                      ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
+                          $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
+                      });
                 });
-            })
-            ->latest()
-            ->get();
+            });
+
+        // Get all DV requests with created_at for age calculation
+        $dvRequests = $query->select('dv_requests.*')
+                            ->addSelect(DB::raw('TIMESTAMPDIFF(DAY, dv_requests.created_at, NOW()) as days_old'))
+                            ->get();
+        
+        // Calculate days_in_status for each request based on status timestamp
+        $dvRequests = $dvRequests->map(function ($request) {
+            // Determine the relevant timestamp based on status
+            $statusTimestamp = null;
+            
+            if (in_array($request->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'Incoming-TEV_verified'])) {
+                // These are pending receipt - use created_at or incoming_verified_at
+                $statusTimestamp = $request->incoming_verified_at ?? $request->created_at;
+            } elseif (in_array($request->status, ['ORS_received', 'ORS_in_process', 'ORS_onhold', 'ORS_for_revision'])) {
+                // These are ORS statuses - use ors_received_at or status_updated_at
+                $statusTimestamp = $request->ors_received_at ?? $request->status_updated_at ?? $request->created_at;
+            } else {
+                $statusTimestamp = $request->status_updated_at ?? $request->created_at;
+            }
+            
+            // Calculate days in current status
+            $daysInStatus = now()->diffInDays($statusTimestamp);
+            
+            // Priority scoring system for ORS (Budget Officer):
+            // - Critical (7+ days): 1000 points
+            // - High (5-6 days): 500 points
+            // - Medium (3-4 days): 200 points
+            // - Recent (0-2 days): 0 points
+            
+            $priorityScore = 0;
+            
+            if ($daysInStatus >= 7) {
+                $priorityScore += 1000; // Critical priority
+            } elseif ($daysInStatus >= 5) {
+                $priorityScore += 500; // High priority
+            } elseif ($daysInStatus >= 3) {
+                $priorityScore += 200; // Medium priority
+            }
+            
+            // Higher priority for pending receipt statuses
+            if (in_array($request->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'Incoming-TEV_verified'])) {
+                $priorityScore += 100; // Extra priority for unreceived documents
+            }
+            
+            // Higher priority for on-hold or for-revision statuses
+            if ($request->status === 'ORS_onhold' || $request->status === 'ORS_for_revision') {
+                $priorityScore += 150; // Extra priority for documents needing attention
+            }
+            
+            // Lower priority for already received but not processed
+            if ($request->status === 'ORS_received') {
+                $priorityScore += 75; // Medium priority for received documents
+            }
+            
+            // Add small random factor to prevent exact ties
+            $priorityScore += rand(0, 10);
+            
+            $request->days_in_status = $daysInStatus;
+            $request->days_old = now()->diffInDays($request->created_at); // Total age
+            $request->priority_score = $priorityScore;
+            $request->urgency = $this->getOrsUrgencyLevel($daysInStatus);
+            
+            return $request;
+        });
+        
+        // Sort by priority score (descending) so highest priority comes first
+        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
         return response()->json($dvRequests->map(function ($req) {
             // ✅ SAFE: Check if orsRequest exists first
@@ -135,6 +207,7 @@ class ObligateDVORSController extends Controller
                 'control_no'   => $req->accounting_control_number ? 
                     'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
                     '—',
+                'ors_number'   => $orsNumber,
                 'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
                 'program'      => $req->program->prcode ?? 'N/A',
                 'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
@@ -142,10 +215,14 @@ class ObligateDVORSController extends Controller
                 'amount'       => number_format($req->amount, 2),
                 'status'       => $req->status,
                 'date'         => $req->created_at->format('M d, Y'),
-                'ors_number'   => $orsNumber,
+                'created_at_timestamp' => $req->created_at->toISOString(),
+                'days_in_status' => $req->days_in_status,
+                'days_old'     => $req->days_old,
+                'urgency'      => $req->urgency,
+                'priority_score' => $req->priority_score,
                 'uacs_codes'   => $uacsDisplay,
                 'adl_code'     => $adlCode,
-                'mfopap_code'  => $mfopapCode, // ✅ FIXED: Added this field
+                'mfopap_code'  => $mfopapCode,
                 'mfocode'      => $mfocode,
                 'mfodescription' => $mfodescription,
             ];
@@ -161,6 +238,21 @@ class ObligateDVORSController extends Controller
     }
 }
 
+/**
+ * Get ORS urgency level based on whole number of days in status
+ */
+protected function getOrsUrgencyLevel($daysInStatus)
+{
+    if ($daysInStatus >= 7) {
+        return 'critical';
+    } elseif ($daysInStatus >= 5) {
+        return 'high';
+    } elseif ($daysInStatus >= 3) {
+        return 'medium';
+    } else {
+        return 'low';
+    }
+}
     public function redirectToFirstPending()
     {
         $currentUserId = auth()->id();
@@ -194,106 +286,111 @@ class ObligateDVORSController extends Controller
     }
 
     public function show($id)
-    {
-        $dvRequest = DvRequest::with([
-            'respocenter',
-            'focalPerson',
-            'orsRequest',
-            'orsRequest.uacsCodes',
-            'logs',
-            'gipAttachments', // ✅ ADD GIP attachments
-            'tupadAttachments', // ✅ ADD TUPAD attachments  
-            'tevAttachments', // ✅ ADD TEV attachments
-            'program' // ✅ Ensure program is loaded
-        ])->findOrFail($id);
+{
+    $dvRequest = DvRequest::with([
+        'respocenter',
+        'focalPerson',
+        'orsRequest',
+        'orsRequest.uacsCodes',
+        'logs',
+        'gipAttachments', // ✅ GIP attachments
+        'tupadAttachments', // ✅ TUPAD attachments  
+        'tevAttachments', // ✅ TEV attachments
+        'program' // ✅ Ensure program is loaded
+    ])->findOrFail($id);
 
-        $currentUserId = auth()->id();
-        $lockDuration = now()->subMinutes(10);
+    $currentUserId = auth()->id();
+    $lockDuration = now()->subMinutes(10);
 
-        // ✅ FIXED: Changed locked_fby to locked_by
-        if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at >= $lockDuration) {
-            return redirect()->route('BudgetOfficer.dvrequests.index')
-                ->with('error', 'This DV Request is currently being processed by another user.');
-        }
+    // Lock handling
+    if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at >= $lockDuration) {
+        return redirect()->route('BudgetOfficer.dvrequests.index')
+            ->with('error', 'This DV Request is currently being processed by another user.');
+    }
 
-        if (!$dvRequest->locked_by || $dvRequest->locked_at < $lockDuration || $dvRequest->locked_by === $currentUserId) {
-            $dvRequest->update([
-                'locked_by' => $currentUserId,
-                'locked_at' => now(),
-            ]);
-        }
-        
-        $orsRequest = $dvRequest->orsRequest ?? null;
-        $lastLog = $dvRequest->logs()->latest()->first();
-        $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
-        
-        $uacsCodes = $orsRequest ? $orsRequest->uacsCodes()->orderBy('pivot_order')->get() : collect();
-        
-        $selectableUacsCodes = UacsCode::selectable()
-            ->with('parent.parent.parent')
-            ->orderBy('level')
-            ->orderBy('sort_order')
-            ->orderBy('uacscode')
-            ->get()
-            ->map(function($uacs) {
-                return [
-                    'id' => $uacs->id,
-                    'code' => $uacs->uacscode,
-                    'description' => $uacs->description,
-                    'full_path' => $uacs->full_path,
-                    'level' => $uacs->level,
-                ];
-            });
-
-        // ✅ GET ATTACHMENTS BASED ON PROGRAM
-        $attachments = collect();
-        $selectedModality = null;
-        $tevAttachments = collect();
-        $tevSelectedModality = null;
-
-        switch ($dvRequest->program->prcode ?? '') {
-            case 'GIP':
-                $attachments = $dvRequest->gipAttachments ?? collect();
-                break;
-                
-            case 'TUPAD':
-                $selectedModality = $dvRequest->tupad_modality;
-                if ($selectedModality) {
-                    $attachments = $dvRequest->tupadAttachments()
-                        ->where('modality', $selectedModality)
-                        ->orderBy('sort_order')
-                        ->get();
-                }
-                break;
-                
-            case 'TEV':
-                $tevSelectedModality = $dvRequest->tev_modality;
-                if ($tevSelectedModality) {
-                    $tevAttachments = $dvRequest->tevAttachments()
-                        ->where('modality', $tevSelectedModality)
-                        ->orderBy('sort_order')
-                        ->get();
-                }
-                break;
-        }
-        
-        return view('BudgetOfficer.obligatedvors', [
-            'dvRequest'           => $dvRequest,
-            'orsRequest'          => $orsRequest,
-            'lastStep'            => $lastStep,
-            'selectableUacsCodes' => $selectableUacsCodes,
-            'adlCodes'            => AdlCode::orderBy('adlcode')->get(),
-            'allotment_classes'   => AllotmentClass::all(),
-            'mfopaps'             => MfoPap::all(),
-            'contcurrents'        => ContinuingOrCurrent::all(),
-            'uacsCodes'           => $uacsCodes,
-            'amount'              => $dvRequest->amount,
-            'attachments'         => $attachments, // ✅ PASS ATTACHMENTS
-            'selectedModality'    => $selectedModality, // ✅ PASS MODALITY
-            'tevAttachments'      => $tevAttachments, // ✅ PASS TEV ATTACHMENTS
-            'tevSelectedModality' => $tevSelectedModality, // ✅ PASS TEV MODALITY
+    if (!$dvRequest->locked_by || $dvRequest->locked_at < $lockDuration || $dvRequest->locked_by === $currentUserId) {
+        $dvRequest->update([
+            'locked_by' => $currentUserId,
+            'locked_at' => now(),
         ]);
     }
+    
+    $orsRequest = $dvRequest->orsRequest ?? null;
+    $lastLog = $dvRequest->logs()->latest()->first();
+    $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
+    
+    $uacsCodes = $orsRequest ? $orsRequest->uacsCodes()->orderBy('pivot_order')->get() : collect();
+    
+    $selectableUacsCodes = UacsCode::selectable()
+        ->with('parent.parent.parent')
+        ->orderBy('level')
+        ->orderBy('sort_order')
+        ->orderBy('uacscode')
+        ->get()
+        ->map(function($uacs) {
+            return [
+                'id' => $uacs->id,
+                'code' => $uacs->uacscode,
+                'description' => $uacs->description,
+                'full_path' => $uacs->full_path,
+                'level' => $uacs->level,
+            ];
+        });
+
+    // ✅ GET ATTACHMENTS BASED ON PROGRAM
+    $attachments = collect();
+    $selectedModality = null;
+    $tevAttachments = collect();
+    $tevSelectedModality = null;
+    $tupadAttachments = collect();
+    $tupadSelectedModality = null;
+
+    switch ($dvRequest->program->prcode ?? '') {
+        case 'GIP':
+            $attachments = $dvRequest->gipAttachments ?? collect();
+            break;
+            
+        case 'TUPAD':
+            $tupadSelectedModality = $dvRequest->tupad_modality;
+            if ($tupadSelectedModality) {
+                $tupadAttachments = $dvRequest->tupadAttachments()
+                    ->where('modality', $tupadSelectedModality)
+                    ->orderBy('sort_order')
+                    ->get();
+            }
+            break;
+            
+        case 'TEV':
+            $tevSelectedModality = $dvRequest->tev_modality;
+            if ($tevSelectedModality) {
+                $tevAttachments = $dvRequest->tevAttachments()
+                    ->where('modality', $tevSelectedModality)
+                    ->orderBy('sort_order')
+                    ->get();
+            }
+            break;
+    }
+    
+    return view('BudgetOfficer.obligatedvors', [
+        'dvRequest'           => $dvRequest,
+        'orsRequest'          => $orsRequest,
+        'lastStep'            => $lastStep,
+        'selectableUacsCodes' => $selectableUacsCodes,
+        'adlCodes'            => AdlCode::orderBy('adlcode')->get(),
+        'allotment_classes'   => AllotmentClass::all(),
+        'mfopaps'             => MfoPap::all(),
+        'contcurrents'        => ContinuingOrCurrent::all(),
+        'uacsCodes'           => $uacsCodes,
+        'amount'              => $dvRequest->amount,
+        // ✅ PASS ALL ATTACHMENTS TO VIEW
+        'attachments'         => $attachments, // GIP
+        'selectedModality'    => $selectedModality, 
+        'tevAttachments'      => $tevAttachments, // TEV
+        'tevSelectedModality' => $tevSelectedModality,
+        'tupadAttachments'    => $tupadAttachments, // TUPAD
+        'tupadSelectedModality' => $tupadSelectedModality,
+    ]);
+}
 
     public function receive(Request $request, $id)
     {

@@ -132,125 +132,316 @@
                     @endif
 
                     <!-- Attachments Display Section -->
-                    @if($dvRequest->program->prcode === 'GIP')
-                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <h2 class="text-lg font-semibold text-gray-800 mb-3">GIP Attachments</h2>
-                        
-                        @if($attachments && $attachments->count() > 0)
-                            <div class="space-y-2">
-                                @foreach($attachments as $attachment)
-                                <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                    <div class="flex items-center space-x-3">
-                                        @if($attachment->is_present)
-                                            <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                            </svg>
-                                        @else
-                                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                            </svg>
-                                        @endif
-                                        <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
-                                            {{ $attachment->name }}
-                                        </span>
-                                    </div>
-                                    <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
-                                        {{ $attachment->is_present ? 'Present' : 'Missing' }}
-                                    </span>
-                                </div>
-                                @endforeach
-                            </div>
-                        @else
-                            <p class="text-gray-500 italic">No attachments available for this GIP request.</p>
-                        @endif
-                    </div>
-                    @endif
+                   <!-- Add this section to obligatedvors.blade.php after the Payment Details section and before UACS Code Section -->
 
-                    @if($dvRequest->program->prcode === 'TUPAD')
-                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                            TUPAD Attachments
-                            @if($selectedModality)
-                                <span class="text-sm font-normal text-blue-600">
-                                    (Modality: {{ ucfirst(str_replace('_', ' ', $selectedModality)) }})
-                                </span>
-                            @endif
-                        </h3>
+<!-- ✅ UNIFIED ATTACHMENTS DISPLAY SECTION -->
+@if($dvRequest->program->prcode === 'GIP')
+<div class="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-5 shadow-sm">
+    <div class="flex items-center mb-4">
+        <svg class="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <h2 class="text-xl font-bold text-gray-800">GIP Attachments Checklist</h2>
+        <span class="ml-auto text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Verified by Incoming</span>
+    </div>
+    
+    @if($attachments && $attachments->count() > 0)
+        @php
+            $presentCount = $attachments->where('is_present', 1)->count();
+            $notPresentCount = $attachments->where('is_present', 0)->count();
+            $naCount = $attachments->where('is_present', null)->count();
+            $totalCount = $attachments->count();
+        @endphp
+        
+        <!-- Summary Stats -->
+        <div class="grid grid-cols-4 gap-3 mb-4">
+            <div class="bg-white rounded-lg p-3 text-center border border-gray-200">
+                <div class="text-2xl font-bold text-gray-700">{{ $totalCount }}</div>
+                <div class="text-xs text-gray-500">Total</div>
+            </div>
+            <div class="bg-green-50 rounded-lg p-3 text-center border border-green-200">
+                <div class="text-2xl font-bold text-green-700">{{ $presentCount }}</div>
+                <div class="text-xs text-green-600">Present</div>
+            </div>
+            <div class="bg-red-50 rounded-lg p-3 text-center border border-red-200">
+                <div class="text-2xl font-bold text-red-700">{{ $notPresentCount }}</div>
+                <div class="text-xs text-red-600">Not Present</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
+                <div class="text-2xl font-bold text-gray-700">{{ $naCount }}</div>
+                <div class="text-xs text-gray-500">N/A</div>
+            </div>
+        </div>  
+<!-- Attachments List -->
+<div class="space-y-2 max-h-96 overflow-y-auto">
+    @foreach($attachments as $attachment)
+        @php
+            // Use consistent comparison - either all integers or all booleans
+            $isPresent = $attachment->is_present === true;
+            $isNotPresent = $attachment->is_present === false;
+            $isNull = $attachment->is_present === null;
+        @endphp
+        
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border-2 
+            {{ $isPresent ? 'border-green-300 bg-green-50' : ($isNotPresent ? 'border-red-300 bg-red-50' : 'border-gray-200') }}">
+            <div class="flex items-center space-x-3 flex-1">
+                @if($isPresent)
+                    <svg class="h-6 w-6 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @elseif($isNotPresent)
+                    <svg class="h-6 w-6 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @else
+                    <svg class="h-6 w-6 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @endif
+                <div class="flex-1">
+                    <span class="text-sm font-semibold text-gray-900 block">{{ $attachment->name }}</span>
+                    <span class="text-sm font-semibold text-gray-900 block">💬{{ $attachment->remarks }}</span>
+                </div>
+            </div>
+            <span class="text-xs font-bold px-3 py-1.5 rounded-full 
+                {{ $isPresent ? 'bg-green-200 text-green-800' : ($isNotPresent ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-700') }}">
+                {{ $isPresent ? '✓ Present' : ($isNotPresent ? '✗ Not Present' : '— N/A') }}
+            </span>
+        </div>
+    @endforeach
+</div>
 
-                        @if($selectedModality && $attachments && $attachments->count() > 0)
-                            <div class="space-y-2">
-                                @foreach($attachments as $attachment)
-                                <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                    <div class="flex items-center space-x-3">
-                                        @if($attachment->is_present)
-                                            <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                            </svg>
-                                        @else
-                                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
-                                            </svg>
-                                        @endif
-                                        <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
-                                            {{ $attachment->name }}
-                                        </span>
-                                    </div>
-                                    <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
-                                        {{ $attachment->is_present ? 'Present' : 'Missing' }}
-                                    </span>
-                                </div>
-                                @endforeach
-                            </div>
-                        @elseif(!$selectedModality)
-                            <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
-                        @else
-                            <p class="text-gray-400">No attachments found for the selected modality.</p>
-                        @endif
-                    </div>
-                    @endif
+@else
+    <div class="text-center py-8">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <p class="text-gray-500 italic mt-2">No attachments available for this GIP request.</p>
+    </div>
+@endif
+</div>
+@endif
 
-                    @if($dvRequest->program->prcode === 'TEV')
-                    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                            TEV Attachments
-                            @if($tevSelectedModality)
-                                <span class="text-sm font-normal text-blue-600">
-                                    (Modality: {{ ucfirst(str_replace('_', ' ', $tevSelectedModality)) }})
-                                </span>
-                            @endif
-                        </h3>
+@if($dvRequest->program->prcode === 'TUPAD')
+<div class="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-5 shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center">
+            <svg class="w-6 h-6 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <h3 class="text-xl font-bold text-gray-800">TUPAD Attachments Checklist</h3>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">Verified by Incoming</span>
+            @if($tupadSelectedModality)
+                <span class="text-sm font-semibold px-3 py-1 bg-purple-200 text-purple-800 rounded-full">
+                    📋 {{ ucfirst(str_replace('_', ' ', $tupadSelectedModality)) }}
+                </span>
+            @endif
+        </div>
+    </div>
 
-                        @if($tevSelectedModality && $tevAttachments && $tevAttachments->count() > 0)
-                            <div class="space-y-2">
-                                @foreach($tevAttachments as $attachment)
-                                <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                    <div class="flex items-center space-x-3">
-                                        @if($attachment->is_present)
-                                            <svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                            </svg>
-                                        @else
-                                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18-6M6 6l12 12"></path>
-                                            </svg>
-                                        @endif
-                                        <span class="text-sm font-medium text-gray-900 {{ $attachment->is_present ? '' : 'text-gray-500' }}">
-                                            {{ $attachment->name }}
-                                        </span>
-                                    </div>
-                                    <span class="text-xs px-2 py-1 rounded-full {{ $attachment->is_present ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">
-                                        {{ $attachment->is_present ? 'Present' : 'Missing' }}
-                                    </span>
-                                </div>
-                                @endforeach
-                            </div>
-                        @elseif(!$tevSelectedModality)
-                            <p class="text-gray-500 italic">No modality was selected by IMSD for this request.</p>
-                        @else
-                            <p class="text-gray-400">No attachments found for the selected modality.</p>
-                        @endif
-                    </div>
-                    @endif
+    @if($tupadSelectedModality && $tupadAttachments && $tupadAttachments->count() > 0)
+        @php
+            $presentCount = $tupadAttachments->where('is_present', 1)->count();
+            $notPresentCount = $tupadAttachments->where('is_present', 0)->count();
+            $naCount = $tupadAttachments->where('is_present', null)->count();
+            $totalCount = $tupadAttachments->count();
+        @endphp
+        
+        <!-- Summary Stats -->
+        <div class="grid grid-cols-4 gap-3 mb-4">
+            <div class="bg-white rounded-lg p-3 text-center border border-gray-200">
+                <div class="text-2xl font-bold text-gray-700">{{ $totalCount }}</div>
+                <div class="text-xs text-gray-500">Total</div>
+            </div>
+            <div class="bg-green-50 rounded-lg p-3 text-center border border-green-200">
+                <div class="text-2xl font-bold text-green-700">{{ $presentCount }}</div>
+                <div class="text-xs text-green-600">Present</div>
+            </div>
+            <div class="bg-red-50 rounded-lg p-3 text-center border border-red-200">
+                <div class="text-2xl font-bold text-red-700">{{ $notPresentCount }}</div>
+                <div class="text-xs text-red-600">Not Present</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
+                <div class="text-2xl font-bold text-gray-700">{{ $naCount }}</div>
+                <div class="text-xs text-gray-500">N/A</div>
+            </div>
+        </div>
+        
+   <div class="space-y-2 max-h-96 overflow-y-auto">
+    @foreach($tupadAttachments as $attachment)
+        @php
+            // Determine status based on both is_present and remarks
+            $isPresent = $attachment->is_present === true;
+            $isNotPresent = $attachment->is_present === false;
+            $isNull = $attachment->is_present === null;
+            
+            // Check if it's "Not Applicable" (NULL with "Not applicable" remarks)
+            $isNotApplicable = $isNull && $attachment->remarks === 'Not applicable';
+            // Check if it's "Not Reviewed" (NULL without "Not applicable" remarks)
+            $isNotReviewed = $isNull && !$isNotApplicable;
+        @endphp
+        
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border-2 
+            {{ $isPresent ? 'border-green-300 bg-green-50' : ($isNotPresent ? 'border-red-300 bg-red-50' : ($isNotApplicable ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200')) }}">
+            
+            <div class="flex items-center space-x-3 flex-1">
+                {{-- Icon --}}
+                @if($isPresent)
+                    <svg class="h-6 w-6 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @elseif($isNotPresent)
+                    <svg class="h-6 w-6 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @elseif($isNotApplicable)
+                    {{-- N/A icon (different from not reviewed) --}}
+                    <svg class="h-6 w-6 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                    </svg>
+                @else
+                    {{-- Not reviewed icon --}}
+                    <svg class="h-6 w-6 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @endif
+                
+                <div class="flex-1">
+                    <span class="text-sm font-semibold text-gray-900 block">{{ $attachment->name }}</span>
+                    <span class="text-sm font-semibold text-gray-900 block">💬{{ $attachment->remarks }}</span>
+                </div>
+            </div>
+            
+            {{-- Status badge --}}
+            <span class="text-xs font-bold px-3 py-1.5 rounded-full 
+                {{ $isPresent ? 'bg-green-200 text-green-800' : ($isNotPresent ? 'bg-red-200 text-red-800' : ($isNotApplicable ? 'bg-yellow-200 text-yellow-800' : 'bg-gray-200 text-gray-700')) }}">
+                {{ $isPresent ? '✓ Present' : ($isNotPresent ? '✗ Not Present' : ($isNotApplicable ? '⚠ N/A' : '— Not Reviewed')) }}
+            </span>
+        </div>
+    @endforeach
+</div>
+    @elseif(!$tupadSelectedModality)
+        <div class="text-center py-8">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <p class="text-gray-500 italic mt-2">No modality was selected by Incoming for this request.</p>
+        </div>
+    @else
+        <div class="text-center py-8">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <p class="text-gray-400 mt-2">No attachments found for the selected modality.</p>
+        </div>
+    @endif
+</div>
+@endif
+
+@if($dvRequest->program->prcode === 'TEV')
+<div class="mb-6 bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-xl p-5 shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center">
+            <svg class="w-6 h-6 text-emerald-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <h3 class="text-xl font-bold text-gray-800">TEV Attachments Checklist</h3>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded">Verified by Incoming</span>
+            @if($tevSelectedModality)
+                <span class="text-sm font-semibold px-3 py-1 bg-emerald-200 text-emerald-800 rounded-full">
+                    📋 {{ ucfirst(str_replace('_', ' ', $tevSelectedModality)) }}
+                </span>
+            @endif
+        </div>
+    </div>
+
+    @if($tevSelectedModality && $tevAttachments && $tevAttachments->count() > 0)
+        @php
+            $presentCount = $tevAttachments->where('is_present', 1)->count();
+            $notPresentCount = $tevAttachments->where('is_present', 0)->count();
+            $naCount = $tevAttachments->where('is_present', null)->count();
+            $totalCount = $tevAttachments->count();
+        @endphp
+        
+        <!-- Summary Stats -->
+        <div class="grid grid-cols-4 gap-3 mb-4">
+            <div class="bg-white rounded-lg p-3 text-center border border-gray-200">
+                <div class="text-2xl font-bold text-gray-700">{{ $totalCount }}</div>
+                <div class="text-xs text-gray-500">Total</div>
+            </div>
+            <div class="bg-green-50 rounded-lg p-3 text-center border border-green-200">
+                <div class="text-2xl font-bold text-green-700">{{ $presentCount }}</div>
+                <div class="text-xs text-green-600">Present</div>
+            </div>
+            <div class="bg-red-50 rounded-lg p-3 text-center border border-red-200">
+                <div class="text-2xl font-bold text-red-700">{{ $notPresentCount }}</div>
+                <div class="text-xs text-red-600">Not Present</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
+                <div class="text-2xl font-bold text-gray-700">{{ $naCount }}</div>
+                <div class="text-xs text-gray-500">N/A</div>
+            </div>
+        </div>
+        
+       <!-- Attachments List -->
+<div class="space-y-2 max-h-96 overflow-y-auto">
+    @foreach($tevAttachments as $attachment)
+        @php
+            // Define status variables for consistent comparison
+            $isPresent = $attachment->is_present === 1 || $attachment->is_present === true;
+            $isNotPresent = $attachment->is_present === 0 || $attachment->is_present === false;
+            $isNull = $attachment->is_present === null;
+        @endphp
+        
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border-2 
+            {{ $isPresent ? 'border-green-300 bg-green-50' : ($isNotPresent ? 'border-red-300 bg-red-50' : 'border-gray-200') }}">
+            <div class="flex items-center space-x-3 flex-1">
+                @if($isPresent)
+                    <svg class="h-6 w-6 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @elseif($isNotPresent)
+                    <svg class="h-6 w-6 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @else
+                    <svg class="h-6 w-6 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                @endif
+                <div class="flex-1">
+                    <span class="text-sm font-semibold text-gray-900 block">{{ $attachment->name }}</span>
+                    <span class="text-sm font-semibold text-gray-900 block">💬{{ $attachment->remarks }}</span>
+                </div>
+            </div>
+            <span class="text-xs font-bold px-3 py-1.5 rounded-full 
+                {{ $isPresent ? 'bg-green-200 text-green-800' : ($isNotPresent ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-700') }}">
+                {{ $isPresent ? '✓ Present' : ($isNotPresent ? '✗ Not Present' : '— N/A') }}
+            </span>
+        </div>
+    @endforeach
+</div>
+@elseif(!$tevSelectedModality)
+    <div class="text-center py-8">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+        </svg>
+        <p class="text-gray-500 italic mt-2">No modality was selected by Incoming for this request.</p>
+    </div>
+@else
+    <div class="text-center py-8">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <p class="text-gray-400 mt-2">No attachments found for the selected modality.</p>
+    </div>
+@endif
+</div>
+@endif
 
                     <!-- UACS Code Section -->
                     <div>

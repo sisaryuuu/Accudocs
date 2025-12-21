@@ -37,16 +37,31 @@ use App\Http\Requests\AccountingUnitEmailVerificationRequest;
 use App\Models\AccountingUnit;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schedule;
 use App\Http\Controllers\AnalyticsController;
 
 
+Route::prefix('admin')->name('admin.')->group(function () {
+    
+    // Main dashboard view with optional date filters
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    
+    // API endpoints for data fetching (with date filters)
+    Route::get('/dashboard/data', [DashboardController::class, 'fetchData'])->name('dashboard.data');
+    
+    // Filter endpoint (GET method for form submission)
+    Route::get('/dashboard/filter', [DashboardController::class, 'filter'])->name('dashboard.filter');
+    
+    // Quick filter presets
+    Route::get('/dashboard/preset/{preset}', [DashboardController::class, 'preset'])->name('dashboard.preset');
+    
+    // Manual refresh trigger
+    Route::post('/dashboard/refresh', [DashboardController::class, 'refresh'])->name('dashboard.refresh');
+    
+    // Export data
+    Route::get('/dashboard/export', [DashboardController::class, 'export'])->name('dashboard.export');
+});
 
-// Dashboard Routes
-Route::get('/admin/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
-Route::get('/admin/dashboard/fetch-data', [DashboardController::class, 'fetchData'])->name('admin.dashboard.fetch');
-Route::get('/admin/dashboard/data', [DashboardController::class, 'fetchData'])->name('admin.dashboard.data');
-Route::get('/admin/dashboard/filter', [DashboardController::class, 'filter'])->name('admin.dashboard.filter');
-Route::post('/admin/dashboard/refresh', [DashboardController::class, 'refresh'])->name('admin.dashboard.refresh'); // Add this line
 
 Route::get('/test-chart', function () {
     return view('test-chart');
@@ -451,6 +466,9 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|IMSD'])->prefix('Regional
         ->name('RegionalOffices.IMSD.dvrequests.tupadAttachments');
     
     // Aging routes
+       Route::post('/aging/notify-focal-persons', [DvRequestAgingController::class, 'notifyFocalPersonsOfAgingDocuments'])
+        ->name('aging.notifyFocalPersons');
+        
     Route::get('/aging-documents', [DvRequestAgingController::class, 'getAgingDocuments'])
         ->name('IMSD.aging.documents');
     
@@ -505,12 +523,12 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-GIP'])->prefix('
     
     Route::get('/aging/statistics', [GIPRequestAgingController::class, 'getAgingStatistics'])
         ->middleware('permission:gip.view')
-        ->name('GIP.aging.statistics');
-    
-    Route::post('/aging-alerts/{alertId}/acknowledge', [GIPRequestAgingController::class, 'acknowledgeAlert'])
-        ->middleware('permission:gip.approve')
-        ->name('GIP.aging.acknowledge');
-    
+        ->name('GIP.aging.statistics');   
+        // Aging routes
+
+       Route::post('/aging/notify-focal-persons', [GIPRequestAgingController::class, 'notifyFocalPersonsOfAgingDocuments'])
+        ->name('GIP.aging.notifyFocalPersons');
+   
     // Optional: Route to send aging alerts manually (for testing)
     Route::post('/aging/send-alerts', [GIPRequestAgingController::class, 'sendAgingAlerts'])
         ->middleware('permission:gip.approve')
@@ -559,6 +577,8 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TUPAD'])->prefix
     Route::post('/dvrequests/{id}/release-lock', [TupadDvRequestProcessingController::class, 'releaseLock'])
     ->name('Incoming.TUPAD.dvrequests.releaseLock');
     // Aging routes
+    Route::post('/notify-focal-persons', [TUPADRequestAgingController::class, 'notifyFocalPersonsOfAgingDocuments'])
+    ->name('TUPAD.aging.notifyFocalPersons');
   Route::get('/aging-documents', [TUPADRequestAgingController::class, 'getAgingDocuments'])
     ->name('TUPAD.aging.documents');
 Route::get('/aging-statistics', [TUPADRequestAgingController::class, 'getAgingStatistics'])
@@ -604,6 +624,9 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Incoming-TEV'])->prefix('
    
 
       // ============ TEV AGING ROUTES ============
+      Route::post('/aging/notify-focal-persons', [TEVRequestAgingController::class, 'notifyFocalPersonsOfAgingDocuments'])
+        ->name('TEV.aging.notifyFocalPersons');
+
     Route::get('/aging/documents', [TEVRequestAgingController::class, 'getAgingDocuments'])
         ->middleware('permission:tev.view')
         ->name('TEV.aging.documents');
@@ -627,6 +650,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
     Route::get('/dvrequests/fetch', [ObligateDVORSController::class, 'fetchDvRequests'])
         ->middleware('permission:budget.view')
         ->name('dvrequests.fetch');
+        
     Route::get('/dvrequests/verify', [ObligateDVORSController::class, 'redirectToFirstPending'])
         ->middleware('permission:budget.view')
         ->name('dvrequests.verifyors');
@@ -635,7 +659,7 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
         ->middleware('permission:budget.view')
         ->name('dvrequests.loghistory');
         
-    // View specific DV request (this should be LAST among GET routes)
+    // View specific DV request
     Route::get('/dvrequests/{id}', [ObligateDVORSController::class, 'show'])
         ->middleware('permission:budget.view')
         ->name('dvrequests.withid');
@@ -657,14 +681,14 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
         ->name('dvrequests.store');
     
     Route::get('/dv-requests/{id}/preview-ors', [ObligateDVORSController::class, 'previewOrs'])
-    ->middleware('permission:budget.view')
-    ->name('dvrequests.previewOrs');
+        ->middleware('permission:budget.view')
+        ->name('dvrequests.previewOrs');
 
     Route::get('/dv-requests/{id}/generate-ors-pdf', [ObligateDVORSController::class, 'generateORSPDF'])
-    ->name('dvrequests.generateORSPDF');
+        ->name('dvrequests.generateORSPDF');
 
     Route::post('/dvrequests/{id}/reject', [ObligateDVORSController::class, 'reject'])
-    ->name('dvrequests.reject');
+        ->name('dvrequests.reject');
 
     Route::post('/dvrequests/{id}/onhold', [ObligateDVORSController::class, 'onhold'])
         ->middleware('permission:budget.onhold')
@@ -687,47 +711,44 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
         ->name('dvrequests.releaseLock');
     
     // ====================================
-    // ADL CODE ROUTES (NEW)
+    // ADL CODE ROUTES
     // ====================================
     
-    // Store new ADL Code
     Route::post('/adl/store', [ObligateDVORSController::class, 'storeADLCode'])
         ->middleware('permission:budget.edit')
         ->name('adl.store');
     
-    // Check if ADL Code exists (GET method is better for checking)
     Route::get('/adl/check', [ObligateDVORSController::class, 'checkADLCode'])
         ->middleware('permission:budget.view')
         ->name('adl.check');
-
-         Route::prefix('ors-aging')->group(function () {
+    
+    // ====================================
+    // ORS AGING ROUTES
+    // ====================================
+    
+    Route::prefix('ors-aging')->name('ors-aging.')->group(function () {
         // Get ORS aging documents
         Route::get('/documents', [ORSRequestAgingController::class, 'getAgingDocuments'])
             ->middleware('permission:budget.view')
-            ->name('ors-aging.documents');
+            ->name('documents');
             
         // Get ORS aging statistics
         Route::get('/statistics', [ORSRequestAgingController::class, 'getAgingStatistics'])
             ->middleware('permission:budget.view')
-            ->name('ors-aging.statistics');
-            
-        // Get unacknowledged alerts count
-        Route::get('/unacknowledged-count', [ORSRequestAgingController::class, 'getUnacknowledgedCount'])
-            ->middleware('permission:budget.view')
-            ->name('ors-aging.unacknowledged-count');
+            ->name('statistics');
             
         // Send aging alerts (admin/automated)
         Route::post('/send-alerts', [ORSRequestAgingController::class, 'sendAgingAlerts'])
             ->middleware('permission:budget.edit')
-            ->name('ors-aging.send-alerts');
+            ->name('send-alerts');
             
-        // Get ORS aging history
-        Route::get('/history', [ORSRequestAgingController::class, 'getAgingHistory'])
-            ->middleware('permission:budget.view')
-            ->name('ors-aging.history');
+        // Notify focal persons
+        Route::post('/notify-focal-persons', [ORSRequestAgingController::class, 'notifyFocalPersonsOfAgingDocuments'])
+            ->middleware('permission:budget.edit')
+            ->name('notify-focal-persons');
     });
 });
-
+// Outgoing Routes (Already good!)
 Route::middleware(['auth:web', 'verified', 'role:Admin|Outgoing'])->prefix('/Outgoing')->name('Outgoing.')->group(function () {
     // Main DV Requests Routes
     Route::get('/dvrequests', [OutgoingDvController::class, 'index'])
@@ -767,6 +788,10 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Outgoing'])->prefix('/Out
         ->middleware('permission:outgoing.view')
         ->name('dvrequests.withid');
     
+    Route::post('/dvrequests/{id}/update-attachment', [OutgoingDvController::class, 'updateAttachment'])
+        ->middleware('permission:outgoing.edit')
+        ->name('dvrequests.update-attachment');
+    
     // DV Request Actions
     Route::post('/dvrequests/{id}/receive', [OutgoingDvController::class, 'receive'])
         ->middleware('permission:outgoing.view')
@@ -794,71 +819,125 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Outgoing'])->prefix('/Out
         ->name('dvrequests.releaseLock');
     
     // ============ OUTGOING AGING ROUTES ============
-    Route::prefix('aging')->group(function () {
+    Route::prefix('aging')->name('aging.')->group(function () {
         Route::get('/documents', [OutgoingRequestAgingController::class, 'getAgingDocuments'])
             ->middleware('permission:outgoing.view')
-            ->name('aging.documents');
+            ->name('documents');
         
         Route::get('/statistics', [OutgoingRequestAgingController::class, 'getAgingStatistics'])
             ->middleware('permission:outgoing.view')
-            ->name('aging.statistics');
+            ->name('statistics');
         
+        // Note: sendAgingAlerts expects a parameter - we need to handle both cases
         Route::post('/alerts/send', [OutgoingRequestAgingController::class, 'sendAgingAlerts'])
             ->middleware('permission:outgoing.manage')
-            ->name('aging.alerts.send');
+            ->name('alerts.send');
+        
+        Route::post('/alerts/send-critical', function() {
+            $controller = app(OutgoingRequestAgingController::class);
+            return $controller->sendAgingAlerts(true); // true = critical only
+        })->middleware('permission:outgoing.manage')
+        ->name('alerts.send-critical');
+        
+        Route::post('/notify-focal-persons', [OutgoingRequestAgingController::class, 'notifyFocalPersonsOfAgingDocuments'])
+            ->middleware('permission:outgoing.manage')
+            ->name('notify-focal-persons');
+        
+        // User alert routes
+        Route::get('/user-alerts', [OutgoingRequestAgingController::class, 'getUserAgingAlerts'])
+            ->name('user-alerts');
+        
+        Route::post('/alerts/{alertId}/acknowledge', [OutgoingRequestAgingController::class, 'acknowledgeAlert'])
+            ->name('alerts.acknowledge');
     });
 });
 
-
-//Accountant III
-Route::middleware(['auth:web', 'verified', 'role:Admin|Accountant_III'])->prefix('Accounting')->name('Accounting.')->group(function () {
-    // Fix the history route - remove duplicate prefix
-    Route::get('/history', [RANCAController::class, 'history'])->name('history');
-    
-    // Your existing routes
+// Accountant III (RANCA) Routes - FIXED
+Route::middleware(['auth:web', 'verified', 'role:Admin|Accountant_III'])
+    ->prefix('/Accounting')
+    ->name('Accounting.')->group(function () {
+        
+    // RANCA controller routes
     Route::get('/dvrequests', [RANCAController::class, 'index'])
-    ->middleware('permission:accunit.view')
-    ->name('dvrequests.index');
+        ->middleware('permission:accunit.view')
+        ->name('dvrequests.index');
+    
     Route::get('/dvrequests/fetch', [RANCAController::class, 'fetchDvRequests'])
-    ->middleware('permission:accunit.view')
-    ->name('dvrequests.fetch');
+        ->middleware('permission:accunit.view')
+        ->name('dvrequests.fetch');
+    
     Route::get('/dvrequests/{id}', [RANCAController::class, 'show'])
-    ->middleware('permission:accunit.view')
-    ->name('dvrequests.show');
+        ->middleware('permission:accunit.view')
+        ->name('dvrequests.show');
+    
+    Route::get('/dvrequests/{id}/preview', [RANCAController::class, 'previewDv'])
+        ->name('dvrequests.preview');
+    
     Route::get('/redirect-first-pending', [RANCAController::class, 'redirectToFirstPending'])
-    ->middleware('permission:accunit.view')
-    ->name('dvrequest.redirectFirstPending');
+        ->middleware('permission:accunit.view')
+        ->name('dvrequest.redirectFirstPending');
+    
     Route::post('/dvrequests/{id}/receive', [RANCAController::class, 'receive'])
-    ->middleware('permission:accunit.validate')
-    ->name('dvrequests.receive');
+        ->middleware('permission:accunit.validate')
+        ->name('dvrequests.receive');
+    
     Route::put('/dvrequests/{id}/update-amount', [RANCAController::class, 'updateAmount'])
-    ->middleware('permission:accunit.edit')
-    ->name('dvrequests.updateAmount');
+        ->middleware('permission:accunit.edit')
+        ->name('dvrequests.updateAmount');
+    
     Route::post('/dvrequests/{id}/validate', [RANCAController::class, 'validateDV'])
-    ->middleware('permission:accunit.validate')
-    ->name('dvrequests.validate'); 
+        ->middleware('permission:accunit.validate')
+        ->name('dvrequests.validate'); 
+    
     Route::post('/dvrequests/{id}/reject', [RANCAController::class, 'reject'])
-    ->name('dvrequests.reject');
+        ->name('dvrequests.reject');
+    
     Route::post('/dvrequests/{id}/release-lock', [RANCAController::class, 'releaseLock'])   
-    ->name('dvrequests.releaseLock');
+        ->name('dvrequests.releaseLock');
+    
     Route::post('/dvrequests/{id}/refresh-lock', [RANCAController::class, 'refreshLock'])
-    ->name('dvrequests.refreshLock');
+        ->name('dvrequests.refreshLock');
+    
+    // History route - CORRECTED (was duplicating prefix)
+    Route::get('/history', [RANCAController::class, 'history'])
+        ->name('history');
 
     // ============ RANCA AGING ROUTES ============
-    Route::get('/aging/documents', [RANCARequestAgingController::class, 'getAgingDocuments'])
-    ->name('aging.documents');
-    
-    Route::get('/aging/statistics', [RANCARequestAgingController::class, 'getAgingStatistics'])
-    ->name('aging.statistics');
-    
-    Route::get('/aging/report', [RANCARequestAgingController::class, 'getAgingReport'])
-    ->name('aging.report');
-    
-    Route::post('/aging/alerts/send', [RANCARequestAgingController::class, 'sendAgingAlerts'])
-    ->name('aging.alerts.send');
-    
-    Route::post('/aging/alerts/cleanup', [RANCARequestAgingController::class, 'cleanupOldAlerts'])
-    ->name('aging.alerts.cleanup');
+    Route::prefix('aging')->name('aging.')->group(function () {
+        Route::get('/documents', [RANCARequestAgingController::class, 'getAgingDocuments'])
+            ->name('documents');
+        
+        Route::get('/statistics', [RANCARequestAgingController::class, 'getAgingStatistics'])
+            ->name('statistics');
+        
+        Route::get('/report', [RANCARequestAgingController::class, 'getAgingReport'])
+            ->name('report');
+        
+        // Regular aging alerts (3+ days)
+        Route::post('/alerts/send', [RANCARequestAgingController::class, 'sendAgingAlerts'])
+            ->name('alerts.send');
+        
+        // Critical aging alerts (10+ days only)
+        Route::post('/alerts/send-critical', function() {
+            $controller = app(RANCARequestAgingController::class);
+            return $controller->sendAgingAlerts(true);
+        })->name('alerts.send-critical');
+        
+        // Focal person notifications
+        Route::post('/notify-focal-persons', [RANCARequestAgingController::class, 'notifyFocalPersonsOfAgingDocuments'])
+            ->name('notify-focal-persons');
+        
+        // Cleanup old alerts
+        Route::post('/alerts/cleanup', [RANCARequestAgingController::class, 'cleanupOldAlerts'])
+            ->name('alerts.cleanup');
+        
+        // User alert routes
+        Route::get('/user-alerts', [RANCARequestAgingController::class, 'getUserAgingAlerts'])
+            ->name('user-alerts');
+        
+        Route::post('/alerts/{alertId}/acknowledge', [RANCARequestAgingController::class, 'acknowledgeAlert'])
+            ->name('alerts.acknowledge');
+    });
 });
 
 Route::prefix('sms')->group(function () {

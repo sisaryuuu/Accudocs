@@ -10,7 +10,7 @@
         <div class="lg:col-span-2 bg-white shadow rounded-xl p-6">
             <h1 class="text-2xl font-bold text-gray-900 mb-6">Incoming GIP</h1>
 
-            <form action="{{ route('Incoming.GIP.dvrequests.verify', $dvRequest->id) }}" method="POST" class="space-y-6">
+            <form action="{{ route('Incoming.GIP.dvrequests.verify', $dvRequest->id) }}" method="POST" class="space-y-6" id="verifyForm">
                 @csrf
 
                 <!-- Mode of Payment -->
@@ -81,7 +81,7 @@
                         <h3 class="text-lg font-semibold text-gray-900">GIP Attachments Checklist</h3>
                         
                         @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0 && $dvRequest->status === 'Incoming-GIP_received')
-                            <div class="flex items-center space-x-3">
+                            <div class="flex items-center space-x-3" id="bulk-actions">
                                 <button type="button" 
                                         onclick="markAllAsPresent()"
                                         class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
@@ -98,14 +98,6 @@
                                     </svg>
                                     All N/A
                                 </button>
-                                <button type="button" 
-                                        onclick="uncheckAll()"
-                                        class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
-                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                    Uncheck All
-                                </button>
                             </div>
                         @endif
                     </div>
@@ -113,19 +105,72 @@
                     @if($dvRequest->gipAttachments && $dvRequest->gipAttachments->count() > 0)
                         <div class="space-y-3" id="attachments-list">
                             @foreach($dvRequest->gipAttachments as $attachment)
-                                <div class="border rounded-lg p-4 transition-all duration-200 attachment-item
-                                    {{ $attachment->is_present === 1 ? 'bg-green-50 border-green-200' : ($attachment->is_present === 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200') }}"
-                                    data-attachment-id="{{ $attachment->id }}">
+                                @php
+                                    $isPayroll = false;
+                                    $attachmentName = strtolower($attachment->name ?? '');
+                                    if (str_contains($attachmentName, 'payroll') || str_contains($attachmentName, 'eup')) {
+                                        $isPayroll = true;
+                                    }
+                                    
+                                    // Determine the current status
+                                    $isPresent = $attachment->is_present ?? null;
+                                    
+                                    // Set color classes based on status
+                                    if ($isPresent === true || $isPresent === 1) {
+                                        $statusClass = 'bg-green-50 border-green-200';
+                                        $borderClass = 'border-green-300 bg-green-50';
+                                        $textClass = 'text-green-600';
+                                        $helperText = '✓ This document is complete and present.';
+                                    } elseif ($isPresent === false || $isPresent === 0) {
+                                        $statusClass = 'bg-red-50 border-red-200';
+                                        $borderClass = 'border-red-300 bg-red-50';
+                                        $textClass = 'text-gray-500';
+                                        $helperText = 'Describe what information or entries are missing from this document.';
+                                    } else {
+                                        // Default: N/A
+                                        $statusClass = 'bg-gray-50 border-gray-200';
+                                        $borderClass = 'border-gray-300 bg-gray-50';
+                                        $textClass = 'text-gray-500';
+                                        $helperText = 'Explain why this document is not applicable for this request.';
+                                    }
+                                    
+                                    // Set initial remarks text
+                                    $remarksText = $attachment->remarks ?? '';
+                                    
+                                    // For Present status, use default text if empty
+                                    if (($isPresent === true || $isPresent === 1) && empty($remarksText)) {
+                                        $remarksText = 'The attachment is present';
+                                    }
+                                    
+                                    // Set readonly based on status
+                                    $isReadonly = false;
+                                    if ($isPresent === true || $isPresent === 1) {
+                                        $isReadonly = true;
+                                    }
+                                @endphp
+                                
+                                <div class="border rounded-lg p-4 transition-all duration-200 attachment-item {{ $statusClass }}
+                                    {{ $isPayroll ? 'border-l-4 border-l-yellow-500' : '' }}"
+                                    data-attachment-id="{{ $attachment->id }}"
+                                    data-is-payroll="{{ $isPayroll ? 'true' : 'false' }}">
                                     
                                     <!-- Document Name & Status Row -->
                                     <div class="flex items-start justify-between mb-3">
-                                        <div class="flex-1">
+                                        <div class="flex-1 flex items-center">
                                             <label class="text-sm font-medium text-gray-900">
                                                 {{ $attachment->name }}
                                             </label>
+                                            @if($isPayroll)
+                                                <span class="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                    Required
+                                                </span>
+                                            @endif
                                         </div>
                                         
-                                        <!-- Status Selection - Changed to RADIO BUTTONS -->
+                                        <!-- Status Selection - RADIO BUTTONS -->
                                         <div class="flex items-center space-x-2" id="status-group-{{ $attachment->id }}">
                                             <label class="inline-flex items-center cursor-pointer">
                                                 <input type="radio" 
@@ -133,7 +178,7 @@
                                                     value="1"
                                                     class="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500 attachment-radio present-radio"
                                                     data-attachment-id="{{ $attachment->id }}"
-                                                    {{ $attachment->is_present === 1 ? 'checked' : '' }}
+                                                    {{ $isPresent === 1 ? 'checked' : '' }}
                                                     {{ $dvRequest->status === 'Incoming-GIP_received' ? '' : 'disabled' }}
                                                     onchange="handleStatusChange({{ $attachment->id }}, 1)">
                                                 <span class="ml-1.5 text-xs font-medium text-green-700">Present</span>
@@ -145,7 +190,7 @@
                                                     value="0"
                                                     class="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500 attachment-radio not-present-radio"
                                                     data-attachment-id="{{ $attachment->id }}"
-                                                    {{ $attachment->is_present === 0 ? 'checked' : '' }}
+                                                    {{ $isPresent === 0 ? 'checked' : '' }}
                                                     {{ $dvRequest->status === 'Incoming-GIP_received' ? '' : 'disabled' }}
                                                     onchange="handleStatusChange({{ $attachment->id }}, 0)">
                                                 <span class="ml-1.5 text-xs font-medium text-red-700">Not Present</span>
@@ -157,7 +202,7 @@
                                                     value="null"
                                                     class="h-4 w-4 text-gray-600 border-gray-300 focus:ring-gray-500 attachment-radio na-radio"
                                                     data-attachment-id="{{ $attachment->id }}"
-                                                    {{ $attachment->is_present === null ? 'checked' : '' }}
+                                                    {{ is_null($isPresent) ? 'checked' : '' }}
                                                     {{ $dvRequest->status === 'Incoming-GIP_received' ? '' : 'disabled' }}
                                                     onchange="handleStatusChange({{ $attachment->id }}, null)">
                                                 <span class="ml-1.5 text-xs font-medium text-gray-700">N/A</span>
@@ -166,7 +211,7 @@
                                             <!-- Hidden input to store the actual value -->
                                             <input type="hidden" 
                                                    name="gip_attachment_status_value[{{ $attachment->id }}]" 
-                                                   value="{{ $attachment->is_present ?? '' }}" 
+                                                   value="{{ $isPresent === 1 ? '1' : ($isPresent === 0 ? '0' : 'null') }}" 
                                                    id="status-value-{{ $attachment->id }}">
                                         </div>
                                     </div>
@@ -174,24 +219,21 @@
                                     <!-- Remarks/Lacking Input -->
                                     <div class="remarks-container" id="remarks-container-{{ $attachment->id }}">
                                         <label class="block text-xs font-medium text-gray-700 mb-1">
-                                            Remarks
+                                            Remarks <span class="text-red-500">*</span>
                                         </label>
                                         <textarea 
                                             name="gip_attachment_remarks[{{ $attachment->id }}]"
                                             id="remarks-{{ $attachment->id }}"
                                             rows="2"
-                                            class="w-full px-3 py-2 text-xs border {{ $attachment->is_present === 1 ? 'border-green-300 bg-green-50' : ($attachment->is_present === 0 ? 'border-red-300' : 'border-gray-300') }} rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
-                                            placeholder="{{ $attachment->is_present === 1 ? 'The attachment is present' : ($attachment->is_present === 0 ? 'Specify what is lacking or missing in this document...' : 'Not applicable') }}"
-                                            {{ $dvRequest->status === 'Incoming-GIP_received' ? '' : 'disabled' }}
-                                            maxlength="500">{{ $attachment->remarks ?? ($attachment->is_present === 1 ? 'The attachment is present' : '') }}</textarea>
-                                        <p class="text-xs {{ $attachment->is_present === 1 ? 'text-green-600' : 'text-gray-500' }} mt-1">
-                                            @if($attachment->is_present === 1)
-                                                ✓ This document is complete and present.
-                                            @elseif($attachment->is_present === 0)
-                                                Describe what information or entries are missing from this document.
-                                            @else
-                                                This document is not applicable for this request.
-                                            @endif
+                                            class="w-full px-3 py-2 text-xs border {{ $borderClass }} rounded-lg focus:ring-2 focus:ring-opacity-50 resize-none"
+                                            placeholder="{{ $isPresent === 1 ? 'The attachment is present' : 'Enter remarks...' }}"
+                                            {{ $dvRequest->status === 'Incoming-GIP_received' && !$isReadonly ? '' : 'readonly' }}
+                                            maxlength="500">{{ $remarksText }}</textarea>
+                                        <p class="text-xs {{ $textClass }} mt-1">
+                                            {{ $helperText }}
+                                        </p>
+                                        <p class="text-xs text-red-500 mt-1 hidden" id="remarks-error-{{ $attachment->id }}">
+                                            Remarks are required for N/A or Not Present attachments
                                         </p>
                                     </div>
                                 </div>
@@ -204,19 +246,19 @@
                                 <span class="flex items-center">
                                     <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
                                     <span class="text-green-700 font-medium" id="present-count">
-                                        Present: {{ $dvRequest->gipAttachments->where('is_present', 1)->count() }}
+                                        Present: {{ $dvRequest->gipAttachments->whereIn('is_present', [true, 1])->count() }}
                                     </span>
                                 </span>
                                 <span class="flex items-center">
                                     <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
                                     <span class="text-red-700 font-medium" id="not-present-count">
-                                        Not Present: {{ $dvRequest->gipAttachments->where('is_present', 0)->count() }}
+                                        Not Present: {{ $dvRequest->gipAttachments->whereIn('is_present', [false, 0])->count() }}
                                     </span>
                                 </span>
                                 <span class="flex items-center">
                                     <span class="w-3 h-3 bg-gray-400 rounded-full mr-1"></span>
                                     <span class="text-gray-700 font-medium" id="na-count">
-                                        N/A: {{ $dvRequest->gipAttachments->whereNull('is_present')->count() }}
+                                        N/A: {{ $dvRequest->gipAttachments->whereNotIn('is_present', [true, false, 1, 0])->count() }}
                                     </span>
                                 </span>
                             </div>
@@ -225,10 +267,36 @@
                             </span>
                         </div>
                         
+                        <!-- Important Information Box -->
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-4">
+                            <p class="text-sm text-yellow-800">
+                                <strong>Important:</strong> Remarks are <span class="font-bold">required</span> for:
+                            </p>
+                            <ul class="list-disc list-inside text-sm text-yellow-700 mt-1 space-y-1">
+                                <li>All attachments marked as <span class="font-bold">"N/A"</span> - Explain why the document is not applicable</li>
+                                <li>All attachments marked as <span class="font-bold">"Not Present"</span> - Specify what is missing or lacking</li>
+                                <li>Attachments marked as <span class="font-bold">"Present"</span> automatically have remarks filled</li>
+                            </ul>
+                        </div>
+                        
+                        <!-- Payroll Requirement Warning -->
+                        <div id="payroll-warning" class="hidden mt-3 bg-red-50 border border-red-200 rounded-lg p-4">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                </svg>
+                                <span class="text-red-800 font-medium">Payroll/EUP Payroll Required</span>
+                            </div>
+                            <p class="text-sm text-red-700 mt-1">
+                                The Payroll or EUP Payroll attachment must be marked as <span class="font-bold">"Present"</span> to verify this request.
+                                It cannot be marked as "Not Present" or "N/A".
+                            </p>
+                        </div>
+                        
                         <p class="text-xs text-gray-500 mt-3">
                             <strong>Note:</strong> Mark documents as "Present", "Not Present", or "N/A". 
+                            <span class="font-medium text-yellow-600">Payroll/EUP Payroll attachments are required and must be marked as "Present".</span>
                             When marked as "Present", a default remark "The attachment is present" will be automatically added.
-                            Use "Uncheck All" to clear all selections.
                         </p>
                     @else
                         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -323,7 +391,9 @@
                 @if($dvRequest->status === 'Incoming-GIP_received')
                     <div class="flex justify-end space-x-3" id="button-container">
                         <button type="submit"
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                                id="verifyButton"
+                                class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 verify-btn"
+                                {{ $dvRequest->status !== 'Incoming-GIP_received' ? 'disabled' : '' }}>
                             Verify
                         </button>
                         <button 
@@ -333,8 +403,9 @@
                             Reject
                         </button>
                         <a href="{{ route('Incoming.GIP.index') }}"
-                            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
-                            onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                              onclick="releaseLock(event, ${dvRequestId})" 
+                           >
                             Back
                         </a>
                     </div>
@@ -352,12 +423,12 @@
                         </button>
                         <a href="{{ route('Incoming.GIP.index') }}"
                             class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
-                            onclick="releaseLock(event, {{ $dvRequest->id }})">
+                            onclick="releaseLock(event, ${dvRequestId})">
                             Back
                         </a>
                     </div>
                 @else
-                    <a href="{{ route('Incoming.GIP.index') }}" onclick="releaseLock(event, {{ $dvRequest->id }})"
+                    <a href="{{ route('Incoming.GIP.index') }}"
                        class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
                         Back
                     </a>
@@ -447,7 +518,6 @@
 </div>
 
 <style>
-/* Smooth transitions */
 #rejectModal {
     transition: opacity 0.3s ease-in-out;
 }
@@ -467,25 +537,17 @@
     }
 }
 
-/* Custom radio button styling */
 .attachment-radio {
     cursor: pointer;
 }
 
-/* Textarea styling for different statuses */
-.textarea-present {
-    border-color: #10b981 !important;
-    background-color: #f0fdf4 !important;
+.verify-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
-.textarea-not-present {
-    border-color: #ef4444 !important;
-    background-color: #fef2f2 !important;
-}
-
-.textarea-na {
-    border-color: #d1d5db !important;
-    background-color: #f9fafb !important;
+.verify-btn:disabled:hover {
+    background-color: #059669;
 }
 </style>
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
@@ -494,29 +556,60 @@
 <script>
 let currentRejectId = null;
 
-// NEW FUNCTION: Uncheck all attachments
-function uncheckAll() {
-    // Get all enabled radio buttons
-    const allRadios = document.querySelectorAll('.attachment-radio:not(:disabled)');
+// Function to check payroll attachment status
+function checkPayrollRequirements() {
+    const verifyButton = document.getElementById('verifyButton');
+    const payrollWarning = document.getElementById('payroll-warning');
     
-    // Uncheck all radio buttons by removing the checked attribute
-    allRadios.forEach(radio => {
-        radio.checked = false;
-    });
+    if (!verifyButton) return;
     
-    // Update all attachment UIs to show no selection
-    const attachmentItems = document.querySelectorAll('.attachment-item');
-    attachmentItems.forEach(item => {
-        const attachmentId = item.dataset.attachmentId;
-        if (attachmentId) {
-            updateAttachmentUI(parseInt(attachmentId), null, true);
-            // Clear hidden value
-            document.getElementById(`status-value-${attachmentId}`).value = '';
+    // Find all payroll attachments (EUP Payroll or Payroll)
+    const payrollAttachments = document.querySelectorAll('.attachment-item[data-is-payroll="true"]');
+    let hasAtLeastOnePayrollPresent = false;
+    
+    // Check if at least ONE payroll attachment is marked as "Present"
+    payrollAttachments.forEach(attachment => {
+        const attachmentId = attachment.dataset.attachmentId;
+        const hiddenInput = document.getElementById(`status-value-${attachmentId}`);
+        const statusValue = hiddenInput ? hiddenInput.value : '';
+        
+        // If any payroll attachment is marked as "Present" (value = "1")
+        if (statusValue === '1') {
+            hasAtLeastOnePayrollPresent = true;
         }
     });
     
-    showMessage('All attachments have been unchecked', 'success');
-    updateAttachmentSummary();
+    // If there are payroll attachments
+    if (payrollAttachments.length > 0) {
+        if (hasAtLeastOnePayrollPresent) {
+            // At least one payroll attachment is present - enable verify button
+            verifyButton.disabled = false;
+            verifyButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            verifyButton.title = 'Verify this request';
+            
+            if (payrollWarning) {
+                payrollWarning.classList.add('hidden');
+            }
+        } else {
+            // No payroll attachments are marked as "Present" - disable verify button
+            verifyButton.disabled = true;
+            verifyButton.classList.add('opacity-50', 'cursor-not-allowed');
+            verifyButton.title = 'At least one Payroll or EUP Payroll attachment must be marked as "Present"';
+            
+            if (payrollWarning) {
+                payrollWarning.classList.remove('hidden');
+            }
+        }
+    } else {
+        // No payroll attachments found - enable verify button
+        verifyButton.disabled = false;
+        verifyButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        verifyButton.title = 'Verify this request';
+        
+        if (payrollWarning) {
+            payrollWarning.classList.add('hidden');
+        }
+    }
 }
 
 // Handle status change for radio buttons
@@ -525,84 +618,161 @@ function handleStatusChange(attachmentId, value) {
     updateAttachmentUI(attachmentId, value, false);
     
     // Update hidden input value
-    document.getElementById(`status-value-${attachmentId}`).value = value;
+    const hiddenInput = document.getElementById(`status-value-${attachmentId}`);
+    if (hiddenInput) {
+        hiddenInput.value = value;
+    }
     
     updateAttachmentSummary();
+    checkPayrollRequirements(); // Check payroll requirements after each change
+    
+    // Validate remarks for this attachment
+    validateRemarksForAttachment(attachmentId);
 }
 
 // Update attachment UI based on status
-function updateAttachmentUI(attachmentId, status, isCleared = false) {
+function updateAttachmentUI(attachmentId, status) {
     const item = document.querySelector(`[data-attachment-id="${attachmentId}"]`);
-    const remarksContainer = document.getElementById(`remarks-container-${attachmentId}`);
     const remarksTextarea = document.getElementById(`remarks-${attachmentId}`);
-    const remarksHelper = remarksContainer ? remarksContainer.querySelector('p.text-xs') : null;
+    const remarksHelper = item.querySelector('.remarks-container p.text-xs');
+    const remarksError = document.getElementById(`remarks-error-${attachmentId}`);
     
     // Remove all color classes
     item.classList.remove('bg-green-50', 'border-green-200', 'bg-red-50', 'border-red-200', 'bg-gray-50', 'border-gray-200');
+    if (remarksTextarea) {
+        remarksTextarea.classList.remove('border-green-300', 'border-red-300', 'border-gray-300', 
+                                        'bg-green-50', 'bg-red-50', 'bg-gray-50');
+    }
     
-    if (status === 1) {
+    if (status === 1 || status === '1') {
         // Present - Green
         item.classList.add('bg-green-50', 'border-green-200');
+        
         if (remarksTextarea) {
-            remarksTextarea.value = 'The attachment is present';
-            remarksTextarea.classList.add('textarea-present');
-            remarksTextarea.classList.remove('textarea-not-present', 'textarea-na');
+            // Auto-fill remarks for Present
+            if (!remarksTextarea.value || remarksTextarea.value === '') {
+                remarksTextarea.value = 'The attachment is present';
+            }
+            remarksTextarea.classList.add('border-green-300', 'bg-green-50');
             remarksTextarea.placeholder = 'The attachment is present';
             remarksTextarea.readOnly = true;
         }
         if (remarksHelper) {
             remarksHelper.textContent = '✓ This document is complete and present.';
-            remarksHelper.classList.remove('text-gray-500', 'text-red-600');
-            remarksHelper.classList.add('text-green-600');
+            remarksHelper.className = 'text-xs text-green-600 mt-1';
         }
-    } else if (status === 0) {
+        if (remarksError) {
+            remarksError.classList.add('hidden');
+        }
+    } else if (status === 0 || status === '0') {
         // Not Present - Red
         item.classList.add('bg-red-50', 'border-red-200');
+        
         if (remarksTextarea) {
-            // Clear the textarea if it has the default present message
+            // Clear if it has default "present" message
             if (remarksTextarea.value === 'The attachment is present') {
                 remarksTextarea.value = '';
             }
-            remarksTextarea.classList.add('textarea-not-present');
-            remarksTextarea.classList.remove('textarea-present', 'textarea-na');
+            remarksTextarea.classList.add('border-red-300', 'bg-red-50');
             remarksTextarea.placeholder = 'Specify what is lacking or missing in this document...';
             remarksTextarea.readOnly = false;
         }
         if (remarksHelper) {
             remarksHelper.textContent = 'Describe what information or entries are missing from this document.';
-            remarksHelper.classList.remove('text-green-600', 'text-gray-500');
-            remarksHelper.classList.add('text-gray-500');
+            remarksHelper.className = 'text-xs text-gray-500 mt-1';
         }
-    } else if (status === null) {
-        // N/A - Gray
+        if (remarksError) {
+            remarksError.textContent = 'Remarks are required for Not Present attachments';
+            remarksError.classList.remove('hidden');
+        }
+    } else if (status === null || status === 'null') {
+        // N/A - Gray (default) - Editable remarks
         item.classList.add('bg-gray-50', 'border-gray-200');
+        
         if (remarksTextarea) {
-            remarksTextarea.value = '';
-            remarksTextarea.classList.add('textarea-na');
-            remarksTextarea.classList.remove('textarea-present', 'textarea-not-present');
-            remarksTextarea.placeholder = 'Not applicable';
-            remarksTextarea.readOnly = true;
+            // Clear if it's the default "present" message
+            if (remarksTextarea.value === 'The attachment is present') {
+                remarksTextarea.value = '';
+            }
+            remarksTextarea.classList.add('border-gray-300', 'bg-gray-50');
+            remarksTextarea.placeholder = 'Explain why this document is not applicable...';
+            remarksTextarea.readOnly = false; // Make it editable for N/A
         }
         if (remarksHelper) {
-            remarksHelper.textContent = 'This document is not applicable for this request.';
-            remarksHelper.classList.remove('text-green-600', 'text-gray-500');
-            remarksHelper.classList.add('text-gray-500');
+            remarksHelper.textContent = 'Explain why this document is not applicable for this request.';
+            remarksHelper.className = 'text-xs text-gray-500 mt-1';
+        }
+        if (remarksError) {
+            remarksError.textContent = 'Remarks are required for N/A attachments';
+            remarksError.classList.remove('hidden');
         }
     } else {
         // No selection - Default
         item.classList.add('bg-gray-50', 'border-gray-200');
+        
         if (remarksTextarea) {
             remarksTextarea.value = '';
-            remarksTextarea.classList.remove('textarea-present', 'textarea-not-present', 'textarea-na');
             remarksTextarea.placeholder = 'Select a status first...';
             remarksTextarea.readOnly = true;
         }
         if (remarksHelper) {
             remarksHelper.textContent = 'Please select a status for this document.';
-            remarksHelper.classList.remove('text-green-600', 'text-red-600');
-            remarksHelper.classList.add('text-gray-500');
+            remarksHelper.className = 'text-xs text-gray-500 mt-1';
         }
     }
+}
+
+// Validate remarks for a specific attachment
+function validateRemarksForAttachment(attachmentId) {
+    const hiddenInput = document.getElementById(`status-value-${attachmentId}`);
+    const remarksTextarea = document.getElementById(`remarks-${attachmentId}`);
+    const remarksError = document.getElementById(`remarks-error-${attachmentId}`);
+    
+    if (!hiddenInput || !remarksTextarea || !remarksError) return true;
+    
+    const status = hiddenInput.value;
+    const remarks = remarksTextarea.value.trim();
+    
+    // For Present status, we auto-fill remarks, so always valid
+    if (status === '1') {
+        remarksError.classList.add('hidden');
+        return true;
+    }
+    
+    // For N/A and Not Present, remarks are required
+    if ((status === 'null' || status === '0') && !remarks) {
+        remarksError.classList.remove('hidden');
+        return false;
+    }
+    
+    remarksError.classList.add('hidden');
+    return true;
+}
+
+// Validate all attachments remarks
+function validateAllAttachmentsRemarks() {
+    const allHiddenInputs = document.querySelectorAll('input[name^="gip_attachment_status_value"]');
+    let allValid = true;
+    const invalidAttachments = [];
+    
+    allHiddenInputs.forEach(input => {
+        const attachmentId = input.name.match(/\[(.*?)\]/)[1];
+        const isValid = validateRemarksForAttachment(attachmentId);
+        
+        if (!isValid) {
+            allValid = false;
+            // Get attachment name for error message
+            const item = document.querySelector(`[data-attachment-id="${attachmentId}"]`);
+            if (item) {
+                const label = item.querySelector('label.text-sm.font-medium.text-gray-900');
+                if (label) {
+                    invalidAttachments.push(label.textContent.trim());
+                }
+            }
+        }
+    });
+    
+    return { allValid, invalidAttachments };
 }
 
 // Mark all attachments as present
@@ -619,6 +789,7 @@ function markAllAsPresent() {
     });
     showMessage('All attachments marked as Present', 'success');
     updateAttachmentSummary();
+    checkPayrollRequirements(); // Check payroll requirements
 }
 
 // Mark all attachments as N/A
@@ -635,6 +806,7 @@ function markAllAsNA() {
     });
     showMessage('All attachments marked as N/A', 'success');
     updateAttachmentSummary();
+    checkPayrollRequirements(); // Check payroll requirements
 }
 
 // Update character count
@@ -665,8 +837,6 @@ function updateCharCount() {
 
 // Open reject modal
 function openRejectModal() {
-    console.log('🔴 openRejectModal called for Incoming-GIP');
-    
     currentRejectId = {{ $dvRequest->id }};
     const modal = document.getElementById('rejectModal');
     
@@ -675,13 +845,10 @@ function openRejectModal() {
     document.getElementById('remarksError').classList.add('hidden');
     document.body.style.overflow = 'hidden';
     updateCharCount();
-    
-    console.log('🔴 Modal opened for DV Request ID:', currentRejectId);
 }
 
 // Close reject modal
 function closeRejectModal() {
-    console.log('🟢 closeRejectModal called');
     document.getElementById('rejectModal').classList.add('hidden');
     document.getElementById('rejectRemarks').value = '';
     document.getElementById('remarksError').classList.add('hidden');
@@ -695,14 +862,12 @@ function updateAttachmentSummary() {
     let presentCount = 0;
     let notPresentCount = 0;
     let naCount = 0;
-    let unselectedCount = 0;
     
     allHiddenInputs.forEach(input => {
         const value = input.value;
         if (value === '1') presentCount++;
         else if (value === '0') notPresentCount++;
         else if (value === 'null') naCount++;
-        else unselectedCount++;
     });
     
     const total = allHiddenInputs.length;
@@ -721,6 +886,7 @@ function updateAttachmentSummary() {
 // Handle reject form submission
 document.addEventListener('DOMContentLoaded', () => {
     const rejectForm = document.getElementById('rejectForm');
+    const verifyForm = document.getElementById('verifyForm');
     
     // Initialize character count
     updateCharCount();
@@ -728,26 +894,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize attachment summary
     updateAttachmentSummary();
     
-    // Initialize all remarks textareas with appropriate styling
-    document.querySelectorAll('.remarks-container textarea').forEach(textarea => {
-        const attachmentId = textarea.id.replace('remarks-', '');
-        const hiddenInput = document.getElementById(`status-value-${attachmentId}`);
-        if (hiddenInput) {
-            const status = hiddenInput.value;
-            if (status === '1') {
-                textarea.classList.add('textarea-present');
-            } else if (status === '0') {
-                textarea.classList.add('textarea-not-present');
-            } else if (status === 'null') {
-                textarea.classList.add('textarea-na');
+    // Initialize payroll requirement check
+    setTimeout(checkPayrollRequirements, 100);
+    
+    // Handle verify form submission
+    if (verifyForm) {
+        verifyForm.addEventListener('submit', function(e) {
+            // First check payroll requirements
+            const verifyButton = document.getElementById('verifyButton');
+            if (verifyButton && verifyButton.disabled) {
+                e.preventDefault();
+                e.stopPropagation();
+                showMessage('Payroll/EUP Payroll attachment must be marked as "Present" to verify this request.', 'error');
+                return false;
             }
-        }
-    });
+            
+            // Validate all attachments remarks
+            const { allValid, invalidAttachments } = validateAllAttachmentsRemarks();
+            if (!allValid) {
+                e.preventDefault();
+                showMessage(`Please add remarks for the following attachments:\n${invalidAttachments.join('\n')}`, 'error');
+                return false;
+            }
+            
+            // Show confirmation dialog
+            const confirmMsg = `Are you sure you want to verify this DV request?\n\n` +
+                             `This action cannot be undone.`;
+            
+            if (!confirm(confirmMsg)) {
+                e.preventDefault();
+                return false;
+            }
+            
+            return true;
+        });
+    }
     
     if (rejectForm) {
         rejectForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            console.log('🟡 Reject form submitted for Incoming-GIP');
             
             const remarks = document.getElementById('rejectRemarks').value.trim();
             const remarksError = document.getElementById('remarksError');
@@ -771,7 +956,6 @@ document.addEventListener('DOMContentLoaded', () => {
             spinner.classList.remove('hidden');
             
             try {
-                console.log('🟡 Sending reject request for ID:', currentRejectId);
                 const response = await fetch(`/Incoming/GIP/dvrequests/${currentRejectId}/reject`, {
                     method: 'POST',
                     headers: {
@@ -783,15 +967,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 
                 const data = await response.json();
-                console.log('🟡 Reject response:', data);
                 
                 if (data.success) {
                     showMessage(data.message || 'DV request has been rejected successfully.', 'success');
                     closeRejectModal();
                     
-                    // Release lock and redirect after short delay
                     setTimeout(() => {
-                        releaseLock(new Event('click'), currentRejectId);
+                        window.location.href = "{{ route('Incoming.GIP.index') }}";
                     }, 1500);
                 } else {
                     showMessage(data.message || 'Failed to reject the request.', 'error');
@@ -800,7 +982,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     spinner.classList.add('hidden');
                 }
             } catch (error) {
-                console.error('❌ Reject error:', error);
+                console.error('Reject error:', error);
                 showMessage('An error occurred while rejecting the request.', 'error');
                 confirmBtn.disabled = false;
                 btnText.textContent = 'Reject Request';
@@ -823,6 +1005,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && rejectModal && !rejectModal.classList.contains('hidden')) {
             closeRejectModal();
+        }
+    });
+    
+    // Add input event listeners to remarks textareas
+    document.addEventListener('input', function(e) {
+        if (e.target.name && e.target.name.startsWith('gip_attachment_remarks[')) {
+            const attachmentId = e.target.name.match(/\[(.*?)\]/)[1];
+            validateRemarksForAttachment(attachmentId);
         }
     });
 });
@@ -898,7 +1088,8 @@ function updateButtonsToVerifyMode(dvRequestId) {
     buttonContainer.innerHTML = `
         <div class="flex justify-end space-x-3">
             <button type="submit" 
-                    class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                    id="verifyButton"
+                    class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200 verify-btn">
                 Verify
             </button>
             <button type="button"
@@ -913,6 +1104,9 @@ function updateButtonsToVerifyMode(dvRequestId) {
             </a>
         </div>
     `;
+    
+    // Re-initialize payroll requirement check after updating buttons
+    setTimeout(checkPayrollRequirements, 100);
 }
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -425,52 +425,119 @@ protected function getOrCreateTevAttachmentsForDvRequest($dvRequest, $selectedMo
         return response()->json($recentDvRequests);
     }
 
-     public function fetchAll(Request $request)
-    {
-        $currentUserId = auth()->id();
-        $lockDuration = now()->subMinutes(10);
+    public function fetchAll(Request $request)
+{
+    $currentUserId = auth()->id();
+    $lockDuration = now()->subMinutes(10);
 
-        $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
-            ->whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
-            ->whereIn('status', ['IMSD_verified','Incoming-TEV_received'])
-            ->where(function($q) use ($currentUserId,$lockDuration){
-                $q->whereNull('locked_by')
-                ->orWhere('locked_by',$currentUserId)
-                ->orwhere('locked_at','<=',$lockDuration);
-            });
+    $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
+        ->whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
+        ->whereIn('status', ['IMSD_verified', 'Incoming-TEV_received', 'Incoming-TEV_in_process'])
+        ->where(function($q) use ($currentUserId, $lockDuration) {
+            $q->whereNull('locked_by')
+              ->orWhere('locked_by', $currentUserId)
+              ->orWhere('locked_at', '<=', $lockDuration);
+        });
 
-  
-        if ($request->filled('search')) {
-            $search = $request->input('search');
+    if ($request->filled('search')) {
+        $search = $request->input('search');
 
-            $query->where(function ($q) use ($search) {
-                $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
-                  ->orWhereHas('focalPerson', fn($fp) =>
-                      $fp->where('fname', 'like', "%{$search}%")
-                         ->orWhere('lname', 'like', "%{$search}%")
-                  )
-                  ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%"))
-                  ->orWhere('amount', 'like', "%{$search}%")
-                  ->orWhere('status', 'like', "%{$search}%");
-            });
+        $query->where(function ($q) use ($search) {
+            $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
+              ->orWhereHas('focalPerson', fn($fp) =>
+                  $fp->where('fname', 'like', "%{$search}%")
+                     ->orWhere('lname', 'like', "%{$search}%")
+              )
+              ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%"))
+              ->orWhere('amount', 'like', "%{$search}%")
+              ->orWhere('status', 'like', "%{$search}%")
+              ->orWhere('particulars', 'like', "%{$search}%")
+              ->orWhere('accounting_control_number', 'like', "%{$search}%");
+        });
+    }
+
+    // Get all DV requests with created_at for age calculation
+    $dvRequests = $query->select('dv_requests.*')
+                        ->addSelect(DB::raw('TIMESTAMPDIFF(DAY, dv_requests.created_at, NOW()) as days_old'))
+                        ->get();
+    
+    // Calculate age for each request and add priority score
+    $dvRequests = $dvRequests->map(function ($request) {
+        $daysOld = now()->diffInDays($request->created_at);
+        
+        // Priority scoring system:
+        // - Critical (10+ days): 1000 points
+        // - High (7-9 days): 500 points
+        // - Medium (3-6 days): 200 points
+        // - Recent (0-2 days): 0 points
+        
+        $priorityScore = 0;
+        
+        if ($daysOld >= 10) {
+            $priorityScore += 1000; // Critical priority
+        } elseif ($daysOld >= 7) {
+            $priorityScore += 500; // High priority
+        } elseif ($daysOld >= 3) {
+            $priorityScore += 200; // Medium priority
         }
+        
+        // Higher priority for 'IMSD_verified' vs 'Incoming-TEV_received'
+        if ($request->status === 'IMSD_verified') {
+            $priorityScore += 50;
+        } elseif ($request->status === 'Incoming-TEV_received') {
+            $priorityScore += 25;
+        }
+        // 'Incoming-TEV_in_process' gets 0 additional points
+        
+        // Add small random factor to prevent exact ties
+        $priorityScore += rand(0, 10);
+        
+        $request->days_old = $daysOld;
+        $request->priority_score = $priorityScore;
+        $request->urgency = $this->getUrgencyLevel($daysOld);
+        
+        return $request;
+    });
+    
+    // Sort by priority score (descending) so highest priority comes first
+    $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
-        $dvRequests = $query->latest()->get();
-
-        $result = $dvRequests->map(fn($request) => [
+    $result = $dvRequests->map(function ($request) {
+        return [
             'id'           => $request->id,
             'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT): '—',
-            'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+            'submitted_by' => trim(($request->payee_fname ?? $request->focalPerson->fname ?? '') . ' ' . ($request->payee_lname ?? $request->focalPerson->lname ?? '')),
             'program'      => $request->program->prcode ?? 'N/A',
             'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
             'particulars'  => $request->particulars,
             'amount'       => number_format($request->amount, 2),
             'status'       => $request->status,
             'date'         => $request->created_at->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        ]);
+            'created_at_timestamp' => $request->created_at->toISOString(),
+            'days_old'     => $request->days_old,
+            'urgency'      => $request->urgency,
+            'priority_score' => $request->priority_score,
+        ];
+    });
 
-        return response()->json($result);
+    return response()->json($result);
+}
+
+/**
+ * Get urgency level based on whole number of days
+ */
+protected function getUrgencyLevel($daysOld)
+{
+    if ($daysOld >= 10) {
+        return 'critical';
+    } elseif ($daysOld >= 7) {
+        return 'high';
+    } elseif ($daysOld >= 3) {
+        return 'medium';
+    } else {
+        return 'low';
     }
+}
 
     public function fetch($id)
     {

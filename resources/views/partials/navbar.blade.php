@@ -1,10 +1,13 @@
-@auth
-    @php
-        $authUser = auth()->user();
+@php
+    $authUser = auth()->user();
+    $currentRole = null;
+    $userRoles = collect();
+    
+    if ($authUser) {
         $currentRole = session('current_role', $authUser->primary_role ?? $authUser->getRoleNames()->first() ?? 'User');
         $userRoles = $authUser->getRoleNames();
-    @endphp
-@endauth
+    }
+@endphp
 
 <nav class="bg-white shadow-md fixed w-full z-10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

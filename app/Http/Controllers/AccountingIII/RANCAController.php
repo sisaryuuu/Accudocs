@@ -20,9 +20,12 @@ use App\Models\Notification;
 use App\Models\DvRequestLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
-
+use App\Traits\EmailBatchingTrait;
 class RANCAController extends Controller
+
 {
+
+    use EmailBatchingTrait;
     protected PusherService $pusher;
     protected IprogSmsService $smsService; // ADD SMS SERVICE PROPERTY
 
@@ -38,110 +41,157 @@ class RANCAController extends Controller
         return view('Accounting.index');
     }
 
-    /** Fetch DV requests for RANCA */
-    public function fetchDvRequests(Request $request)
-    {
-        try {
-            $currentUserId = auth()->id();
-            $lockDuration  = now()->subMinutes(10);
-            $search = $request->get('search', '');
+   /** Fetch DV requests for Accounting/RANCA */
+public function fetchDvRequests(Request $request)
+{
+    try {
+        $currentUserId = auth()->id();
+        $lockDuration  = now()->subMinutes(10);
+        
+        // Get search parameter from request
+        $searchTerm = $request->input('search', '');
 
-            $query = DvRequest::with([
-                    'program', 
-                    'focalPerson', 
-                    'respocenter',
-                    'orsRequest',
-                    'orsRequest.uacsCodes',
-                    'orsRequest.AdlCode',
-                    'orsRequest.Mfopap'
-                ])
-            ->whereIn('status', ['Outgoing_finalized','RANCA_received'])
-                ->where(function ($q) use ($currentUserId, $lockDuration) {
-                    $q->whereNull('locked_by')
-                    ->orWhere('locked_by', $currentUserId)
-                    ->orWhere('locked_at', '<=', $lockDuration);
+        $query = DvRequest::with([
+                'program', 
+                'focalPerson', 
+                'respocenter',
+                'orsRequest',
+            ])
+            ->whereIn('status', ['Outgoing_finalized', 'RANCA_received']) // RANCA_in_process removed
+            ->where(function ($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by')
+                  ->orWhere('locked_by', $currentUserId)
+                  ->orWhere('locked_at', '<=', $lockDuration);
+            })
+            ->when($searchTerm, function ($query) use ($searchTerm) {
+                $query->where(function ($q) use ($searchTerm) {
+                    // Search in control number
+                    $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
+                      // Search in DV number
+                      ->orWhere('dv_number', 'LIKE', "%{$searchTerm}%")
+                      // Search in focal person name
+                      ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
+                          $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
+                                     ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
+                      })
+                      // Search in program code
+                      ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
+                          $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
+                      })
+                      // Search in respocenter
+                      ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
+                          $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
+                                     ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+                      })
+                      // Search in particulars
+                      ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
+                      // Search in amount (handle numeric search)
+                      ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
+                      // Search in status
+                      ->orWhere('status', 'LIKE', "%{$searchTerm}%")
+                      // Search in ORS number
+                      ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
+                          $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
+                      });
                 });
+            });
 
-            // Add search functionality
-            if (!empty($search)) {
-                $query->where(function($q) use ($search) {
-                    $q->where('dv_number', 'like', "%{$search}%")
-                    ->orWhere('accounting_control_number', 'like', "%{$search}%")
-                    ->orWhereHas('orsRequest', function($orsQuery) use ($search) {
-                        $orsQuery->where('ors_number', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('program', function($programQuery) use ($search) {
-                        $programQuery->where('prcode', 'like', "%{$search}%")
-                                    ->orWhere('description', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('respocenter', function($rcQuery) use ($search) {
-                        $rcQuery->where('rccode', 'like', "%{$search}%")
-                                ->orWhere('description', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('focalPerson', function($userQuery) use ($search) {
-                        $userQuery->where('fname', 'like', "%{$search}%")
-                                ->orWhere('lname', 'like', "%{$search}%");
-                    });
-                });
-            }
-
-            $dvRequests = $query->latest()->get();
-                
-            return response()->json($dvRequests->map(function ($req) {
-                // ✅ SAFE: Check if orsRequest exists first
-                $orsRequest = $req->orsRequest;
-
-                // ✅ SAFE: Handle UACS codes
-                $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
-                $uacsDisplay = $uacsCodes->isNotEmpty() 
-                    ? $uacsCodes->map(function($uacs) {
-                        return $uacs->uacscode . ' - ' . $uacs->description;
-                    })->implode('<br>') 
-                    : '—';
-
-                // ✅ SAFE: Get ADL code - check if orsRequest AND adlCode exist
-                $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
-                    $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
-                    '—';
-                
-                // ✅ SAFE: Get MFO/PAP code - check if orsRequest AND mfopap exist
-                $mfopapCode = ($orsRequest && $orsRequest->Mfopap) ? 
-                    $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription : 
-                    '—';
-
-                // ✅ SAFE: Get ORS number
-                $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
-
-                return [
-                    'id'           => $req->id,
-                    'control_no'   => $req->accounting_control_number ? 
-                        'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
-                        '—',
-                    'dv_number'   => $req->dv_number ?? '—',
-                    'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                    'program'      => $req->program->prcode ?? 'N/A',
-                    'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                    'particulars'  => $req->particulars,
-                    'amount'       => number_format($req->amount, 2),
-                    'status'       => $req->status,
-                    'date'         => $req->created_at->format('M d, Y'),
-                    'ors_number'   => $orsNumber,
-                    'uacs_codes'   => $uacsDisplay,
-                    'allotment_code'  => $req->allotcode ?? '—',
-                    'adl_code'     => $adlCode,
-                    'mfopap_code'  => $mfopapCode,
-                ];
-            }));
-
-        } catch (\Exception $e) {
-            \Log::error('Error in fetchDvRequests: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
+        // Get all DV requests with created_at for age calculation
+        $dvRequests = $query->select('dv_requests.*')
+                            ->addSelect(DB::raw('TIMESTAMPDIFF(DAY, dv_requests.created_at, NOW()) as days_old'))
+                            ->get();
+        
+        // Calculate priority for Accounting/RANCA
+        $dvRequests = $dvRequests->map(function ($request) {
+            // Calculate days old
+            $daysOld = now()->diffInDays($request->created_at);
             
-            return response()->json([
-                'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
-            ], 500);
-        }
+            // Priority scoring system for Accounting/RANCA:
+            // - Critical (10+ days): 1000 points
+            // - High (7-9 days): 500 points
+            // - Medium (3-6 days): 200 points
+            // - Recent (0-2 days): 0 points
+            
+            $priorityScore = 0;
+            
+            if ($daysOld >= 10) {
+                $priorityScore += 1000; // Critical priority
+            } elseif ($daysOld >= 7) {
+                $priorityScore += 500; // High priority
+            } elseif ($daysOld >= 3) {
+                $priorityScore += 200; // Medium priority
+            }
+            
+            // Higher priority for pending receipt (Outgoing_finalized)
+            if ($request->status === 'Outgoing_finalized') {
+                $priorityScore += 100; // Extra priority for unreceived documents
+            }
+            
+            // Higher priority for in-process documents
+            if ($request->status === 'RANCA_received' || $request->status === 'RANCA_in_process') {
+                $priorityScore += 50; // Medium priority for documents being processed
+            }
+            
+            // Add small random factor to prevent exact ties
+            $priorityScore += rand(0, 10);
+            
+            $request->days_old = $daysOld;
+            $request->priority_score = $priorityScore;
+            $request->urgency = $this->getAccountingUrgencyLevel($daysOld);
+            
+            return $request;
+        });
+        
+        // Sort by priority score (descending) so highest priority comes first
+        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+
+        return response()->json($dvRequests->map(function ($req) {
+            return [
+                'id'           => $req->id,
+                'control_no'   => $req->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
+                    '—',
+                'dv_number'    => $req->dv_number ?? null,
+                'ors_number'   => $req->orsRequest->ors_number ?? null,
+                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                'program'      => $req->program->prcode ?? 'N/A',
+                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                'particulars'  => $req->particulars,
+                'amount'       => number_format($req->amount, 2),
+                'status'       => $req->status,
+                'date'         => $req->created_at->format('M d, Y'),
+                'created_at_timestamp' => $req->created_at->toISOString(),
+                'days_old'     => $req->days_old,
+                'urgency'      => $req->urgency,
+                'priority_score' => $req->priority_score,
+            ];
+        }));
+
+    } catch (\Exception $e) {
+        \Log::error('Error in Accounting fetchDvRequests: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+        ], 500);
     }
+}
+
+/**
+ * Get Accounting urgency level based on whole number of days old
+ */
+protected function getAccountingUrgencyLevel($daysOld)
+{
+    if ($daysOld >= 10) {
+        return 'critical';
+    } elseif ($daysOld >= 7) {
+        return 'high';
+    } elseif ($daysOld >= 3) {
+        return 'medium';
+    } else {
+        return 'low';
+    }
+}
 
     /** Show DV for processing */
     public function show($id)

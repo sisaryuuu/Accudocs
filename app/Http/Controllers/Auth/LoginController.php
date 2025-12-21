@@ -327,9 +327,10 @@ class LoginController extends Controller
      * Clean up expired sessions (can be called via scheduler)
      * Now just cleans up old records, doesn't enforce single sessions
      */
-    public function cleanupExpiredSessions()
+    public static function cleanupExpiredSessions()
     {
-        $expired = DB::table('active_sessions')
+        // Note: In static method, use DB:: instead of $this-> or direct DB::
+        $expired = \DB::table('active_sessions')
             ->where('last_activity', '<', now()->subHours(24))
             ->delete();
             

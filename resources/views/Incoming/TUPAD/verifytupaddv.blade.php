@@ -10,7 +10,7 @@
         <div class="lg:col-span-2 bg-white shadow rounded-xl p-6">
             <h1 class="text-2xl font-bold text-gray-900 mb-6">Incoming - TUPAD</h1>
 
-            <form action="{{ route('Incoming.TUPAD.dvrequests.verify', $dvRequest->id) }}" method="POST" class="space-y-6">
+            <form action="{{ route('Incoming.TUPAD.dvrequests.verify', $dvRequest->id) }}" method="POST" class="space-y-6" id="verifyForm">
                 @csrf
 
                 {{-- Mode of Payment --}}
@@ -70,267 +70,260 @@
                     <textarea rows="2" readonly class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm">{{ $dvRequest->particulars ?? '' }}</textarea>
                 </div>
 
-               <!-- TUPAD Attachments Checklist -->
-<div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-    <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-semibold text-gray-900">
-            📋 TUPAD Attachments Verification
-        </h3>
-        
-        <!-- Bulk Action Buttons -->
-        @if($dvRequest->status === 'Incoming-TUPAD_received' && $tupadSelectedModality && $tupadAttachments && $tupadAttachments->count() > 0)
-            <div class="flex items-center space-x-3">
-                <button type="button" 
-                        onclick="markAllTUPADAsPresent()"
-                        class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    All Present
-                </button>
-                <button type="button" 
-                        onclick="markAllTUPADAsNA()"
-                        class="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                    All N/A
-                </button>
-                <button type="button" 
-                        onclick="uncheckAllTUPAD()"
-                        class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                    Uncheck All
-                </button>
-            </div>
-        @endif
-    </div>
-
-    <!-- Modality Selection -->
-    <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-            Select TUPAD Modality <span class="text-red-500">*</span>
-        </label>
-      <select name="tupad_modality" 
-        id="tupad_modality_select"
-        required 
-        {{ $dvRequest->status !== 'Incoming-TUPAD_received' ? 'disabled' : '' }}
-        class="w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm"
-        onchange="handleModalityChange()">
-    <option value="">-- Select Modality --</option>
-    <option value="rpmt" {{ $tupadSelectedModality == 'rpmt' ? 'selected' : '' }}>
-        RPMT (Direct Administration)
-    </option>
-    <option value="lgu" {{ $tupadSelectedModality == 'lgu' ? 'selected' : '' }}>
-        Local Government Unit (LGU)
-    </option>
-    <option value="ngo_po" {{ $tupadSelectedModality == 'ngo_po' ? 'selected' : '' }}>
-        NGO/People's Organizations
-    </option>
-    <option value="money_remittance" {{ $tupadSelectedModality == 'money_remittance' ? 'selected' : '' }}>
-        Money Remittance
-    </option>
-    <option value="individual_beneficiaries" {{ $tupadSelectedModality == 'individual_beneficiaries' ? 'selected' : '' }}>
-        Individual Beneficiaries
-    </option>
-    <option value="group_beneficiaries" {{ $tupadSelectedModality == 'group_beneficiaries' ? 'selected' : '' }}>
-        Group Beneficiaries
-    </option>
-</select>
-        <p class="text-xs text-gray-500 mt-1">Select the TUPAD modality to verify required attachments</p>
-    </div>
-
-  <!-- Dynamic Attachments Container -->
-<div id="tupad-attachments-container">
-    @if($tupadSelectedModality && $tupadAttachments && $tupadAttachments->count() > 0)
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-            <p class="text-sm text-blue-800">
-                <strong>Verification Responsibility:</strong> 
-                <span class="font-semibold">Incoming-TUPAD</span> verifies all physical TUPAD attachments.
-                Found {{ $tupadAttachments->count() }} required attachments for this modality.
-            </p>
-        </div>
-
-        <div class="space-y-3">
-            @foreach($tupadAttachments as $attachment)
-             @php
-                // Determine the current status - default to null (N/A)
-                $isPresent = $attachment->is_present ?? null;
-                
-                // Set color classes based on status
-                if ($isPresent === true || $isPresent === 1) {
-                    $statusClass = 'bg-green-50 border-green-200';
-                    $borderClass = 'border-green-300 bg-green-50';
-                    $textClass = 'text-green-600';
-                    $helperText = '✓ This document is complete and present.';
-                    $placeholderText = 'The attachment is present';
-                } elseif ($isPresent === false || $isPresent === 0) {
-                    $statusClass = 'bg-red-50 border-red-200';
-                    $borderClass = 'border-red-300';
-                    $textClass = 'text-gray-500';
-                    $helperText = 'Describe what information or entries are missing from this document.';
-                    $placeholderText = '';
-                } else {
-                    // Default: N/A (null or empty)
-                    $statusClass = 'bg-gray-50 border-gray-200';
-                    $borderClass = 'border-gray-300';
-                    $textClass = 'text-gray-500';
-                    $helperText = 'This document is not applicable for this request.';
-                    $placeholderText = 'Not applicable';
-                }
-                
-                // Set the checked status for checkboxes
-                $presentChecked = ($isPresent === true || $isPresent === 1) ? 'checked' : '';
-                $notPresentChecked = ($isPresent === false || $isPresent === 0) ? 'checked' : '';
-                $naChecked = (is_null($isPresent) || $isPresent === '' || $isPresent === 'null' || $isPresent === 'na') ? 'checked' : '';
-                
-                // Make sure only one is checked
-                if ($presentChecked && $notPresentChecked) {
-                    // If both are checked (shouldn't happen), default to N/A
-                    $presentChecked = '';
-                    $notPresentChecked = '';
-                    $naChecked = 'checked';
-                    $statusClass = 'bg-gray-50 border-gray-200';
-                    $borderClass = 'border-gray-300';
-                    $textClass = 'text-gray-500';
-                    $helperText = 'This document is not applicable for this request.';
-                    $placeholderText = 'Not applicable';
-                }
-            @endphp
-                
-                <div class="border rounded-lg p-4 transition-all duration-200 tupad-attachment-item {{ $statusClass }}"
-                    data-attachment-id="{{ $attachment->id }}">
-                    
-                    <!-- Document Name & Status Row -->
-                    <div class="flex items-start justify-between mb-3">
-                        <div class="flex-1">
-                            <label class="text-sm font-medium text-gray-900">
-                                {{ $attachment->name }}
-                            </label>
-                        </div>
-                                
-        <div class="flex items-center space-x-2" id="tupad-status-group-{{ $attachment->id }}">
-            <label class="inline-flex items-center cursor-pointer">
-                <input type="radio" 
-                    name="tupad_attachment_{{ $attachment->id }}" 
-                    value="1"
-                    class="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500 tupad-attachment-radio present-radio"
-                    data-attachment-id="{{ $attachment->id }}"
-                    {{ $isPresent === 1 ? 'checked' : '' }}
-                    {{ $dvRequest->status === 'Incoming-TUPAD_received' ? '' : 'disabled' }}
-                    onchange="handleTUPADStatusRadioChange(this)">
-                <span class="ml-1.5 text-xs font-medium text-green-700">Present</span>
-            </label>
-            
-            <label class="inline-flex items-center cursor-pointer">
-                <input type="radio" 
-                    name="tupad_attachment_{{ $attachment->id }}" 
-                    value="0"
-                    class="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500 tupad-attachment-radio not-present-radio"
-                    data-attachment-id="{{ $attachment->id }}"
-                    {{ $isPresent === 0 ? 'checked' : '' }}
-                    {{ $dvRequest->status === 'Incoming-TUPAD_received' ? '' : 'disabled' }}
-                    onchange="handleTUPADStatusRadioChange(this)">
-                <span class="ml-1.5 text-xs font-medium text-red-700">Not Present</span>
-            </label>
-            
-            <label class="inline-flex items-center cursor-pointer">
-                <input type="radio" 
-                    name="tupad_attachment_{{ $attachment->id }}" 
-                    value="null"
-                    class="h-4 w-4 text-gray-600 border-gray-300 focus:ring-gray-500 tupad-attachment-radio na-radio"
-                    data-attachment-id="{{ $attachment->id }}"
-                    {{ is_null($isPresent) ? 'checked' : '' }}
-                    {{ $dvRequest->status === 'Incoming-TUPAD_received' ? '' : 'disabled' }}
-                    onchange="handleTUPADStatusRadioChange(this)">
-                <span class="ml-1.5 text-xs font-medium text-gray-700">N/A</span>
-            </label>
-            
-            <!-- Hidden input to store the actual value -->
-            <input type="hidden" 
-                name="tupad_attachment_status_value[{{ $attachment->id }}]" 
-                value="{{ $isPresent === 1 ? '1' : ($isPresent === 0 ? '0' : 'null') }}" 
-                id="tupad-status-value-{{ $attachment->id }}">
-        </div>
+                <!-- TUPAD Attachments Checklist -->
+                <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            📋 TUPAD Attachments Verification
+                        </h3>
+                        
+                        <!-- Bulk Action Buttons -->
+                        @if($dvRequest->status === 'Incoming-TUPAD_received' && $tupadSelectedModality && $tupadAttachments && $tupadAttachments->count() > 0)
+                            <div class="flex items-center space-x-3" id="bulk-actions">
+                                <button type="button" 
+                                        onclick="markAllTUPADAsPresent()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    All Present
+                                </button>
+                                <button type="button" 
+                                        onclick="markAllTUPADAsNA()"
+                                        class="inline-flex items-center px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors duration-200">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                    All N/A
+                                </button>
+                            </div>
+                        @endif
                     </div>
-                    
-                    <!-- Remarks/Lacking Input -->
-                <!-- Remarks/Lacking Input -->
-                <div class="tupad-remarks-container" id="tupad-remarks-container-{{ $attachment->id }}">
-                    <label class="block text-xs font-medium text-gray-700 mb-1">
-                        Remarks
-                    </label>
-                    <textarea 
-                        name="tupad_attachment_remarks[{{ $attachment->id }}]"
-                        id="tupad-remarks-{{ $attachment->id }}"
-                        rows="2"
-                        class="w-full px-3 py-2 text-xs border {{ $borderClass }} rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
-                        placeholder="{{ $placeholderText }}"
-                        {{ $dvRequest->status === 'Incoming-TUPAD_received' && $isPresent !== true && $isPresent !== 1 ? '' : 'readonly' }}
-                        maxlength="500">{{ $attachment->remarks ?? $placeholderText }}</textarea>
-                    <p class="text-xs {{ $textClass }} mt-1">
-                        {{ $helperText }}
-                    </p>
+
+                    <!-- Modality Selection -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Select TUPAD Modality <span class="text-red-500">*</span>
+                        </label>
+                        <select name="tupad_modality" 
+                            id="tupad_modality_select"
+                            required 
+                            {{ $dvRequest->status !== 'Incoming-TUPAD_received' ? 'disabled' : '' }}
+                            class="w-full rounded-lg border-gray-300 shadow-sm focus:ring focus:ring-blue-200 text-sm"
+                            onchange="handleModalityChange()">
+                            <option value="">-- Select Modality --</option>
+                            <option value="rpmt" {{ $tupadSelectedModality == 'rpmt' ? 'selected' : '' }}>
+                                RPMT (Direct Administration)
+                            </option>
+                            <option value="lgu" {{ $tupadSelectedModality == 'lgu' ? 'selected' : '' }}>
+                                Local Government Unit (LGU)
+                            </option>
+                            <option value="ngo_po" {{ $tupadSelectedModality == 'ngo_po' ? 'selected' : '' }}>
+                                NGO/People's Organizations
+                            </option>
+                            <option value="money_remittance" {{ $tupadSelectedModality == 'money_remittance' ? 'selected' : '' }}>
+                                Money Remittance
+                            </option>
+                            <option value="individual_beneficiaries" {{ $tupadSelectedModality == 'individual_beneficiaries' ? 'selected' : '' }}>
+                                Individual Beneficiaries
+                            </option>
+                            <option value="group_beneficiaries" {{ $tupadSelectedModality == 'group_beneficiaries' ? 'selected' : '' }}>
+                                Group Beneficiaries
+                            </option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Select the TUPAD modality to verify required attachments</p>
+                    </div>
+
+                    <!-- Dynamic Attachments Container -->
+                    <div id="tupad-attachments-container">
+                        @if($tupadSelectedModality && $tupadAttachments && $tupadAttachments->count() > 0)
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                <p class="text-sm text-blue-800">
+                                    <strong>Verification Responsibility:</strong> 
+                                    <span class="font-semibold">Incoming-TUPAD</span> verifies all physical TUPAD attachments.
+                                    Found {{ $tupadAttachments->count() }} required attachments for this modality.
+                                </p>
+                            </div>
+
+                            <div class="space-y-3">
+                                @foreach($tupadAttachments as $attachment)
+                                @php
+                                    // Determine the current status
+                                    $isPresent = $attachment->is_present ?? null;
+                                    
+                                    // Set color classes based on status
+                                    if ($isPresent === true || $isPresent === 1) {
+                                        $statusClass = 'bg-green-50 border-green-200';
+                                        $borderClass = 'border-green-300 bg-green-50';
+                                        $textClass = 'text-green-600';
+                                        $helperText = '✓ This document is complete and present.';
+                                    } elseif ($isPresent === false || $isPresent === 0) {
+                                        $statusClass = 'bg-red-50 border-red-200';
+                                        $borderClass = 'border-red-300 bg-red-50';
+                                        $textClass = 'text-gray-500';
+                                        $helperText = 'Describe what information or entries are missing from this document.';
+                                    } else {
+                                        // Default: N/A
+                                        $statusClass = 'bg-gray-50 border-gray-200';
+                                        $borderClass = 'border-gray-300 bg-gray-50';
+                                        $textClass = 'text-gray-500';
+                                        $helperText = 'Explain why this document is not applicable for this request.';
+                                    }
+                                    
+                                    // Set initial remarks text
+                                    $remarksText = $attachment->remarks ?? '';
+                                    
+                                    // For Present status, use default text if empty
+                                    if (($isPresent === true || $isPresent === 1) && empty($remarksText)) {
+                                        $remarksText = 'The attachment is present';
+                                    }
+                                    
+                                    // Set readonly based on status
+                                    $isReadonly = false;
+                                    if ($isPresent === true || $isPresent === 1) {
+                                        $isReadonly = true;
+                                    }
+                                @endphp
+                                    
+                                    <div class="border rounded-lg p-4 transition-all duration-200 tupad-attachment-item {{ $statusClass }}"
+                                        data-attachment-id="{{ $attachment->id }}">
+                                        
+                                        <!-- Document Name & Status Row -->
+                                        <div class="flex items-start justify-between mb-3">
+                                            <div class="flex-1">
+                                                <label class="text-sm font-medium text-gray-900">
+                                                    {{ $attachment->name }}
+                                                </label>
+                                            </div>
+                                                    
+                                            <div class="flex items-center space-x-2" id="tupad-status-group-{{ $attachment->id }}">
+                                                <label class="inline-flex items-center cursor-pointer">
+                                                    <input type="radio" 
+                                                        name="tupad_attachment_{{ $attachment->id }}" 
+                                                        value="1"
+                                                        class="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500 tupad-attachment-radio present-radio"
+                                                        data-attachment-id="{{ $attachment->id }}"
+                                                        {{ $isPresent === 1 ? 'checked' : '' }}
+                                                        {{ $dvRequest->status === 'Incoming-TUPAD_received' ? '' : 'disabled' }}
+                                                        onchange="handleTUPADStatusRadioChange(this)">
+                                                    <span class="ml-1.5 text-xs font-medium text-green-700">Present</span>
+                                                </label>
+                                                
+                                                <label class="inline-flex items-center cursor-pointer">
+                                                    <input type="radio" 
+                                                        name="tupad_attachment_{{ $attachment->id }}" 
+                                                        value="0"
+                                                        class="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500 tupad-attachment-radio not-present-radio"
+                                                        data-attachment-id="{{ $attachment->id }}"
+                                                        {{ $isPresent === 0 ? 'checked' : '' }}
+                                                        {{ $dvRequest->status === 'Incoming-TUPAD_received' ? '' : 'disabled' }}
+                                                        onchange="handleTUPADStatusRadioChange(this)">
+                                                    <span class="ml-1.5 text-xs font-medium text-red-700">Not Present</span>
+                                                </label>
+                                                
+                                                <label class="inline-flex items-center cursor-pointer">
+                                                    <input type="radio" 
+                                                        name="tupad_attachment_{{ $attachment->id }}" 
+                                                        value="null"
+                                                        class="h-4 w-4 text-gray-600 border-gray-300 focus:ring-gray-500 tupad-attachment-radio na-radio"
+                                                        data-attachment-id="{{ $attachment->id }}"
+                                                        {{ is_null($isPresent) ? 'checked' : '' }}
+                                                        {{ $dvRequest->status === 'Incoming-TUPAD_received' ? '' : 'disabled' }}
+                                                        onchange="handleTUPADStatusRadioChange(this)">
+                                                    <span class="ml-1.5 text-xs font-medium text-gray-700">N/A</span>
+                                                </label>
+                                                
+                                                <!-- Hidden input to store the actual value -->
+                                                <input type="hidden" 
+                                                    name="tupad_attachment_status_value[{{ $attachment->id }}]" 
+                                                    value="{{ $isPresent === 1 ? '1' : ($isPresent === 0 ? '0' : 'null') }}" 
+                                                    id="tupad-status-value-{{ $attachment->id }}">
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Remarks/Lacking Input -->
+                                        <div class="tupad-remarks-container" id="tupad-remarks-container-{{ $attachment->id }}">
+                                            <label class="block text-xs font-medium text-gray-700 mb-1">
+                                                Remarks <span class="text-red-500">*</span>
+                                            </label>
+                                            <textarea 
+                                                name="tupad_attachment_remarks[{{ $attachment->id }}]"
+                                                id="tupad-remarks-{{ $attachment->id }}"
+                                                rows="2"
+                                                class="w-full px-3 py-2 text-xs border {{ $borderClass }} rounded-lg focus:ring-2 focus:ring-opacity-50 resize-none"
+                                                placeholder="{{ $isPresent === 1 ? 'The attachment is present' : 'Enter remarks...' }}"
+                                                {{ $dvRequest->status === 'Incoming-TUPAD_received' && !$isReadonly ? '' : 'readonly' }}
+                                                maxlength="500">{{ $remarksText }}</textarea>
+                                            <p class="text-xs {{ $textClass }} mt-1">
+                                                {{ $helperText }}
+                                            </p>
+                                            <p class="text-xs text-red-500 mt-1 hidden" id="remarks-error-{{ $attachment->id }}">
+                                                Remarks are required for N/A or Not Present attachments
+                                            </p>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            
+                            <!-- Summary -->
+                            <div class="mt-4 flex items-center justify-between text-sm p-3 bg-white rounded-lg border border-gray-200">
+                                <div class="flex items-center space-x-4">
+                                    <span class="flex items-center">
+                                        <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+                                        <span class="text-green-700 font-medium" id="tupad-present-count">
+                                            Present: {{ $tupadAttachments->whereIn('is_present', [true, 1])->count() }}
+                                        </span>
+                                    </span>
+                                    <span class="flex items-center">
+                                        <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                                        <span class="text-red-700 font-medium" id="tupad-not-present-count">
+                                            Not Present: {{ $tupadAttachments->whereIn('is_present', [false, 0])->count() }}
+                                        </span>
+                                    </span>
+                                    <span class="flex items-center">
+                                        <span class="w-3 h-3 bg-gray-400 rounded-full mr-1"></span>
+                                        <span class="text-gray-700 font-medium" id="tupad-na-count">
+                                            N/A: {{ $tupadAttachments->whereNotIn('is_present', [true, false, 1, 0])->count() }}
+                                        </span>
+                                    </span>
+                                </div>
+                                <span class="text-gray-600 font-medium" id="tupad-total-count">
+                                    Total: {{ $tupadAttachments->count() }}
+                                </span>
+                            </div>
+                            
+                            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-4">
+                                <p class="text-sm text-yellow-800">
+                                    <strong>Important:</strong> Remarks are <span class="font-bold">required</span> for:
+                                </p>
+                                <ul class="list-disc list-inside text-sm text-yellow-700 mt-1 space-y-1">
+                                    <li>All attachments marked as <span class="font-bold">"N/A"</span> - Explain why the document is not applicable</li>
+                                    <li>All attachments marked as <span class="font-bold">"Not Present"</span> - Specify what is missing or lacking</li>
+                                    <li>Attachments marked as <span class="font-bold">"Present"</span> automatically have remarks filled</li>
+                                </ul>
+                            </div>
+                            
+                            @elseif($tupadSelectedModality && $tupadAttachments->count() === 0)
+                                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                                    <div class="flex items-center">
+                                        <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                        </svg>
+                                        <span class="text-yellow-800">No attachments found for the "{{ $tupadSelectedModality }}" modality.</span>
+                                    </div>
+                                    <p class="text-sm text-yellow-700 mt-2">
+                                        Please run the TUPAD attachment seeder or contact the system administrator.
+                                    </p>
+                                </div>
+                            @else
+                                <div class="bg-gray-100 border border-gray-300 rounded-lg p-4">
+                                    <p class="text-sm text-gray-600 italic">
+                                        Please select a modality above to view required attachments.
+                                    </p>
+                                </div>
+                            @endif
+                    </div>
                 </div>
-                </div>
-            @endforeach
-        </div>
-        
-        <!-- Summary -->
-        <div class="mt-4 flex items-center justify-between text-sm p-3 bg-white rounded-lg border border-gray-200">
-            <div class="flex items-center space-x-4">
-                <span class="flex items-center">
-                    <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
-                    <span class="text-green-700 font-medium" id="tupad-present-count">
-                        Present: {{ $tupadAttachments->whereIn('is_present', [true, 1])->count() }}
-                    </span>
-                </span>
-                <span class="flex items-center">
-                    <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
-                    <span class="text-red-700 font-medium" id="tupad-not-present-count">
-                        Not Present: {{ $tupadAttachments->whereIn('is_present', [false, 0])->count() }}
-                    </span>
-                </span>
-                <span class="flex items-center">
-                    <span class="w-3 h-3 bg-gray-400 rounded-full mr-1"></span>
-                    <span class="text-gray-700 font-medium" id="tupad-na-count">
-                        N/A: {{ $tupadAttachments->whereNotIn('is_present', [true, false, 1, 0])->count() }}
-                    </span>
-                </span>
-            </div>
-            <span class="text-gray-600 font-medium" id="tupad-total-count">
-                Total: {{ $tupadAttachments->count() }}
-            </span>
-        </div>
-        
-        <p class="text-xs text-gray-500 mt-3">
-            <strong>Note:</strong> All documents default to "N/A". Mark as "Present" or "Not Present" as needed. 
-            When marked as "Present", a default remark "The attachment is present" will be automatically added.
-            Use "Uncheck All" to reset all to N/A.
-        </p>
-        @elseif($tupadSelectedModality && $tupadAttachments->count() === 0)
-            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div class="flex items-center">
-                    <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-                    </svg>
-                    <span class="text-yellow-800">No attachments found for the "{{ $tupadSelectedModality }}" modality.</span>
-                </div>
-                <p class="text-sm text-yellow-700 mt-2">
-                    Please run the TUPAD attachment seeder or contact the system administrator.
-                </p>
-            </div>
-        @else
-            <div class="bg-gray-100 border border-gray-300 rounded-lg p-4">
-                <p class="text-sm text-gray-600 italic">
-                    Please select a modality above to view required attachments.
-                </p>
-            </div>
-        @endif
-    </div>
-</div>
 
                 {{-- Amount --}}
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -409,7 +402,8 @@
                 @if($dvRequest->status === 'Incoming-TUPAD_received')
                     <div class="flex justify-end space-x-3" id="button-container">
                         <button type="submit"
-                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                            class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                            id="verify-button">
                             Verify
                         </button>
                         <button 
@@ -534,7 +528,6 @@
 </div>
 
 <style>
-/* Smooth transitions */
 #rejectModal {
     transition: opacity 0.3s ease-in-out;
 }
@@ -554,7 +547,6 @@
     }
 }
 
-/* Custom checkbox styling */
 .tupad-attachment-checkbox {
     cursor: pointer;
 }
@@ -563,197 +555,210 @@
     background-color: currentColor;
     border-color: currentColor;
 }
-
-/* Textarea styling for different statuses */
-.tupad-textarea-present {
-    border-color: #10b981 !important;
-    background-color: #f0fdf4 !important;
-}
-
-.tupad-textarea-not-present {
-    border-color: #7e2222ff !important;
-    background-color: #fef2f2 !important;
-}
-
-.tupad-textarea-na {
-    border-color: #d1d5db !important;
-    background-color: #f9fafb !important;
-}
 </style>
 <div id="message-container" class="fixed top-4 right-4 z-50"></div>
 @endsection
 
 <script>
-let currentRejectId = null;
-
-// TUPAD attachments data by modality (frontend only)
-const tupadAttachmentsByModality = {
+// TUPAD Required Attachments by Modality
+const TUPAD_REQUIRED_ATTACHMENTS = {
     'rpmt': [
         'RPMT',
         'TUPAD Work Program (Annex B)',
-        'Profile of TUPAD Beneficiaries (Annex D)',
-        'Contract of Service (Annex E-2)',
         'Payroll',
-        'Notice to Proceed',
-        'Photocopy of Valid IDs'
     ],
     'lgu': [
-        'Letter of Intent (Annex F)',
         'RPMT',
         'TUPAD Work Program (Annex B)',
-        'Profile of TUPAD Beneficiaries (Annex D)',
-        'Contract of Service (Annex E-2)',
-        'Notice to Proceed',
-        'Photocopy of Valid IDs',
-        'Local Development Plan',
-        'Sangguniang Bayan (SB) or Board Resolution',
-        'Memorandum of Agreement (Annex G)'
     ],
     'ngo_po': [
-        'Letter of Intent (Annex F)',
         'RPMT',
         'TUPAD Work Program (Annex B)',
-        'Profile of TUPAD Beneficiaries (Annex D)',
-        'Contract of Service (Annex E-2)',
-        'Notice to Proceed',
-        'Photocopy of Valid IDs',
-        'Local Development Plan',
-        'Sangguniang Bayan (SB) or Board Resolution',
-        'Memorandum of Agreement (Annex G)',
-        'Audited Financial Reports for the past three (3) years',
-        'Work and Financial Plan',
-        'List of photographs of similar implemented projects',
-        'Sworn Affidavit',
-        'Copy of Accredited as Co-Partner (ACP) Certificate',
-        'Constitution and By-Laws Authenticated (if registered with DOLE)',
-        'Updated list of officers and members (if registered with DOLE)'
     ],
     'money_remittance': [
         'RPMT',
         'TUPAD Work Program (Annex B)',
-        'Profile of TUPAD Beneficiaries (Annex D)',
-        'Contract of Service (Annex E-2)',
         'TUPAD Payroll',
         'Money Remittance Payroll',
-        'Notice to Proceed',
-        'Photocopy of Valid IDs',
-        'Daily Time Records (DTRs) / Attendance Sheets',
-        'TUPAD Completion Report'
     ],
     'individual_beneficiaries': [
-        'Letter Of Intent (Annex F)',
         'RPMT',
-        'Business Plan',
-        'Beneficiary Profile Form (Annex O)',
-        'Photocopy of Valid IDs',
-        'Proof of Project Readiness'
     ],
     'group_beneficiaries': [
         'RPMT',
-        'Beneficiary Profile Form (Annex O)',
-        'Notice to Proceed',
-        'Project Proposal',
-        'Local Development Plan',
-        'Sangguiniang Bayan (SB) or Board Resolution',
-        'Memorandum of Agreement (Annex G)',
-        'Audited Financial Reports for the past three (3) years',
-        'Work and Financial Plan',
-        'List or photographs of similar implemented projects',
-        'Sworn Affidavit',
-        'Copy of Accredited as Co-Partner (ACP) Certificate',
-        'Constitution and By-Laws Authenticated (if registered from DOLE)',
-        'Updated list of officers and members (if registered from DOLE)',
-        'Masterlist',
-        'Photocopy of Valid IDs'
     ]
 };
 
-function updateTUPADAttachmentUI(attachmentId, status, isCleared = false) {
-    console.log('updateTUPADAttachmentUI called', { attachmentId, status, isCleared });
+let currentRejectId = null;
+
+// Function to check if an attachment name exactly matches a required attachment
+function isRequiredTUPADAttachment(attachmentName, modality) {
+    const requiredList = TUPAD_REQUIRED_ATTACHMENTS[modality];
+    if (!requiredList) return false;
     
-    const item = document.querySelector(`[data-attachment-id="${attachmentId}"]`);
-    if (!item) return;
+    const normalizedName = attachmentName.toLowerCase().trim();
     
-    const remarksContainer = document.getElementById(`tupad-remarks-container-${attachmentId}`);
-    const remarksTextarea = document.getElementById(`tupad-remarks-${attachmentId}`);
-    const remarksHelper = remarksContainer ? remarksContainer.querySelector('p.text-xs') : null;
+    return requiredList.some(required => {
+        const normalizedRequired = required.toLowerCase().trim();
+        return normalizedName === normalizedRequired || 
+               (normalizedName.includes(normalizedRequired) && 
+                Math.abs(normalizedName.length - normalizedRequired.length) < 10);
+    });
+}
+
+// Function to find which specific required attachment matches the attachment name
+function findMatchingRequiredTUPADAttachment(attachmentName, modality) {
+    const requiredList = TUPAD_REQUIRED_ATTACHMENTS[modality];
+    if (!requiredList) return null;
     
-    // Remove all color classes
-    item.classList.remove('bg-green-50', 'border-green-200', 'bg-red-50', 'border-red-200', 'bg-gray-50', 'border-gray-200');
+    const normalizedName = attachmentName.toLowerCase().trim();
     
-    // Update radio button states
-    const presentRadio = item.querySelector('.present-radio');
-    const notPresentRadio = item.querySelector('.not-present-radio');
-    const naRadio = item.querySelector('.na-radio');
-    
-    // Uncheck all radios first
-    if (presentRadio) presentRadio.checked = false;
-    if (notPresentRadio) notPresentRadio.checked = false;
-    if (naRadio) naRadio.checked = false;
-    
-    if (status === 1 || status === '1') {
-        // Present - Green
-        item.classList.add('bg-green-50', 'border-green-200');
-        if (presentRadio) presentRadio.checked = true;
-        
-        if (remarksTextarea) {
-            remarksTextarea.value = 'The attachment is present';
-            remarksTextarea.classList.add('border-green-300', 'bg-green-50');
-            remarksTextarea.classList.remove('border-red-300', 'border-gray-300', 'bg-red-50', 'bg-gray-50');
-            remarksTextarea.placeholder = 'The attachment is present';
-            remarksTextarea.readOnly = true;
+    for (const required of requiredList) {
+        const normalizedRequired = required.toLowerCase().trim();
+        if (normalizedName === normalizedRequired) {
+            return required;
         }
-        if (remarksHelper) {
-            remarksHelper.textContent = '✓ This document is complete and present.';
-            remarksHelper.className = 'text-xs text-green-600 mt-1';
-        }
-    } else if (status === 0 || status === '0') {
-        // Not Present - Red
-        item.classList.add('bg-red-50', 'border-red-200');
-        if (notPresentRadio) notPresentRadio.checked = true;
-        
-        if (remarksTextarea) {
-            // Clear if it has default messages
-            if (remarksTextarea.value === 'The attachment is present' || remarksTextarea.value === 'Not applicable') {
-                remarksTextarea.value = '';
-            }
-            remarksTextarea.classList.add('border-red-300', 'bg-red-50');
-            remarksTextarea.classList.remove('border-green-300', 'border-gray-300', 'bg-green-50', 'bg-gray-50');
-            remarksTextarea.placeholder = 'Specify what is lacking or missing in this document...';
-            remarksTextarea.readOnly = false;
-        }
-        if (remarksHelper) {
-            remarksHelper.textContent = 'Describe what information or entries are missing from this document.';
-            remarksHelper.className = 'text-xs text-gray-500 mt-1';
-        }
-    } else {
-        // N/A - Gray (default)
-        item.classList.add('bg-gray-50', 'border-gray-200');
-        if (naRadio) naRadio.checked = true;
-        
-        if (remarksTextarea) {
-            remarksTextarea.value = 'Not applicable';
-            remarksTextarea.classList.add('border-gray-300', 'bg-gray-50');
-            remarksTextarea.classList.remove('border-green-300', 'border-red-300', 'bg-green-50', 'bg-red-50');
-            remarksTextarea.placeholder = 'Not applicable';
-            remarksTextarea.readOnly = true;
-        }
-        if (remarksHelper) {
-            remarksHelper.textContent = 'This document is not applicable for this request.';
-            remarksHelper.className = 'text-xs text-gray-500 mt-1';
+        if (normalizedName.includes(normalizedRequired) && 
+            Math.abs(normalizedName.length - normalizedRequired.length) < 10) {
+            return required;
         }
     }
-}   
+    
+    return null;
+}
+
+// Function to check if all required TUPAD attachments are marked as Present
+function checkTUPADRequiredAttachments() {
+    const verifyButton = document.getElementById('verify-button');
+    const modalitySelect = document.getElementById('tupad_modality_select');
+    
+    if (!verifyButton || !modalitySelect) return true;
+    
+    const selectedModality = modalitySelect.value;
+    if (!selectedModality) return true;
+    
+    const requiredAttachments = TUPAD_REQUIRED_ATTACHMENTS[selectedModality];
+    if (!requiredAttachments || requiredAttachments.length === 0) return true;
+    
+    // Get all attachment items
+    const attachmentItems = document.querySelectorAll('.tupad-attachment-item');
+    
+    // Create a map to track which required attachments are present
+    const requiredAttachmentsStatus = new Map();
+    requiredAttachments.forEach(req => {
+        requiredAttachmentsStatus.set(req, false);
+    });
+    
+    // Check each attachment item in the UI
+    attachmentItems.forEach(item => {
+        const attachmentLabel = item.querySelector('label.text-sm.font-medium.text-gray-900');
+        if (!attachmentLabel) return;
+        
+        const attachmentName = attachmentLabel.textContent.trim();
+        const attachmentId = item.dataset.attachmentId;
+        
+        // Look for the present radio button
+        const presentRadio = item.querySelector(`input[name="tupad_attachment_${attachmentId}"][value="1"]`);
+        
+        // Check if this attachment is marked as Present
+        if (presentRadio && presentRadio.checked) {
+            const matchedRequired = findMatchingRequiredTUPADAttachment(attachmentName, selectedModality);
+            if (matchedRequired) {
+                requiredAttachmentsStatus.set(matchedRequired, true);
+            }
+        }
+    });
+    
+    // Get list of missing required attachments
+    const missingRequired = [];
+    requiredAttachmentsStatus.forEach((isPresent, requiredName) => {
+        if (!isPresent) {
+            missingRequired.push(requiredName);
+        }
+    });
+    
+    // Remove existing warnings/success messages
+    const existingWarning = document.getElementById('tupad-required-warning');
+    if (existingWarning) {
+        existingWarning.remove();
+    }
+    
+    const existingSuccess = document.getElementById('tupad-required-success');
+    if (existingSuccess) {
+        existingSuccess.remove();
+    }
+    
+    if (missingRequired.length > 0) {
+        // Disable verify button - NOT ALL required attachments are present
+        verifyButton.disabled = true;
+        verifyButton.classList.add('opacity-50', 'cursor-not-allowed');
+        verifyButton.title = 'All required attachments must be marked as Present';
+        
+        // Show warning
+        const warningDiv = document.createElement('div');
+        warningDiv.id = 'tupad-required-warning';
+        warningDiv.className = 'mt-3 bg-red-50 border border-red-200 rounded-lg p-4';
+        warningDiv.innerHTML = `
+            <div class="flex items-start">
+                <svg class="w-5 h-5 text-red-600 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>
+                <div class="flex-1">
+                    <span class="text-red-800 font-medium">⚠️ Required Attachments Missing</span>
+                    <p class="text-sm text-red-700 mt-1">
+                        The following <strong>${missingRequired.length}</strong> required attachment(s) must be marked as <span class="font-bold">"Present"</span> to verify this request:
+                    </p>
+                    <ul class="list-disc list-inside text-sm text-red-700 mt-2 space-y-1 ml-2">
+                        ${missingRequired.map(name => `<li>${name}</li>`).join('')}
+                    </ul>
+                    <p class="text-xs text-red-600 mt-2">
+                        <strong>Note:</strong> All ${requiredAttachments.length} required attachments must be marked as "Present". You currently have ${requiredAttachments.length - missingRequired.length} of ${requiredAttachments.length} marked.
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        const summaryDiv = document.querySelector('#tupad-attachments-container .mt-4.flex.items-center.justify-between');
+        if (summaryDiv) {
+            summaryDiv.parentNode.insertBefore(warningDiv, summaryDiv.nextSibling);
+        }
+        
+        return false;
+    } else {
+        // Enable verify button - ALL required attachments are present
+        verifyButton.disabled = false;
+        verifyButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        verifyButton.title = 'Verify this request';
+        
+        // Show success message
+        const successDiv = document.createElement('div');
+        successDiv.id = 'tupad-required-success';
+        successDiv.className = 'mt-3 bg-green-50 border border-green-200 rounded-lg p-4';
+        successDiv.innerHTML = `
+            <div class="flex items-start">
+                <svg class="w-5 h-5 text-green-600 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <div class="flex-1">
+                    <span class="text-green-800 font-medium">✓ All Required Attachments Present</span>
+                    <p class="text-sm text-green-700 mt-1">
+                        All <strong>${requiredAttachments.length}</strong> required attachments are marked as "Present". You may now verify this request.
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        const summaryDiv = document.querySelector('#tupad-attachments-container .mt-4.flex.items-center.justify-between');
+        if (summaryDiv) {
+            summaryDiv.parentNode.insertBefore(successDiv, summaryDiv.nextSibling);
+        }
+        
+        return true;
+    }
+}
 
 // Handle status change for TUPAD radio buttons
 function handleTUPADStatusRadioChange(radioElement) {
-    console.log('handleTUPADStatusRadioChange called', { 
-        radio: radioElement,
-        value: radioElement.value,
-        checked: radioElement.checked,
-        attachmentId: radioElement.dataset.attachmentId
-    });
-    
     const attachmentId = radioElement.dataset.attachmentId;
     if (!attachmentId) {
         console.error('No attachment ID found for radio button');
@@ -785,12 +790,6 @@ function handleTUPADStatusRadioChange(radioElement) {
     const hiddenInput = document.getElementById(`tupad-status-value-${attachmentId}`);
     if (hiddenInput) {
         hiddenInput.value = statusValue;
-        console.log('Hidden input updated:', { 
-            id: hiddenInput.id, 
-            value: hiddenInput.value 
-        });
-    } else {
-        console.warn('Hidden input not found for attachment:', attachmentId);
     }
     
     // Update UI
@@ -798,11 +797,162 @@ function handleTUPADStatusRadioChange(radioElement) {
     
     // Update summary
     updateTUPADAttachmentSummary();
+    
+    // Check required attachments
+    checkTUPADRequiredAttachments();
+    
+    // Validate remarks
+    validateRemarksForAttachment(attachmentId);
 }
+
+function updateTUPADAttachmentUI(attachmentId, status) {
+    const item = document.querySelector(`[data-attachment-id="${attachmentId}"]`);
+    if (!item) return;
+    
+    const remarksTextarea = document.getElementById(`tupad-remarks-${attachmentId}`);
+    const remarksHelper = item.querySelector('.tupad-remarks-container p.text-xs');
+    const remarksError = document.getElementById(`remarks-error-${attachmentId}`);
+    
+    // Remove all color classes
+    item.classList.remove('bg-green-50', 'border-green-200', 'bg-red-50', 'border-red-200', 'bg-gray-50', 'border-gray-200');
+    if (remarksTextarea) {
+        remarksTextarea.classList.remove('border-green-300', 'border-red-300', 'border-gray-300', 
+                                        'bg-green-50', 'bg-red-50', 'bg-gray-50');
+    }
+    
+    // Update radio button states
+    const presentRadio = item.querySelector('.present-radio');
+    const notPresentRadio = item.querySelector('.not-present-radio');
+    const naRadio = item.querySelector('.na-radio');
+    
+    // Uncheck all radios first
+    if (presentRadio) presentRadio.checked = false;
+    if (notPresentRadio) notPresentRadio.checked = false;
+    if (naRadio) naRadio.checked = false;
+    
+    if (status === 1 || status === '1') {
+        // Present - Green
+        item.classList.add('bg-green-50', 'border-green-200');
+        if (presentRadio) presentRadio.checked = true;
+        
+        if (remarksTextarea) {
+            // Auto-fill remarks for Present
+            if (!remarksTextarea.value || remarksTextarea.value === '') {
+                remarksTextarea.value = 'The attachment is present';
+            }
+            remarksTextarea.classList.add('border-green-300', 'bg-green-50');
+            remarksTextarea.placeholder = 'The attachment is present';
+            remarksTextarea.readOnly = true;
+        }
+        if (remarksHelper) {
+            remarksHelper.textContent = '✓ This document is complete and present.';
+            remarksHelper.className = 'text-xs text-green-600 mt-1';
+        }
+        if (remarksError) {
+            remarksError.classList.add('hidden');
+        }
+    } else if (status === 0 || status === '0') {
+        // Not Present - Red
+        item.classList.add('bg-red-50', 'border-red-200');
+        if (notPresentRadio) notPresentRadio.checked = true;
+        
+        if (remarksTextarea) {
+            // Clear if it has default "present" message
+            if (remarksTextarea.value === 'The attachment is present') {
+                remarksTextarea.value = '';
+            }
+            remarksTextarea.classList.add('border-red-300', 'bg-red-50');
+            remarksTextarea.placeholder = 'Specify what is lacking or missing in this document...';
+            remarksTextarea.readOnly = false;
+        }
+        if (remarksHelper) {
+            remarksHelper.textContent = 'Describe what information or entries are missing from this document.';
+            remarksHelper.className = 'text-xs text-gray-500 mt-1';
+        }
+        if (remarksError) {
+            remarksError.textContent = 'Remarks are required for Not Present attachments';
+            remarksError.classList.remove('hidden');
+        }
+    } else {
+        // N/A - Gray (default) - Editable remarks
+        item.classList.add('bg-gray-50', 'border-gray-200');
+        if (naRadio) naRadio.checked = true;
+        
+        if (remarksTextarea) {
+            // Clear if it's the default "present" message
+            if (remarksTextarea.value === 'The attachment is present') {
+                remarksTextarea.value = '';
+            }
+            remarksTextarea.classList.add('border-gray-300', 'bg-gray-50');
+            remarksTextarea.placeholder = 'Explain why this document is not applicable...';
+            remarksTextarea.readOnly = false; // Make it editable for N/A
+        }
+        if (remarksHelper) {
+            remarksHelper.textContent = 'Explain why this document is not applicable for this request.';
+            remarksHelper.className = 'text-xs text-gray-500 mt-1';
+        }
+        if (remarksError) {
+            remarksError.textContent = 'Remarks are required for N/A attachments';
+            remarksError.classList.remove('hidden');
+        }
+    }
+}
+
+// Validate remarks for a specific attachment
+function validateRemarksForAttachment(attachmentId) {
+    const hiddenInput = document.getElementById(`tupad-status-value-${attachmentId}`);
+    const remarksTextarea = document.getElementById(`tupad-remarks-${attachmentId}`);
+    const remarksError = document.getElementById(`remarks-error-${attachmentId}`);
+    
+    if (!hiddenInput || !remarksTextarea || !remarksError) return true;
+    
+    const status = hiddenInput.value;
+    const remarks = remarksTextarea.value.trim();
+    
+    // For Present status, we auto-fill remarks, so always valid
+    if (status === '1') {
+        remarksError.classList.add('hidden');
+        return true;
+    }
+    
+    // For N/A and Not Present, remarks are required
+    if ((status === 'null' || status === '0') && !remarks) {
+        remarksError.classList.remove('hidden');
+        return false;
+    }
+    
+    remarksError.classList.add('hidden');
+    return true;
+}
+
+// Validate all attachments remarks
+function validateAllAttachmentsRemarks() {
+    const allHiddenInputs = document.querySelectorAll('input[name^="tupad_attachment_status_value"]');
+    let allValid = true;
+    const invalidAttachments = [];
+    
+    allHiddenInputs.forEach(input => {
+        const attachmentId = input.name.match(/\[(.*?)\]/)[1];
+        const isValid = validateRemarksForAttachment(attachmentId);
+        
+        if (!isValid) {
+            allValid = false;
+            // Get attachment name for error message
+            const item = document.querySelector(`[data-attachment-id="${attachmentId}"]`);
+            if (item) {
+                const label = item.querySelector('label.text-sm.font-medium.text-gray-900');
+                if (label) {
+                    invalidAttachments.push(label.textContent.trim());
+                }
+            }
+        }
+    });
+    
+    return { allValid, invalidAttachments };
+}
+
 // Mark all TUPAD attachments as present
 function markAllTUPADAsPresent() {
-    console.log('markAllTUPADAsPresent called');
-    
     const attachmentItems = document.querySelectorAll('.tupad-attachment-item');
     
     attachmentItems.forEach(item => {
@@ -820,12 +970,11 @@ function markAllTUPADAsPresent() {
     
     showMessage('All TUPAD attachments marked as Present', 'success');
     updateTUPADAttachmentSummary();
+    checkTUPADRequiredAttachments();
 }
 
 // Mark all TUPAD attachments as N/A
 function markAllTUPADAsNA() {
-    console.log('markAllTUPADAsNA called');
-    
     const attachmentItems = document.querySelectorAll('.tupad-attachment-item');
     
     attachmentItems.forEach(item => {
@@ -843,59 +992,24 @@ function markAllTUPADAsNA() {
     
     showMessage('All TUPAD attachments marked as N/A', 'success');
     updateTUPADAttachmentSummary();
+    checkTUPADRequiredAttachments();
 }
 
-// Uncheck all TUPAD attachments (set to N/A)
-function uncheckAllTUPAD() {
-    console.log('uncheckAllTUPAD called');
-    markAllTUPADAsNA(); // This does the same thing
-}
-
-// Mark all TUPAD attachments as N/A
-function markAllTUPADAsNA() {
-    console.log('markAllTUPADAsNA called');
-    
-    const attachmentItems = document.querySelectorAll('.tupad-attachment-item');
-    
-    attachmentItems.forEach(item => {
-        const attachmentId = item.dataset.attachmentId;
-        if (!attachmentId) return;
-        
-        const naRadio = item.querySelector('.na-radio');
-        if (naRadio && !naRadio.disabled) {
-            naRadio.checked = true;
-            naRadio.dispatchEvent(new Event('change'));
-        }
-    });
-    
-    showMessage('All TUPAD attachments marked as N/A', 'success');
-    updateTUPADAttachmentSummary();
-}
 function updateTUPADAttachmentSummary() {
-    console.log('updateTUPADAttachmentSummary called');
-    
-    // Get ALL hidden inputs that contain status values
     const allHiddenInputs = document.querySelectorAll('input[name^="tupad_attachment_status_value"]');
     let presentCount = 0;
     let notPresentCount = 0;
     let naCount = 0;
-    let unsetCount = 0;
-    
-    console.log('Found hidden inputs:', allHiddenInputs.length);
     
     allHiddenInputs.forEach(input => {
         const value = input.value;
-        console.log('Hidden input:', { name: input.name, value: value });
         
         if (value === '1') {
             presentCount++;
         } else if (value === '0') {
             notPresentCount++;
         } else if (value === 'null' || value === '') {
-            naCount++; // Count empty as N/A too
-        } else {
-            unsetCount++;
-            naCount++; // Count unset as N/A
+            naCount++;
         }
     });
     
@@ -910,19 +1024,15 @@ function updateTUPADAttachmentSummary() {
     if (notPresentCountEl) notPresentCountEl.textContent = `Not Present: ${notPresentCount}`;
     if (naCountEl) naCountEl.textContent = `N/A: ${naCount}`;
     if (totalCountEl) totalCountEl.textContent = `Total: ${total}`;
-    
-    console.log('TUPAD Summary updated:', { presentCount, notPresentCount, naCount, unsetCount, total });
 }
-// ✅ FIXED: Handle modality change with correct route
+
+// Handle modality change
 async function handleModalityChange() {
     const modalitySelect = document.getElementById('tupad_modality_select');
     const selectedModality = modalitySelect.value;
     const dvRequestId = "{{ $dvRequest->id }}";
     
-    console.log('TUPAD Modality changed to:', selectedModality);
-    
     if (!selectedModality) {
-        // Show default message
         const container = document.getElementById('tupad-attachments-container');
         container.innerHTML = `
             <div class="bg-gray-100 border border-gray-300 rounded-lg p-4">
@@ -932,7 +1042,7 @@ async function handleModalityChange() {
             </div>
         `;
         
-        const bulkActionButtons = document.querySelector('.flex.items-center.space-x-3');
+        const bulkActionButtons = document.getElementById('bulk-actions');
         if (bulkActionButtons) {
             bulkActionButtons.style.display = 'none';
         }
@@ -943,10 +1053,7 @@ async function handleModalityChange() {
     try {
         showMessage('Changing modality...', 'info');
         
-        // ✅ CORRECT: This will generate /Incoming/TUPAD/dvrequests/{id}/change-modality
         const url = "{{ route('Incoming.TUPAD.dvrequests.changeModality', ':id') }}".replace(':id', dvRequestId);
-        
-        console.log('Calling URL:', url);
         
         const response = await fetch(url, {
             method: 'POST',
@@ -961,28 +1068,19 @@ async function handleModalityChange() {
         });
         
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Response error:', {
-                status: response.status,
-                statusText: response.statusText,
-                body: errorText
-            });
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('Response data:', data);
         
         if (data.success && data.reload_required) {
             showMessage('Modality changed! Reloading page...', 'success');
             
-            // Reload the page after a short delay
             setTimeout(() => {
                 window.location.reload();
             }, 500);
         } else if (data.success) {
             showMessage('Modality set successfully', 'success');
-            // Reload anyway to ensure UI is in sync
             setTimeout(() => {
                 window.location.reload();
             }, 500);
@@ -994,168 +1092,12 @@ async function handleModalityChange() {
         console.error('Error changing modality:', error);
         showMessage('Error changing modality: ' + error.message, 'error');
         
-        // Reload page anyway to reset the form
         setTimeout(() => {
             window.location.reload();
         }, 1500);
     }
 }
-// Function to render TUPAD attachments from names (frontend only)
-function renderTUPADAttachmentsFromNames(attachmentNames, modality) {
-    const container = document.getElementById('tupad-attachments-container');
-    if (!container) return;
-    
-    // Check if user can edit (based on status)
-    const isEditable = {{ $dvRequest->status === 'Incoming-TUPAD_received' ? 'true' : 'false' }};
-    
-    let attachmentsHTML = `
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-            <p class="text-sm text-blue-800">
-                <strong>Verification Responsibility:</strong> 
-                <span class="font-semibold">Incoming-TUPAD</span> verifies all physical TUPAD attachments.
-                Found ${attachmentNames.length} required attachments for this modality.
-            </p>
-        </div>
 
-        <div class="space-y-3">
-    `;
-    
-    attachmentNames.forEach((attachmentName, index) => {
-        // Create a safe ID
-        const safeName = attachmentName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-        const attachmentId = `${modality}_${safeName}_${index}`;
-        
-        attachmentsHTML += `
-            <div class="border rounded-lg p-4 transition-all duration-200 tupad-attachment-item bg-gray-50 border-gray-200"
-                data-attachment-id="${attachmentId}">
-                
-                <!-- Document Name & Status Row -->
-                <div class="flex items-start justify-between mb-3">
-                    <div class="flex-1">
-                        <label class="text-sm font-medium text-gray-900">
-                            ${attachmentName}
-                        </label>
-                    </div>
-                    
-                    <!-- Status Selection - RADIO BUTTONS -->
-                    <div class="flex items-center space-x-2" id="tupad-status-group-${attachmentId}">
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="radio" 
-                                   name="tupad_attachment_${attachmentId}" 
-                                   value="1"
-                                   class="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500 tupad-attachment-radio present-radio"
-                                   data-attachment-id="${attachmentId}"
-                                   ${isEditable ? '' : 'disabled'}
-                                   onchange="handleTUPADStatusRadioChange(this)">
-                            <span class="ml-1.5 text-xs font-medium text-green-700">Present</span>
-                        </label>
-                        
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="radio" 
-                                   name="tupad_attachment_${attachmentId}" 
-                                   value="0"
-                                   class="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500 tupad-attachment-radio not-present-radio"
-                                   data-attachment-id="${attachmentId}"
-                                   ${isEditable ? '' : 'disabled'}
-                                   onchange="handleTUPADStatusRadioChange(this)">
-                            <span class="ml-1.5 text-xs font-medium text-red-700">Not Present</span>
-                        </label>
-                        
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="radio" 
-                                   name="tupad_attachment_${attachmentId}" 
-                                   value="null"
-                                   class="h-4 w-4 text-gray-600 border-gray-300 focus:ring-gray-500 tupad-attachment-radio na-radio"
-                                   data-attachment-id="${attachmentId}"
-                                   checked
-                                   ${isEditable ? '' : 'disabled'}
-                                   onchange="handleTUPADStatusRadioChange(this)">
-                            <span class="ml-1.5 text-xs font-medium text-gray-700">N/A</span>
-                        </label>
-                        
-                        <!-- Hidden input to store the actual value -->
-                        <input type="hidden" 
-                               name="tupad_attachment_status_value[${attachmentId}]" 
-                               value="null" 
-                               id="tupad-status-value-${attachmentId}">
-                    </div>
-                </div>
-                
-                <!-- Remarks/Lacking Input -->
-                <div class="tupad-remarks-container" id="tupad-remarks-container-${attachmentId}">
-                    <label class="block text-xs font-medium text-gray-700 mb-1">
-                        Remarks
-                    </label>
-                    <textarea 
-                        name="tupad_attachment_remarks[${attachmentId}]"
-                        id="tupad-remarks-${attachmentId}"
-                        rows="2"
-                        class="w-full px-3 py-2 text-xs border border-gray-300 bg-gray-50 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
-                        placeholder="Not applicable"
-                        readonly
-                        maxlength="500">Not applicable</textarea>
-                    <p class="text-xs text-gray-500 mt-1">
-                        This document is not applicable for this request.
-                    </p>
-                </div>
-            </div>
-        `;
-    });
-    
-    attachmentsHTML += `
-        </div>
-        
-        <!-- Summary -->
-        <div class="mt-4 flex items-center justify-between text-sm p-3 bg-white rounded-lg border border-gray-200">
-            <div class="flex items-center space-x-4">
-                <span class="flex items-center">
-                    <span class="w-3 h-3 bg-green-500 rounded-full mr-1"></span>
-                    <span class="text-green-700 font-medium" id="tupad-present-count">
-                        Present: 0
-                    </span>
-                </span>
-                <span class="flex items-center">
-                    <span class="w-3 h-3 bg-red-500 rounded-full mr-1"></span>
-                    <span class="text-red-700 font-medium" id="tupad-not-present-count">
-                        Not Present: 0
-                    </span>
-                </span>
-                <span class="flex items-center">
-                    <span class="w-3 h-3 bg-gray-400 rounded-full mr-1"></span>
-                    <span class="text-gray-700 font-medium" id="tupad-na-count">
-                        N/A: ${attachmentNames.length}
-                    </span>
-                </span>
-            </div>
-            <span class="text-gray-600 font-medium" id="tupad-total-count">
-                Total: ${attachmentNames.length}
-            </span>
-        </div>
-        
-        <p class="text-xs text-gray-500 mt-3">
-            <strong>Note:</strong> All documents default to "N/A". Mark as "Present" or "Not Present" as needed. 
-            When marked as "Present", a default remark "The attachment is present" will be automatically added.
-            Use "Uncheck All" to reset all to N/A.
-        </p>
-    `;
-    
-    container.innerHTML = attachmentsHTML;
-    
-    // Update bulk action buttons visibility
-    const bulkActionButtons = document.querySelector('.flex.items-center.space-x-3');
-    if (bulkActionButtons) {
-        if (isEditable && attachmentNames.length > 0) {
-            bulkActionButtons.style.display = 'flex';
-        } else {
-            bulkActionButtons.style.display = 'none';
-        }
-    }
-    
-    // Initialize the attachment summary
-    setTimeout(() => {
-        updateTUPADAttachmentSummary();
-    }, 100);
-}
 // Update character count
 function updateCharCount() {
     const textarea = document.getElementById('rejectRemarks');
@@ -1186,8 +1128,6 @@ function updateCharCount() {
 
 // Open reject modal
 function openRejectModal() {
-    console.log('🔴 openRejectModal called for Incoming-TUPAD');
-    
     currentRejectId = {{ $dvRequest->id }};
     const modal = document.getElementById('rejectModal');
     
@@ -1196,34 +1136,35 @@ function openRejectModal() {
     document.getElementById('remarksError').classList.add('hidden');
     document.body.style.overflow = 'hidden';
     updateCharCount();
-    
-    console.log('🔴 Modal opened for DV Request ID:', currentRejectId);
 }
 
 // Close reject modal
 function closeRejectModal() {
-    console.log('🟢 closeRejectModal called');
     document.getElementById('rejectModal').classList.add('hidden');
     document.getElementById('rejectRemarks').value = '';
     document.getElementById('remarksError').classList.add('hidden');
     currentRejectId = null;
     document.body.style.overflow = 'auto';
 }
+
 document.addEventListener('DOMContentLoaded', () => {
     const rejectForm = document.getElementById('rejectForm');
     const dvRequestId = "{{ $dvRequest->id }}";
+    const verifyForm = document.getElementById('verifyForm');
     
     // Initialize character count
     updateCharCount();
     
-    // Initialize TUPAD attachment summary if there are initial attachments
+    // Initialize TUPAD attachment summary
     updateTUPADAttachmentSummary();
+    
+    // Initialize required attachments check
+    setTimeout(checkTUPADRequiredAttachments, 100);
     
     // Handle reject form submission
     if (rejectForm) {
         rejectForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            console.log('🟡 Reject form submitted for Incoming-TUPAD');
             
             const remarks = document.getElementById('rejectRemarks').value.trim();
             const remarksError = document.getElementById('remarksError');
@@ -1247,7 +1188,6 @@ document.addEventListener('DOMContentLoaded', () => {
             spinner.classList.remove('hidden');
             
             try {
-                console.log('🟡 Sending reject request for ID:', currentRejectId);
                 const response = await fetch(`/Incoming/TUPAD/dvrequests/${currentRejectId}/reject`, {
                     method: 'POST',
                     headers: {
@@ -1259,13 +1199,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 
                 const data = await response.json();
-                console.log('🟡 Reject response:', data);
                 
                 if (data.success) {
                     showMessage(data.message || 'DV request has been rejected successfully.', 'success');
                     closeRejectModal();
                     
-                    // Release lock and redirect after short delay
                     setTimeout(() => {
                         releaseLock(new Event('click'), currentRejectId);
                     }, 1500);
@@ -1276,12 +1214,53 @@ document.addEventListener('DOMContentLoaded', () => {
                     spinner.classList.add('hidden');
                 }
             } catch (error) {
-                console.error('❌ Reject error:', error);
+                console.error('Reject error:', error);
                 showMessage('An error occurred while rejecting the request.', 'error');
                 confirmBtn.disabled = false;
                 btnText.textContent = 'Reject Request';
                 spinner.classList.add('hidden');
             }
+        });
+    }
+
+    // Handle verify form submission
+    if (verifyForm) {
+        verifyForm.addEventListener('submit', function(e) {
+            // Check modality
+            const modalitySelect = document.getElementById('tupad_modality_select');
+            if (modalitySelect && !modalitySelect.value) {
+                e.preventDefault();
+                showMessage('Please select a TUPAD modality first!', 'error');
+                modalitySelect.focus();
+                return false;
+            }
+            
+            // Validate all attachments remarks
+            const { allValid, invalidAttachments } = validateAllAttachmentsRemarks();
+            if (!allValid) {
+                e.preventDefault();
+                showMessage(`Please add remarks for the following attachments:\n${invalidAttachments.join('\n')}`, 'error');
+                return false;
+            }
+            
+            // Check required attachments before submission
+            if (!checkTUPADRequiredAttachments()) {
+                e.preventDefault();
+                showMessage('Please mark all required attachments as "Present" before verifying.', 'error');
+                return false;
+            }
+            
+            // Show confirmation dialog
+            const confirmMsg = `Are you sure you want to verify this DV request?\n\n` +
+                             `Modality: ${modalitySelect.options[modalitySelect.selectedIndex].text}\n` +
+                             `This action cannot be undone.`;
+            
+            if (!confirm(confirmMsg)) {
+                e.preventDefault();
+                return false;
+            }
+            
+            return true;
         });
     }
 
@@ -1302,6 +1281,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Add input event listeners to remarks textareas
+    document.addEventListener('input', function(e) {
+        if (e.target.name && e.target.name.startsWith('tupad_attachment_remarks[')) {
+            const attachmentId = e.target.name.match(/\[(.*?)\]/)[1];
+            validateRemarksForAttachment(attachmentId);
+        }
+    });
+
     // 🔄 Auto-refresh lock every 2 minutes
     const refreshInterval = setInterval(() => {
         fetch(`/Incoming/TUPAD/dvrequests/${dvRequestId}/refresh-lock`, {
@@ -1315,66 +1302,16 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             if (data.success) {
                 console.log("🔒 Lock refreshed at:", data.locked_at);
-            } else {
-                console.warn("⚠️ Lock not refreshed:", data.error);
             }
         })
         .catch(err => console.error("Refresh lock failed:", err));
-    }, 120000); // every 2 minutes
+    }, 120000);
 
     // 🧹 Release lock when user leaves the page
     window.addEventListener("beforeunload", () => {
         navigator.sendBeacon(`/Incoming/TUPAD/dvrequests/${dvRequestId}/release-lock`, 
             JSON.stringify({ _token: "{{ csrf_token() }}" }));
     });
-
-    // Form submit validation
-    const form = document.querySelector('form[action*="verify"]');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            console.log('=== TUPAD FORM SUBMISSION DEBUG ===');
-            
-            // Check modality
-            const modalitySelect = document.getElementById('tupad_modality_select');
-            if (modalitySelect && !modalitySelect.value) {
-                e.preventDefault();
-                alert('Please select a TUPAD modality first!');
-                modalitySelect.focus();
-                return false;
-            }
-            
-            // Check all hidden inputs
-            const allHiddenInputs = document.querySelectorAll('input[name^="tupad_attachment_status_value"]');
-            console.log('Total hidden inputs:', allHiddenInputs.length);
-            
-            let hasSelection = false;
-            let debugInfo = [];
-            
-            allHiddenInputs.forEach(input => {
-                const value = input.value;
-                debugInfo.push({
-                    name: input.name,
-                    value: value,
-                    hasValue: value !== ''
-                });
-                
-                if (value !== '') {
-                    hasSelection = true;
-                }
-            });
-            
-            console.log('Hidden inputs debug:', debugInfo);
-            
-            if (!hasSelection) {
-                e.preventDefault();
-                alert('Please mark at least one attachment status (Present, Not Present, or N/A) before verifying.');
-                return false;
-            }
-            
-            console.log('Form validation passed, submitting...');
-            return true;
-        });
-    }
 });
 
 // Function to show toast messages
@@ -1452,7 +1389,8 @@ function updateButtonsToVerifyMode(dvRequestId) {
     buttonContainer.innerHTML = `
         <div class="flex justify-end space-x-3">
             <button type="submit" 
-                    class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200">
+                    class="inline-flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                    id="verify-button">
                 Verify
             </button>
             <button type="button"
@@ -1467,116 +1405,10 @@ function updateButtonsToVerifyMode(dvRequestId) {
             </a>
         </div>
     `;
+    
+    // Re-check required attachments after button update
+    setTimeout(checkTUPADRequiredAttachments, 100);
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-    const dvRequestId = "{{ $dvRequest->id }}";
-
-    // 🔄 Auto-refresh lock every 2 minutes
-    const refreshInterval = setInterval(() => {
-        fetch(`/Incoming/TUPAD/dvrequests/${dvRequestId}/refresh-lock`, {
-            method: "POST",
-            headers: {
-                "X-CSRF-TOKEN": "{{ csrf_token() }}",
-                "Accept": "application/json"
-            }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                console.log("🔒 Lock refreshed at:", data.locked_at);
-            } else {
-                console.warn("⚠️ Lock not refreshed:", data.error);
-            }
-        })
-        .catch(err => console.error("Refresh lock failed:", err));
-    }, 120000); // every 2 minutes (120,000 ms)
-
-    // 🧹 Release lock when user leaves the page
-    window.addEventListener("beforeunload", () => {
-        navigator.sendBeacon(`/Incoming/TUPAD/dvrequests/${dvRequestId}/release-lock`, 
-            JSON.stringify({ _token: "{{ csrf_token() }}" }));
-    });
-});
-
-
-
-// Add form submit debugging
-// Add form submit debugging
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('form[action*="verify"]');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            console.log('TUPAD Form submitted - checking data...');
-            
-            // Check modality
-            const modalitySelect = document.getElementById('tupad_modality_select');
-            if (modalitySelect && !modalitySelect.value) {
-                e.preventDefault();
-                showMessage('Please select a TUPAD modality first!', 'error');
-                modalitySelect.focus();
-                return false;
-            }
-            
-            // Check all hidden inputs for status values
-            const allHiddenInputs = document.querySelectorAll('input[name^="tupad_attachment_status_value"]');
-            console.log('Total hidden inputs:', allHiddenInputs.length);
-            
-            let hasEmptyValues = false;
-            let debugInfo = [];
-            
-            allHiddenInputs.forEach(input => {
-                const value = input.value;
-                debugInfo.push({
-                    name: input.name,
-                    value: value,
-                    hasValue: value !== ''
-                });
-                
-                if (value === '') {
-                    hasEmptyValues = true;
-                    console.warn('EMPTY VALUE FOUND:', input.name);
-                }
-            });
-            
-            console.log('Hidden inputs debug:', debugInfo);
-            
-            if (hasEmptyValues) {
-                e.preventDefault();
-                showMessage('Some attachments do not have status values. Please ensure all attachments are marked as Present, Not Present, or N/A.', 'error');
-                return false;
-            }
-            
-            // Also check that at least one radio button is checked per group
-            const attachmentItems = document.querySelectorAll('.tupad-attachment-item');
-            let hasUncheckedGroups = false;
-            
-            attachmentItems.forEach(item => {
-                const attachmentId = item.dataset.attachmentId;
-                const radios = item.querySelectorAll('.tupad-attachment-radio');
-                let hasCheckedRadio = false;
-                
-                radios.forEach(radio => {
-                    if (radio.checked) hasCheckedRadio = true;
-                });
-                
-                if (!hasCheckedRadio) {
-                    hasUncheckedGroups = true;
-                    console.warn('No radio checked for attachment:', attachmentId);
-                }
-            });
-            
-            if (hasUncheckedGroups) {
-                e.preventDefault();
-                showMessage('Please select a status (Present, Not Present, or N/A) for all attachments.', 'error');
-                return false;
-            }
-            
-            console.log('Form validation passed, submitting...');
-            return true;
-        });
-    }
-});
 
 function releaseLock(event, id) {
     event.preventDefault(); 
