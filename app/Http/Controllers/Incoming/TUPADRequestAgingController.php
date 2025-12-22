@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Incoming;
 
 use App\Http\Controllers\Controller;
 use App\Models\DvRequest;
+use App\Models\DvRequestLog;
 use App\Models\DocumentAgingAlert;
 use App\Services\PusherService;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+use Illuminate\Support\Str;
 
 class TUPADRequestAgingController extends Controller
 {
@@ -21,6 +23,7 @@ class TUPADRequestAgingController extends Controller
 
     /**
      * Get aging TUPAD documents
+     * Documents aged 3+ days in TUPAD-related statuses
      */
     public function getAgingDocuments()
     {
@@ -28,7 +31,9 @@ class TUPADRequestAgingController extends Controller
             Log::info('Fetching TUPAD aging documents');
             
             $agingThreshold = 3; // days
+            $rejectionThreshold = 15; // days for auto-rejection
             $cutoffTime = now()->subDays($agingThreshold);
+            $rejectionCutoffTime = now()->subDays($rejectionThreshold);
 
             $agingRequests = DvRequest::with(['focalPerson', 'program', 'respocenter'])
                 ->whereHas('program', function($query) {
@@ -38,20 +43,37 @@ class TUPADRequestAgingController extends Controller
                 ->where('created_at', '<=', $cutoffTime)
                 ->orderBy('created_at', 'asc')
                 ->get()
-                ->map(function ($request) {
+                ->map(function ($request) use ($rejectionThreshold) {
                     // Use proper days calculation with whole numbers
                     $daysOld = now()->diffInDays(Carbon::parse($request->created_at), false);
                     $daysOld = floor((int) $daysOld);
                     
+                    // Check if request is eligible for auto-rejection
+                    $isEligibleForRejection = $daysOld >= $rejectionThreshold && 
+                                            in_array($request->status, ['IMSD_verified', 'Incoming-TUPAD_received', 'Incoming-TUPAD_in_process']);
+                    
+                    // Get the latest alert for this document
+                    $latestAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
+                        ->where('alert_date', today())
+                        ->first();
+                    
+                    $controlNumber = $request->accounting_control_number 
+                        ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                        : '—';
+                    
                     return [
                         'id' => $request->id,
-                        'control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT) : '—',
+                        'alert_id' => $latestAlert ? $latestAlert->id : null,
+                        'control_number' => $controlNumber,
                         'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
                         'program' => $request->program->prcode ?? 'N/A',
+                        'document_type' => 'TUPAD',
                         'status' => $request->status,
                         'days_old' => $daysOld, // Positive whole number
                         'submitted_date' => $request->created_at->format('M d, Y h:i A'),
                         'urgency' => $this->getUrgencyLevel($daysOld),
+                        'eligible_for_auto_rejection' => $isEligibleForRejection,
+                        'rejection_threshold_days' => $rejectionThreshold,
                     ];
                 });
 
@@ -61,7 +83,8 @@ class TUPADRequestAgingController extends Controller
                 'success' => true,
                 'aging_count' => $agingRequests->count(),
                 'documents' => $agingRequests,
-                'threshold_days' => $agingThreshold,
+                'notification_threshold_days' => $agingThreshold,
+                'rejection_threshold_days' => $rejectionThreshold,
             ]);
 
         } catch (\Exception $e) {
@@ -85,23 +108,50 @@ class TUPADRequestAgingController extends Controller
         try {
             Log::info('Fetching TUPAD aging statistics');
             
+            // Define completed statuses for TUPAD - INCLUDE Incoming-TUPAD_rejected
+            $completedStatuses = [
+                'cashier_released',
+                'Incoming-TUPAD_rejected',
+                '%_rejected',
+                'completed',
+            ];
+            
+            $rejectionThreshold = 15; // days for auto-rejection
             $tenDaysAgo = now()->subDays(10);
             $sevenDaysAgo = now()->subDays(7);
             $threeDaysAgo = now()->subDays(3);
+            $rejectionCutoff = now()->subDays($rejectionThreshold);
             
             $baseQuery = function() {
                 return DvRequest::whereHas('program', function($query) {
                     $query->where('prcode', 'TUPAD'); // ONLY TUPAD PROGRAM
-                })->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received', 'Incoming-TUPAD_in_process']);
+                });
             };
             
             $statistics = [
-                'critical' => $baseQuery()->where('created_at', '<', $tenDaysAgo)->count(),
-                'high' => $baseQuery()->where('created_at', '>=', $tenDaysAgo)
-                    ->where('created_at', '<', $sevenDaysAgo)->count(),
-                'medium' => $baseQuery()->where('created_at', '>=', $sevenDaysAgo)
-                    ->where('created_at', '<', $threeDaysAgo)->count(),
-                'total_aging' => $baseQuery()->where('created_at', '<', $threeDaysAgo)->count(),
+                'critical' => $baseQuery()
+                    ->whereNotIn('status', $completedStatuses)
+                    ->where('created_at', '<', $tenDaysAgo)
+                    ->count(),
+                'high' => $baseQuery()
+                    ->whereNotIn('status', $completedStatuses)
+                    ->where('created_at', '>=', $tenDaysAgo)
+                    ->where('created_at', '<', $sevenDaysAgo)
+                    ->count(),
+                'medium' => $baseQuery()
+                    ->whereNotIn('status', $completedStatuses)
+                    ->where('created_at', '>=', $sevenDaysAgo)
+                    ->where('created_at', '<', $threeDaysAgo)
+                    ->count(),
+                'total_aging' => $baseQuery()
+                    ->whereNotIn('status', $completedStatuses)
+                    ->where('created_at', '<', $threeDaysAgo)
+                    ->count(),
+                'auto_rejection_candidates' => $baseQuery()
+                    ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received', 'Incoming-TUPAD_in_process'])
+                    ->where('created_at', '<=', $rejectionCutoff)
+                    ->count(),
+                'rejection_threshold_days' => $rejectionThreshold,
             ];
 
             Log::info('TUPAD aging statistics fetched successfully', $statistics);
@@ -125,45 +175,46 @@ class TUPADRequestAgingController extends Controller
     }
 
     /**
-     * Notify focal persons of aging TUPAD documents
+     * Notify focal persons of aging TUPAD documents with auto-rejection
      */
     public function notifyFocalPersonsOfAgingDocuments()
     {
         try {
-            Log::info('🚀 Starting TUPAD focal person aging notifications');
+            Log::info('🚀 Starting TUPAD focal person aging notifications with auto-rejection');
             
-            $criticalThreshold = 10;
+            $criticalThreshold = 5; // Notify when request reaches 5+ days
+            $rejectionThreshold = 15; // Auto-reject after 15+ days
             $now = now('Asia/Manila');
             $cutoffDate = $now->copy()->subDays($criticalThreshold);
+            $rejectionCutoffDate = $now->copy()->subDays($rejectionThreshold);
 
+            // Define COMPLETED statuses (exclude these) - INCLUDE Incoming-TUPAD_rejected
             $completedStatuses = [
                 'cashier_released',
+                'Incoming-TUPAD_rejected',
                 '%_rejected',
                 'completed',
             ];
 
             Log::info('TUPAD notification parameters', [
-                'current_date' => $now->toDateTimeString(),
-                'cutoff_date' => $cutoffDate->toDateTimeString(),
-                'threshold_days' => $criticalThreshold,
+                'notification_threshold_days' => $criticalThreshold,
+                'rejection_threshold_days' => $rejectionThreshold,
             ]);
 
+            // Get TUPAD requests that are 5+ days old AND NOT completed
             $agingRequests = DvRequest::with(['focalPerson', 'program'])
                 ->whereHas('program', function($q) {
                     $q->where('prcode', 'TUPAD');
                 })
+                ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received', 'Incoming-TUPAD_in_process'])
                 ->whereNotIn('status', $completedStatuses)
                 ->where('created_at', '<=', $cutoffDate)
                 ->get();
 
-            Log::info('TUPAD requests for notification', [
-                'total_requests' => $agingRequests->count(),
-                'threshold_days' => $criticalThreshold,
-            ]);
-
             $notifiedCount = 0;
             $skippedCount = 0;
             $alreadyNotified = 0;
+            $autoRejectedCount = 0;
             $errors = [];
 
             foreach ($agingRequests as $request) {
@@ -179,7 +230,6 @@ class TUPADRequestAgingController extends Controller
 
                     $createdAt = Carbon::parse($request->created_at, 'Asia/Manila');
                     $daysOld = abs(floor(now()->startOfDay()->diffInDays($request->created_at->startOfDay(), false))) ?: 0;
-
                     
                     if ($createdAt->isFuture()) {
                         Log::warning('TUPAD - Skipping, document in future', [
@@ -189,6 +239,27 @@ class TUPADRequestAgingController extends Controller
                         continue;
                     }
                     
+                    // Check for auto-rejection (15+ days)
+                    if ($daysOld >= $rejectionThreshold) {
+                        Log::info("TUPAD - Auto-rejecting request (15+ days old)", [
+                            'dv_request_id' => $request->id,
+                            'reference_number' => $request->reference_number,
+                            'days_old' => $daysOld,
+                        ]);
+                        
+                        try {
+                            // Auto-reject the request
+                            $this->autoRejectTUPADRequest($request, $daysOld);
+                            $autoRejectedCount++;
+                            continue; // Skip further processing
+                        } catch (\Exception $rejectError) {
+                            Log::error("TUPAD - Failed to auto-reject request {$request->id}: " . $rejectError->getMessage());
+                            $errors[] = ['request_id' => $request->id, 'error' => 'Auto-rejection failed'];
+                            // Continue with normal processing even if rejection failed
+                        }
+                    }
+                    
+                    // Skip if not old enough for notification (less than 5 days)
                     if ($daysOld < $criticalThreshold) {
                         Log::info("TUPAD - Skipping, not old enough", [
                             'dv_request_id' => $request->id,
@@ -266,7 +337,6 @@ class TUPADRequestAgingController extends Controller
                                 'department' => 'TUPAD',
                             ])->render();
                             
-                            // Assuming you have a similar email service
                             $emailSent = app(\App\Services\SendPulseServices::class)->sendAgingEmail(
                                 $focalPersonEmail,
                                 $focalPersonName,
@@ -278,9 +348,16 @@ class TUPADRequestAgingController extends Controller
                             );
                             
                             if ($emailSent) {
-                                Log::info("📧 TUPAD email sent to focal person", [
+                                // Log email sent - ONLY 'action', NO 'status'
+                                DB::table('dv_request_logs')->insert([
                                     'dv_request_id' => $request->id,
-                                    'focal_person_email' => $focalPersonEmail,
+                                    'focalperson_id' => $request->focalPerson->id,
+                                    'accountingunit_id' => null,
+                                    'external_actor' => 'System',
+                                    'action' => 'Aging_Email_Sent',
+                                    'remarks' => "TUPAD aging notification email sent to focal person. Days pending: {$daysOld}",
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
                                 ]);
                             }
                             
@@ -325,6 +402,7 @@ class TUPADRequestAgingController extends Controller
                 'notified_count' => $notifiedCount,
                 'already_notified_today' => $alreadyNotified,
                 'skipped_count' => $skippedCount,
+                'auto_rejected_count' => $autoRejectedCount,
                 'errors_count' => count($errors),
             ]);
 
@@ -333,9 +411,11 @@ class TUPADRequestAgingController extends Controller
                 'notified_count' => $notifiedCount,
                 'already_notified_today' => $alreadyNotified,
                 'skipped_count' => $skippedCount,
+                'auto_rejected_count' => $autoRejectedCount,
                 'errors' => $errors,
-                'threshold_days' => $criticalThreshold,
-                'message' => "Successfully notified {$notifiedCount} focal person(s) of TUPAD {$criticalThreshold}+-day aging documents",
+                'notification_threshold_days' => $criticalThreshold,
+                'rejection_threshold_days' => $rejectionThreshold,
+                'message' => "Successfully notified {$notifiedCount} focal person(s) and auto-rejected {$autoRejectedCount} TUPAD DV request(s) pending 15+ days",
             ]);
 
         } catch (\Exception $e) {
@@ -346,6 +426,152 @@ class TUPADRequestAgingController extends Controller
                 'message' => 'Failed to send TUPAD aging notifications',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Auto-reject a TUPAD request that has been pending for 15+ days
+     * STATUS: Incoming-TUPAD_rejected
+     */
+    private function autoRejectTUPADRequest(DvRequest $request, int $daysOld)
+    {
+        DB::beginTransaction();
+        
+        try {
+            // Get current status before update
+            $previousStatus = $request->status;
+            
+            // Update request status to Incoming-TUPAD_rejected (specific status)
+            $request->update([
+                'status' => 'Incoming-TUPAD_rejected',
+                'system_remarks' => "Auto-rejected by system after {$daysOld} days of inactivity in TUPAD department.",
+                'rejected_at' => now(),
+            ]);
+            
+            // Create main rejection log - ONLY 'action', NO 'status'
+            DB::table('dv_request_logs')->insert([
+                'dv_request_id' => $request->id,
+                'focalperson_id' => null,
+                'accountingunit_id' => null,
+                'external_actor' => 'System',
+                'action' => 'Auto-Rejected',
+                'remarks' => "This request was closed automatically after {$daysOld} days of inactivity. Original status was '{$previousStatus}'. Please refer to your email for further instructions.",
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            
+            // Create notification for the focal person
+            DB::table('notifications')->insert([
+                'focalperson_id' => $request->focalPerson->id,
+                'dv_request_id' => $request->id,
+                'status' => 'Incoming-TUPAD_rejected',
+                'action' => 'Auto-Rejected',
+                'remarks' => "TUPAD DV request was automatically rejected after {$daysOld} days of inactivity",
+                'read_at' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            
+            // Send email notification about auto-rejection
+            $emailSent = $this->sendTUPADRejectionEmail($request, $daysOld);
+            
+            
+            // Send Pusher notification with correct status
+            $this->sendPusherNotification($request, $daysOld, 'TUPAD');
+            
+            DB::commit();
+            
+            Log::info("✅ TUPAD - Successfully auto-rejected request {$request->id}", [
+                'reference_number' => $request->reference_number,
+                'days_pending' => $daysOld,
+                'new_status' => 'Incoming-TUPAD_rejected',
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("TUPAD - Failed to auto-reject request {$request->id}: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Send Pusher notification for auto-rejection
+     */
+    private function sendPusherNotification(DvRequest $request, int $daysOld, string $department)
+    {
+        try {
+            $this->pusher->trigger("dv-requests-{$request->focalPerson->id}", 'document-auto-rejected-tupad', [
+                'dv_request_id' => $request->id,
+                'reference_number' => $request->reference_number,
+                'days_old' => $daysOld,
+                'department' => $department . ' Department',
+                'message' => "❌ Your TUPAD DV request has been automatically rejected after {$daysOld} days of inactivity",
+                'timestamp' => now()->format('M d, Y h:i A'),
+                'status' => 'Incoming-TUPAD_rejected', // Updated status
+            ]);
+        
+            
+        } catch (\Exception $e) {
+            Log::error("TUPAD - Pusher notification failed: " . $e->getMessage());
+            
+        }
+    }
+
+    /**
+     * Send TUPAD rejection email notification
+     */
+    private function sendTUPADRejectionEmail(DvRequest $request, int $daysOld): bool
+    {
+        try {
+            if (!$request->focalPerson || empty($request->focalPerson->email)) {
+                return false;
+            }
+            
+            $focalPersonName = trim($request->focalPerson->fname . ' ' . 
+                ($request->focalPerson->mi ? $request->focalPerson->mi . ' ' : '') . 
+                $request->focalPerson->lname);
+            
+            $subject = "🚫 AUTO-REJECTED: TUPAD DV Request - {$request->reference_number}";
+            
+            $createdAt = Carbon::parse($request->created_at, 'Asia/Manila');
+            $submittedDate = $createdAt->format('M d, Y');
+            $rejectedDate = now('Asia/Manila')->format('M d, Y');
+            $rejectedTime = now('Asia/Manila')->format('h:i A');
+            
+            $programName = $request->program->prcode ?? 'N/A';
+            
+          
+            
+            $htmlContent = view('emails.document_auto_rejected', [
+                'subject' => $subject,
+                'focalPersonName' => $focalPersonName,
+                'referenceNumber' => $request->reference_number,
+                'program' => $programName,
+                'daysOld' => $daysOld,
+                'submittedDate' => $submittedDate,
+                'rejectedDate' => $rejectedDate,
+                'rejectedTime' => $rejectedTime,
+                'rejectionReason' => "Auto-rejected by system after {$daysOld} days of inactivity. Status: Incoming-TUPAD_rejected",
+                'organizationName' => 'DOLE XI Regional Office',
+                'systemName' => 'ACCUDOCS',
+                'department' => 'TUPAD Department',
+                'contactEmail' => 'dolexi.accudocs@example.com',
+                'contactPhone' => '(082) 221-3141',
+            ])->render();
+            
+            return app(\App\Services\SendPulseServices::class)->sendAgingEmail(
+                $request->focalPerson->email,
+                $focalPersonName,
+                $request,
+                $daysOld,
+                'critical',
+                $subject,
+                $htmlContent
+            );
+            
+        } catch (\Exception $e) {
+            Log::error("TUPAD - Auto-rejection email error for request {$request->id}: " . $e->getMessage());
+            return false;
         }
     }
 

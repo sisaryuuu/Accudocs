@@ -1,3 +1,4 @@
+
 @extends('layouts.app')
 
 @section('title', 'DV Request Logs')
@@ -11,61 +12,52 @@
     // Get the last log entry's action
     $lastLogAction = $logs->last()?->action ?? 'Submitted';
     
+    // Calculate pending days
+    $submittedDate = $dvRequest->created_at;
+    $currentDate = now();
+   $pendingDays = floor($submittedDate->diffInDays($currentDate));
+    $isNearThreshold = $pendingDays >= 8 && $pendingDays < 10;
+    $isOverThreshold = $pendingDays >= 10;
+    
+    // Check if request is completed
+    $isCompleted = $dvRequest->status === 'Cashier_released';
+    
     // Comprehensive status-to-step mapping
     $statusToStepMap = [
-        // Submitted
         'submitted' => 'Submitted',
-        
-        // IMSD statuses
         'IMSD_received' => 'IMSD',
         'IMSD_in_process' => 'IMSD',
         'IMSD_verified' => 'IMSD',
         'IMSD_rejected' => 'IMSD',
-        
-        // Incoming statuses (TUPAD)
         'Incoming-TUPAD_received' => 'Incoming',
         'Incoming-TUPAD_in_process' => 'Incoming',
         'Incoming-TUPAD_verified' => 'Incoming',
         'Incoming-TUPAD_rejected' => 'Incoming',
-        
-        // Incoming statuses (GIP)
         'Incoming-GIP_received' => 'Incoming',
         'Incoming-GIP_in_process' => 'Incoming',
         'Incoming-GIP_verified' => 'Incoming',
         'Incoming-GIP_rejected' => 'Incoming',
-        
-        // Incoming statuses (TEV)
         'Incoming-TEV_received' => 'Incoming',
         'Incoming-TEV_in_process' => 'Incoming',
         'Incoming-TEV_verified' => 'Incoming',
         'Incoming-TEV_rejected' => 'Incoming',
-        
-        // Budget Officer statuses
         'ORS_received' => 'Budget_Officer',
         'ORS_in_process' => 'Budget_Officer',
         'ORS_obligated' => 'Budget_Officer',
         'ORS_rejected' =>'Budget_Officer',
         'ORS_onhold' => 'Budget_Officer',
         'ORS_for_revision' => 'Budget_Officer',
-        
-        // Outgoing statuses
         'Outgoing_received' => 'Outgoing',
         'Outgoing_in_process' => 'Outgoing',
         'Outgoing_finalized' => 'Outgoing',
         'Outgoing_rejected' => 'Outgoing',
-        
-        // RANCA (Accountant_III) statuses
         'RANCA_received' => 'Accountant_III',   
         'RANCA_in_process' => 'Accountant_III',
         'RANCA_validated' => 'Accountant_III',
         'RANCA_amount_updated' => 'Accountant_III',
         'RANCA_rejected' =>'Accountant_III',
-
-        // Regional Director statuses
         'Regional_Director_received' => 'Regional_Director',
         'Regional_Director_signed_approved' => 'Regional_Director',
-
-        // Cashier statuses
         'Cashier_received' => 'Cashier',
         'Cashier_released' => 'Cashier',
     ];
@@ -81,7 +73,7 @@
         $lastStep = $lastLogAction;
     }
     
-    // Check for completion statuses - Cashier_released is now the completion status
+    // Check for completion statuses
     $isStepCompleted = $dvRequest->status === 'Cashier_released' ||
                       stripos($dvRequest->status, '_verified') !== false ||
                       stripos($dvRequest->status, '_obligated') !== false ||
@@ -91,9 +83,6 @@
     // Check for rejection
     $isRejected = stripos($dvRequest->status, 'rejected') !== false || 
                   stripos($lastLogAction, 'rejected') !== false;
-
-    // Check if status is Cashier_released to mark as completed
-    $isCompleted = $dvRequest->status === 'Cashier_released';
 
     $logsForJs = $logs->map(function($log) {
         return [
@@ -118,6 +107,13 @@
 
 <style>
     [x-cloak] { display: none !important; }
+    @keyframes pulse-warning {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    .animate-pulse-warning {
+        animation: pulse-warning 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
 </style>
 
 <div class="min-h-screen bg-gray-50 py-8">
@@ -139,6 +135,50 @@
                 </a>
             </div>
         </div>
+
+        <!-- Pending Days Alert (only show if not completed or rejected) -->
+        @if(!$isCompleted && !$isRejected)
+            @if($isOverThreshold)
+            <div class="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg animate-pulse-warning">
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-red-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <div class="flex-1">
+                        <h3 class="text-red-800 font-semibold">Request Pending: {{ $pendingDays }} Days</h3>
+                        <p class="text-red-700 text-sm mt-1">
+                            This request has exceeded the 10-day threshold. It has been pending for <strong>{{ $pendingDays }} days</strong> since submission on {{ $submittedDate->format('M d, Y') }}.
+                        </p>
+                    </div>
+                    <div class="ml-4 flex-shrink-0">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                            {{ $pendingDays }} days
+                        </span>
+                    </div>
+                </div>
+            </div>
+            @elseif($isNearThreshold)
+            <div class="mb-6 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg">
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-yellow-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <div class="flex-1">
+                        <h3 class="text-yellow-800 font-semibold">Request Approaching Threshold</h3>
+                        <p class="text-yellow-700 text-sm mt-1">
+                            This request has been pending for <strong>{{ $pendingDays }} days</strong>. It will exceed the 10-day threshold in {{ 10 - $pendingDays }} day(s).
+                        </p>
+                    </div>
+                    <div class="ml-4 flex-shrink-0">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                            {{ $pendingDays }} days
+                        </span>
+                    </div>
+                </div>
+            </div>
+            @endif
+        @endif
+
         <!-- Horizontal Progress Bar (shown on all screens) -->
         <div class="mb-8">
             <!-- Completion Success Alert -->
@@ -150,7 +190,7 @@
                     </svg>
                     <div>
                         <h3 class="text-green-800 font-semibold">Request Completed Successfully!</h3>
-                        <p class="text-green-700 text-sm mt-1">Payment has been released by the cashier. This DV request is now completed.</p>
+                        <p class="text-green-700 text-sm mt-1">Payment has been released by the cashier. This DV request is now completed. (Processed in {{ $pendingDays }} days)</p>
                     </div>
                 </div>
             </div>
@@ -216,6 +256,7 @@
             </div>
         </div>
 
+        <!-- Rest of your existing code remains the same... -->
         <!-- Main Content Area with Flex Layout -->
         <div class="flex flex-col lg:flex-row gap-6">
             <!-- LEFT/MAIN CONTENT (Timeline/Table) -->
