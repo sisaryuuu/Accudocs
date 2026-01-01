@@ -6,26 +6,33 @@ use App\Events\DashboardUpdated;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+
 trait TriggersDashboardUpdate
 {
+     use BudgetThresholdAnalysis;
+
+
+
+
     private $useDummyData = false;
-    private function calculateWorkingDays($start, $end)
-    {
-        $start = \Carbon\Carbon::parse($start);
-        $end = \Carbon\Carbon::parse($end);
-        $workingDays = 0;
-        $current = $start->copy();
-        
-        while ($current->lte($end)) {
-            // Check if it's a weekday (1 = Monday, 7 = Sunday)
-            if ($current->isWeekday()) {
-                $workingDays++;
-            }
-            $current->addDay();
+    
+   private function calculateWorkingDays($start, $end)
+{
+    $start = \Carbon\Carbon::parse($start);
+    $end = \Carbon\Carbon::parse($end);
+    $workingDays = 0;
+    $current = $start->copy();
+    
+    while ($current->lte($end)) {
+        // Check if it's a weekday (1 = Monday, 7 = Sunday)
+        if ($current->isWeekday()) {
+            $workingDays++;
         }
-        
-        return $workingDays;
+        $current->addDay();
     }
+    
+    return $workingDays;
+}
 
     /**
      * Trigger real-time dashboard update via Pusher
@@ -525,7 +532,7 @@ private function validateDateRange($dateFrom, $dateTo)
 
     // Add average processing time in days for display
     $avgProcessingDays = $averageProcessingTime > 0 ? round(($averageProcessingTime / 60) / 24, 1) : 0;
-    
+    $budgetAnalysis = $this->getBudgetAnalysisWithThresholds($dateFrom, $dateTo);
     // =============================================
     // RETURN ALL DATA
     // =============================================
@@ -539,6 +546,7 @@ private function validateDateRange($dateFrom, $dateTo)
         'documentsPerRole'      => $documentsPerRole,
         'monthlyRequests'       => $monthlyRequests,
         'budgetPerProgram'      => $orderedBudget,
+        'budgetAnalysis'        => $budgetAnalysis,
         'staffPerformance' => [
             'individual_metrics' => $staffPerformance,
             'monthly_productivity' => $monthlyStaffProductivity,

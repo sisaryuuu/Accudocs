@@ -100,79 +100,75 @@ class TUPADRequestAgingController extends Controller
         }
     }
 
-    /**
-     * Get TUPAD aging statistics
-     */
     public function getAgingStatistics()
-    {
-        try {
-            Log::info('Fetching TUPAD aging statistics');
-            
-            // Define completed statuses for TUPAD - INCLUDE Incoming-TUPAD_rejected
-            $completedStatuses = [
-                'cashier_released',
-                'Incoming-TUPAD_rejected',
-                '%_rejected',
-                'completed',
-            ];
-            
-            $rejectionThreshold = 15; // days for auto-rejection
-            $tenDaysAgo = now()->subDays(10);
-            $sevenDaysAgo = now()->subDays(7);
-            $threeDaysAgo = now()->subDays(3);
-            $rejectionCutoff = now()->subDays($rejectionThreshold);
-            
-            $baseQuery = function() {
-                return DvRequest::whereHas('program', function($query) {
-                    $query->where('prcode', 'TUPAD'); // ONLY TUPAD PROGRAM
-                });
-            };
-            
-            $statistics = [
-                'critical' => $baseQuery()
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '<', $tenDaysAgo)
-                    ->count(),
-                'high' => $baseQuery()
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '>=', $tenDaysAgo)
-                    ->where('created_at', '<', $sevenDaysAgo)
-                    ->count(),
-                'medium' => $baseQuery()
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '>=', $sevenDaysAgo)
-                    ->where('created_at', '<', $threeDaysAgo)
-                    ->count(),
-                'total_aging' => $baseQuery()
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '<', $threeDaysAgo)
-                    ->count(),
-                'auto_rejection_candidates' => $baseQuery()
-                    ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received', 'Incoming-TUPAD_in_process'])
-                    ->where('created_at', '<=', $rejectionCutoff)
-                    ->count(),
-                'rejection_threshold_days' => $rejectionThreshold,
-            ];
+{
+    try {
+        Log::info('Fetching TUPAD aging statistics');
+        
+        // Define the statuses that should be counted as "aging"
+        $agingStatuses = ['IMSD_verified', 'Incoming-TUPAD_received'];
+        
+        $rejectionThreshold = 15; // days for auto-rejection
+        $tenDaysAgo = now()->subDays(10);
+        $sevenDaysAgo = now()->subDays(7);
+        $threeDaysAgo = now()->subDays(3);
+        $rejectionCutoff = now()->subDays($rejectionThreshold);
+        
+        $statistics = [
+            'critical' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TUPAD');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '<', $tenDaysAgo)
+                ->count(),
+            'high' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TUPAD');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '>=', $tenDaysAgo)
+                ->where('created_at', '<', $sevenDaysAgo)
+                ->count(),
+            'medium' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TUPAD');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '>=', $sevenDaysAgo)
+                ->where('created_at', '<', $threeDaysAgo)
+                ->count(),
+            'total_aging' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TUPAD');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '<', $threeDaysAgo)
+                ->count(),
+            'auto_rejection_candidates' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TUPAD');
+                })
+                ->whereIn('status', ['IMSD_verified', 'Incoming-TUPAD_received', 'TUPAD_in_process'])
+                ->where('created_at', '<=', $rejectionCutoff)
+                ->count(),
+            'rejection_threshold_days' => $rejectionThreshold,
+        ];
 
-            Log::info('TUPAD aging statistics fetched successfully', $statistics);
+        Log::info('TUPAD aging statistics fetched successfully', $statistics);
 
-            return response()->json([
-                'success' => true,
-                ...$statistics
-            ]);
+        return response()->json([
+            'success' => true,
+            ...$statistics
+        ]);
 
-        } catch (\Exception $e) {
-            Log::error('Error fetching TUPAD aging statistics: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch aging statistics',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    } catch (\Exception $e) {
+        Log::error('Error fetching TUPAD aging statistics: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to fetch TUPAD aging statistics',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * Notify focal persons of aging TUPAD documents with auto-rejection
@@ -347,19 +343,7 @@ class TUPADRequestAgingController extends Controller
                                 $htmlContent
                             );
                             
-                            if ($emailSent) {
-                                // Log email sent - ONLY 'action', NO 'status'
-                                DB::table('dv_request_logs')->insert([
-                                    'dv_request_id' => $request->id,
-                                    'focalperson_id' => $request->focalPerson->id,
-                                    'accountingunit_id' => null,
-                                    'external_actor' => 'System',
-                                    'action' => 'Aging_Email_Sent',
-                                    'remarks' => "TUPAD aging notification email sent to focal person. Days pending: {$daysOld}",
-                                    'created_at' => now(),
-                                    'updated_at' => now(),
-                                ]);
-                            }
+            
                             
                         } catch (\Exception $emailError) {
                             Log::error("TUPAD email error for request {$request->id}: " . $emailError->getMessage());

@@ -2086,4 +2086,392 @@ function releaseLock(event, id) {
         window.location.href = "/BudgetOfficer/dvrequests";
     });
 }
+async function checkBudgetAvailability(dvRequestId) {
+    try {
+        const response = await fetch(`/budget-officer/dv-requests/${dvRequestId}/check-budget`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'Accept': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.message || 'Budget check failed');
+        }
+
+        return result;
+    } catch (error) {
+        console.error('❌ Budget check error:', error);
+        throw error;
+    }
+}
+
+/**
+ * Show budget exceeded modal with details
+ */
+function showBudgetExceededModal(budgetData) {
+    const modal = document.createElement('div');
+    modal.id = 'budget-exceeded-modal';
+    modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50';
+    
+    modal.innerHTML = `
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-lg bg-white">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b">
+                <h3 class="text-xl font-bold text-red-600 flex items-center">
+                    <svg class="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                    </svg>
+                    ❌ Budget Threshold Exceeded
+                </h3>
+                <button onclick="closeBudgetExceededModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <!-- Error Message -->
+                <div class="bg-red-50 border-l-4 border-red-400 p-4 rounded">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-red-700 font-medium">${budgetData.reason}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Budget Details Card -->
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-lg border-2 border-blue-200">
+                    <h4 class="font-semibold text-lg mb-3 text-gray-800 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                        📊 Budget Details for ${budgetData.program}
+                    </h4>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- Allocated Budget -->
+                        <div class="bg-white p-3 rounded-lg border border-blue-200">
+                            <div class="text-xs text-gray-500 mb-1">Allocated Budget</div>
+                            <div class="text-lg font-bold text-gray-900">
+                                ₱${formatNumber(budgetData.details.allocated_budget || 0)}
+                            </div>
+                        </div>
+                        
+                        <!-- Already Obligated -->
+                        <div class="bg-white p-3 rounded-lg border border-blue-200">
+                            <div class="text-xs text-gray-500 mb-1">Already Obligated</div>
+                            <div class="text-lg font-bold text-orange-600">
+                                ₱${formatNumber(budgetData.details.obligated_budget || 0)}
+                            </div>
+                        </div>
+                        
+                        <!-- Remaining Budget -->
+                        <div class="bg-white p-3 rounded-lg border border-blue-200">
+                            <div class="text-xs text-gray-500 mb-1">Remaining Budget</div>
+                            <div class="text-lg font-bold ${parseFloat(budgetData.remaining_budget.replace(/,/g, '')) >= 0 ? 'text-green-600' : 'text-red-600'}">
+                                ₱${budgetData.remaining_budget}
+                            </div>
+                        </div>
+                        
+                        <!-- This Request -->
+                        <div class="bg-white p-3 rounded-lg border border-blue-200">
+                            <div class="text-xs text-gray-500 mb-1">This Request Amount</div>
+                            <div class="text-lg font-bold text-purple-600">
+                                ₱${budgetData.request_amount}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Status Indicator -->
+                    ${budgetData.details.budget_exceeded ? `
+                        <div class="mt-3 p-2 bg-red-100 rounded-lg text-center">
+                            <span class="text-sm font-semibold text-red-800">
+                                ⚠️ Budget Exceeded by ₱${formatNumber(Math.abs(parseFloat(budgetData.remaining_budget.replace(/,/g, ''))))}
+                            </span>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- Action Required Notice -->
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-yellow-800 mb-2">⚠️ Action Required</h3>
+                            <div class="text-sm text-yellow-700 space-y-1">
+                                <p>• Contact the <strong>IMSD Head</strong> to request budget augmentation for ${budgetData.program}</p>
+                                <p>• This obligation cannot proceed until additional budget is allocated</p>
+                                <p>• You may save this as draft and return after budget approval</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
+                <button type="button" 
+                        onclick="closeBudgetExceededModal()"
+                        class="px-6 py-2.5 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors duration-200">
+                    I Understand
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+/**
+ * Show budget confirmation modal with impact
+ */
+function showBudgetConfirmationModal(budgetData, onConfirm) {
+    const modal = document.createElement('div');
+    modal.id = 'budget-confirmation-modal';
+    modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50';
+    
+    const remaining = parseFloat(budgetData.remaining_budget.replace(/,/g, ''));
+    const requestAmount = parseFloat(budgetData.request_amount.replace(/,/g, ''));
+    const afterObligation = remaining - requestAmount;
+    const utilizationPercent = ((budgetData.details.obligated_budget + requestAmount) / budgetData.details.allocated_budget * 100).toFixed(2);
+    
+    modal.innerHTML = `
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-lg bg-white">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b">
+                <h3 class="text-xl font-bold text-blue-600 flex items-center">
+                    <svg class="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    Confirm ORS Obligation
+                </h3>
+                <button onclick="closeBudgetConfirmationModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <!-- Confirmation Message -->
+                <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+                    <p class="text-sm text-blue-700">
+                        You are about to obligate this ORS request. Please review the budget impact below:
+                    </p>
+                </div>
+
+                <!-- Budget Impact Summary -->
+                <div class="bg-gradient-to-r from-green-50 to-emerald-50 p-5 rounded-lg border-2 border-green-200">
+                    <h4 class="font-semibold text-lg mb-3 text-gray-800 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Budget Impact Summary
+                    </h4>
+                    
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <!-- Program -->
+                        <div class="bg-white p-3 rounded-lg border border-green-200">
+                            <div class="text-xs text-gray-500 mb-1">Program</div>
+                            <div class="text-lg font-bold text-gray-900">${budgetData.program}</div>
+                        </div>
+                        
+                        <!-- Request Amount -->
+                        <div class="bg-white p-3 rounded-lg border border-green-200">
+                            <div class="text-xs text-gray-500 mb-1">Request Amount</div>
+                            <div class="text-lg font-bold text-purple-600">₱${budgetData.request_amount}</div>
+                        </div>
+                        
+                        <!-- Current Remaining -->
+                        <div class="bg-white p-3 rounded-lg border border-green-200">
+                            <div class="text-xs text-gray-500 mb-1">Current Remaining</div>
+                            <div class="text-lg font-bold text-green-600">₱${budgetData.remaining_budget}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- After Obligation -->
+                    <div class="bg-white p-4 rounded-lg border-2 ${afterObligation < (budgetData.details.allocated_budget * 0.1) ? 'border-yellow-300 bg-yellow-50' : 'border-green-300'}">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xs text-gray-500 mb-1">After This Obligation</div>
+                                <div class="text-2xl font-bold ${afterObligation < (budgetData.details.allocated_budget * 0.1) ? 'text-yellow-600' : 'text-green-600'}">
+                                    ₱${formatNumber(afterObligation)}
+                                </div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    Budget Utilization: <span class="font-semibold ${utilizationPercent >= 90 ? 'text-red-600' : utilizationPercent >= 75 ? 'text-yellow-600' : 'text-green-600'}">${utilizationPercent}%</span>
+                                </div>
+                            </div>
+                            ${afterObligation < (budgetData.details.allocated_budget * 0.1) ? `
+                                <svg class="w-8 h-8 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                                </svg>
+                            ` : `
+                                <svg class="w-8 h-8 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                </svg>
+                            `}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Warning if nearing threshold -->
+                ${utilizationPercent >= 75 ? `
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-yellow-800">⚠️ Budget Utilization Warning</p>
+                                <p class="text-sm text-yellow-700 mt-1">
+                                    ${utilizationPercent >= 90 ? 
+                                        'Critical: Budget utilization will reach ' + utilizationPercent + '% after this obligation. Consider requesting budget augmentation soon.' :
+                                        'Notice: Budget utilization will reach ' + utilizationPercent + '% after this obligation. Monitor remaining budget closely.'
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="bg-green-50 border-l-4 border-green-400 p-4 rounded">
+                        <div class="flex items-center">
+                            <svg class="h-5 w-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                            </svg>
+                            <p class="text-sm text-green-700">
+                                ✅ <strong>Budget is sufficient.</strong> Safe to proceed with obligation.
+                            </p>
+                        </div>
+                    </div>
+                `}
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
+                <button type="button" 
+                        onclick="closeBudgetConfirmationModal()"
+                        class="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg transition-colors duration-200">
+                    Cancel
+                </button>
+                <button type="button" 
+                        id="confirm-obligate-btn"
+                        class="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200">
+                    <span class="btn-text">Yes, Proceed with Obligation</span>
+                    <svg class="animate-spin hidden h-4 w-4 text-white inline ml-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Attach confirm handler
+    document.getElementById('confirm-obligate-btn').onclick = onConfirm;
+}
+
+/**
+ * Close budget exceeded modal
+ */
+function closeBudgetExceededModal() {
+    const modal = document.getElementById('budget-exceeded-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+/**
+ * Close budget confirmation modal
+ */
+function closeBudgetConfirmationModal() {
+    const modal = document.getElementById('budget-confirmation-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// ====================================
+// FORM SUBMISSION INTERCEPTOR
+// ====================================
+
+/**
+ * Intercept form submission to check budget first
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const obligateForm = document.querySelector('form[action*="obligate"]');
+    
+    if (obligateForm) {
+        obligateForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // First validate UACS amounts
+            if (!validateUACSAmounts()) {
+                showMessage('Please ensure all UACS amounts are entered and total equals gross amount', 'error');
+                return;
+            }
+            
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<svg class="animate-spin h-5 w-5 text-white inline mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Checking Budget...';
+            
+            try {
+                const dvRequestId = "{{ $dvRequest->id }}";
+                const budgetCheck = await checkBudgetAvailability(dvRequestId);
+                
+                if (!budgetCheck.allowed) {
+                    // Budget exceeded - show error modal
+                    showBudgetExceededModal(budgetCheck);
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                } else {
+                    // Budget OK - show confirmation modal
+                    showBudgetConfirmationModal(budgetCheck, async function() {
+                        const confirmBtn = document.getElementById('confirm-obligate-btn');
+                        const btnText = confirmBtn.querySelector('.btn-text');
+                        const spinner = confirmBtn.querySelector('svg');
+                        
+                        confirmBtn.disabled = true;
+                        btnText.textContent = 'Processing...';
+                        spinner.classList.remove('hidden');
+                        
+                        // Submit the form
+                        obligateForm.submit();
+                    });
+                    
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
+            } catch (error) {
+                console.error('❌ Budget check failed:', error);
+                showMessage('Budget check temporarily unavailable. Proceeding with caution...', 'warning');
+                
+                // Allow submission after 2 seconds if check fails
+                setTimeout(() => {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                    obligateForm.submit();
+                }, 2000);
+            }
+        });
+    }
+});
 </script>

@@ -1173,39 +1173,55 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-   // Update the performSearch function to include sorting by days_old
-function performSearch() {
-    filteredRequests = filterRequests(allRequests, searchTerm);
+   function performSearch() {
+    // First, filter all requests based on search term
+    let tempFiltered = filterRequests(allRequests, searchTerm);
     
     // Ensure days_old is positive for all requests
-    filteredRequests = filteredRequests.map(req => ({
+    tempFiltered = tempFiltered.map(req => ({
         ...req,
         days_old: Math.abs(req.days_old) || 0
     }));
     
     // Apply priority sort by default (sort by days_old descending)
     if (currentSort === 'priority') {
-        filteredRequests.sort((a, b) => b.days_old - a.days_old);
+        tempFiltered.sort((a, b) => b.days_old - a.days_old);
     } else if (currentSort === 'date') {
         // Sort by date (created_at)
-        filteredRequests.sort((a, b) => new Date(a.created_at_timestamp || a.date) - new Date(b.created_at_timestamp || b.date));
+        tempFiltered.sort((a, b) => new Date(a.created_at_timestamp || a.date) - new Date(b.created_at_timestamp || b.date));
     }
     
     // Apply critical filter if active
     if (isCriticalOnlyView) {
-        filteredRequests = filteredRequests.filter(req => req.days_old >= 10);
+        tempFiltered = tempFiltered.filter(req => req.days_old >= 10);
     }
     
+    // Store the filtered results
+    filteredRequests = tempFiltered;
+    
+    // Update pagination
     totalRecords = filteredRequests.length;
     totalPages = Math.ceil(totalRecords / perPage);
-    currentPage = 1;
     
+    // Reset to first page only if search term changed or critical filter toggled
+    if (searchTerm || isCriticalOnlyView) {
+        currentPage = 1;
+    } else {
+        // Keep current page but ensure it's within bounds
+        if (currentPage > totalPages && totalPages > 0) {
+            currentPage = totalPages;
+        }
+    }
+    
+    // Render the current page
     renderTable(getPaginatedData());
     updatePaginationInfo();
 }
-// Update the sortByPriority function
 function sortByPriority() {
-    filteredRequests.sort((a, b) => {
+    // Create a copy to sort
+    const sorted = [...filteredRequests];
+    
+    sorted.sort((a, b) => {
         // Critical (10+ days) comes first
         const aCritical = a.days_old >= 10;
         const bCritical = b.days_old >= 10;
@@ -1230,16 +1246,34 @@ function sortByPriority() {
         // Then by days old descending within same priority
         return b.days_old - a.days_old;
     });
+    
+    // Update the filteredRequests array
+    filteredRequests = sorted;
+    
+    // Reset to first page when sorting
+    currentPage = 1;
+    renderTable(getPaginatedData());
+    updatePaginationInfo();
 }
 
-// Update the sortByDate function
 function sortByDate() {
-    filteredRequests.sort((a, b) => {
+    // Create a copy to sort
+    const sorted = [...filteredRequests];
+    
+    sorted.sort((a, b) => {
         // Use created_at_timestamp if available, otherwise parse the date string
         const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
         const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
         return aDate - bDate;
     });
+    
+    // Update the filteredRequests array
+    filteredRequests = sorted;
+    
+    // Reset to first page when sorting
+    currentPage = 1;
+    renderTable(getPaginatedData());
+    updatePaginationInfo();
 }
     
     function updateSortButtonStyles() {

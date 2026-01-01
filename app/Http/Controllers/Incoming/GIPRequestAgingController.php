@@ -39,7 +39,7 @@ class GIPRequestAgingController extends Controller
                 ->whereHas('program', function($q) {
                     $q->where('prcode', 'GIP');
                 })
-                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received', 'GIP_in_process'])
+                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received'])
                 ->where('created_at', '<=', $cutoffTime)
                 ->orderBy('created_at', 'asc')
                 ->get()
@@ -48,7 +48,7 @@ class GIPRequestAgingController extends Controller
                     
                     // Check if request is eligible for auto-rejection
                     $isEligibleForRejection = $daysOld >= $rejectionThreshold && 
-                                            in_array($request->status, ['IMSD_verified', 'Incoming-GIP_received', 'GIP_in_process']);
+                                            in_array($request->status, ['IMSD_verified', 'Incoming-GIP_received']);
                     
                     // Get the latest alert for this document
                     $latestAlert = DocumentAgingAlert::where('dv_request_id', $request->id)
@@ -97,84 +97,75 @@ class GIPRequestAgingController extends Controller
             ], 500);
         }
     }
+public function getAgingStatistics()
+{
+    try {
+        Log::info('Fetching GIP aging statistics');
+        
+        // Define the statuses that should be counted as "aging"
+        $agingStatuses = ['IMSD_verified', 'Incoming-GIP_received', 'GIP_in_process'];
+        
+        $rejectionThreshold = 15; // days for auto-rejection
+        $tenDaysAgo = now()->subDays(10);
+        $sevenDaysAgo = now()->subDays(7);
+        $threeDaysAgo = now()->subDays(3);
+        $rejectionCutoff = now()->subDays($rejectionThreshold);
+        
+        $statistics = [
+            'critical' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'GIP');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '<', $tenDaysAgo)
+                ->count(),
+            'high' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'GIP');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '>=', $tenDaysAgo)
+                ->where('created_at', '<', $sevenDaysAgo)
+                ->count(),
+            'medium' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'GIP');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '>=', $sevenDaysAgo)
+                ->where('created_at', '<', $threeDaysAgo)
+                ->count(),
+            'total_aging' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'GIP');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '<', $threeDaysAgo)
+                ->count(),
+            'auto_rejection_candidates' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'GIP');
+                })
+                ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received', 'GIP_in_process'])
+                ->where('created_at', '<=', $rejectionCutoff)
+                ->count(),
+            'rejection_threshold_days' => $rejectionThreshold,
+        ];
 
-    /**
-     * Get GIP aging statistics
-     */
-    public function getAgingStatistics()
-    {
-        try {
-            Log::info('Fetching GIP aging statistics');
-            
-            // Define completed statuses for GIP - INCLUDE Incoming-GIP_rejected
-            $completedStatuses = [
-                'cashier_released',
-                'Incoming-GIP_rejected',
-                '%_rejected',
-                'completed',
-            ];
-            
-            $rejectionThreshold = 15; // days for auto-rejection
-            $tenDaysAgo = now()->subDays(10);
-            $sevenDaysAgo = now()->subDays(7);
-            $threeDaysAgo = now()->subDays(3);
-            $rejectionCutoff = now()->subDays($rejectionThreshold);
-            
-            $statistics = [
-                'critical' => DvRequest::whereHas('program', function($q) {
-                        $q->where('prcode', 'GIP');
-                    })
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '<', $tenDaysAgo)
-                    ->count(),
-                'high' => DvRequest::whereHas('program', function($q) {
-                        $q->where('prcode', 'GIP');
-                    })
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '>=', $tenDaysAgo)
-                    ->where('created_at', '<', $sevenDaysAgo)
-                    ->count(),
-                'medium' => DvRequest::whereHas('program', function($q) {
-                        $q->where('prcode', 'GIP');
-                    })
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '>=', $sevenDaysAgo)
-                    ->where('created_at', '<', $threeDaysAgo)
-                    ->count(),
-                'total_aging' => DvRequest::whereHas('program', function($q) {
-                        $q->where('prcode', 'GIP');
-                    })
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '<', $threeDaysAgo)
-                    ->count(),
-                'auto_rejection_candidates' => DvRequest::whereHas('program', function($q) {
-                        $q->where('prcode', 'GIP');
-                    })
-                    ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received', 'GIP_in_process'])
-                    ->where('created_at', '<=', $rejectionCutoff)
-                    ->count(),
-                'rejection_threshold_days' => $rejectionThreshold,
-            ];
+        Log::info('GIP aging statistics fetched successfully', $statistics);
 
-            Log::info('GIP aging statistics fetched successfully', $statistics);
+        return response()->json([
+            'success' => true,
+            ...$statistics
+        ]);
 
-            return response()->json([
-                'success' => true,
-                ...$statistics
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Error fetching GIP aging statistics: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch GIP aging statistics',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    } catch (\Exception $e) {
+        Log::error('Error fetching GIP aging statistics: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to fetch GIP aging statistics',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * Send aging alerts for GIP dashboard
@@ -334,8 +325,6 @@ class GIPRequestAgingController extends Controller
             // Define COMPLETED statuses (exclude these) - INCLUDE Incoming-GIP_rejected
             $completedStatuses = [
                 'cashier_released',
-                'Incoming-GIP_rejected',
-                '%_rejected',
                 'completed',
             ];
 
@@ -400,7 +389,7 @@ class GIPRequestAgingController extends Controller
                         $skippedCount++;
                         continue;
                     }
-                    /*
+                    
                     // Check if already notified today
                     $alreadySent = DB::table('notifications')
                         ->where('focalperson_id', $request->focalPerson->id)
@@ -413,7 +402,7 @@ class GIPRequestAgingController extends Controller
                         $alreadyNotified++;
                         continue;
                     }
-                    */
+                    
                     $urgencyLevel = $this->getUrgencyLevel($daysOld);
                     $focalPersonName = trim($request->focalPerson->fname . ' ' . ($request->focalPerson->mi ? $request->focalPerson->mi . ' ' : '') . $request->focalPerson->lname);
                     $focalPersonEmail = $request->focalPerson->email;
@@ -580,19 +569,7 @@ class GIPRequestAgingController extends Controller
             // Send email notification about auto-rejection
             $emailSent = $this->sendGIPRejectionEmail($request, $daysOld);
             
-            // Log email status - ONLY 'action', NO 'status'
-            if ($emailSent) {
-                DB::table('dv_request_logs')->insert([
-                    'dv_request_id' => $request->id,
-                    'focalperson_id' => $request->focalPerson->id,
-                    'accountingunit_id' => null,
-                    'external_actor' => 'System',
-                    'action' => 'Rejection_Email_Sent',
-                    'remarks' => "GIP auto-rejection email sent to focal person",
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            }
+       
             
             // Send Pusher notification with correct status
             $this->sendPusherNotification($request, $daysOld, 'GIP');
@@ -632,17 +609,7 @@ class GIPRequestAgingController extends Controller
         } catch (\Exception $e) {
             Log::error("GIP - Pusher notification failed: " . $e->getMessage());
             
-            // Log Pusher failure - ONLY 'action', NO 'status'
-            DB::table('dv_request_logs')->insert([
-                'dv_request_id' => $request->id,
-                'focalperson_id' => $request->focalPerson->id,
-                'accountingunit_id' => null,
-                'external_actor' => 'System',
-                'action' => 'Pusher_Failed',
-                'remarks' => "GIP: Failed to send Pusher notification: " . $e->getMessage(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+    
         }
     }
 

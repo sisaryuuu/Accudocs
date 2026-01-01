@@ -242,6 +242,9 @@ class DvRequestAgingController extends Controller
                     $urgencyLevel = $this->getUrgencyLevel($daysOld);
                     $focalPersonName = trim($request->focalPerson->fname . ' ' . ($request->focalPerson->mi ? $request->focalPerson->mi . ' ' : '') . $request->focalPerson->lname);
                     $focalPersonEmail = $request->focalPerson->email;
+                    $controlNumber = $request->accounting_control_number 
+                    ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                    : 'Not assigned';
 
                     // 1. Create database notification
                     DB::table('notifications')->insert([
@@ -272,6 +275,7 @@ class DvRequestAgingController extends Controller
                                 'subject' => $subject,
                                 'focalPersonName' => $focalPersonName,
                                 'referenceNumber' => $request->reference_number,
+                                'controlNumber' => $controlNumber,
                                 'program' => $programName,
                                 'status' => $statusFormatted,
                                 'daysOld' => $daysOld,
@@ -286,7 +290,7 @@ class DvRequestAgingController extends Controller
                                 'systemName' => 'ACCUDOCS',
                                 'department' => 'IMSD Department',
                             ])->render();
-                            
+                                                
                             $emailSent = app(\App\Services\SendPulseServices::class)->sendAgingEmail(
                                 $focalPersonEmail,
                                 $focalPersonName,
@@ -297,8 +301,6 @@ class DvRequestAgingController extends Controller
                                 $htmlContent
                             );
                             
-            
-                            
                         } catch (\Exception $emailError) {
                             Log::error("IMSD email error for request {$request->id}: " . $emailError->getMessage());
                         }
@@ -308,6 +310,7 @@ class DvRequestAgingController extends Controller
                     $this->pusher->trigger("dv-requests-{$request->focalPerson->id}", 'document-critical-aging-imsd', [
                         'dv_request_id' => $request->id,
                         'reference_number' => $request->reference_number,
+                        'control_number' => $controlNumber,
                         'days_old' => $daysOld,
                         'urgency' => $urgencyLevel,
                         'department' => 'IMSD Department',
@@ -356,7 +359,165 @@ class DvRequestAgingController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * Send aging alerts for IMSD dashboard
+     */
+    public function sendAgingAlerts($criticalOnly = false)
+    {
+        try {
+            Log::info('🚀 Starting IMSD aging alerts', ['criticalOnly' => $criticalOnly]);
+            
+            if ($criticalOnly) {
+                return $this->sendCriticalIMSDAgingAlerts();
+            } else {
+                return $this->sendAllIMSDAgingAlerts();
+            }
 
+        } catch (\Exception $e) {
+            Log::error('❌ Error in sendAgingAlerts for IMSD: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send IMSD aging alerts',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Send alerts for ALL aging IMSD documents (3+ days)
+     */
+    private function sendAllIMSDAgingAlerts()
+    {
+        try {
+            $agingThreshold = 3;
+            $cutoffTime = now()->subDays($agingThreshold);
+
+            $agingRequests = DvRequest::with(['focalPerson', 'program'])
+                ->whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process'])
+                ->where('created_at', '<=', $cutoffTime)
+                ->get();
+
+            foreach ($agingRequests as $request) {
+                $daysOld = now()->diffInDays($request->created_at);
+                
+                $this->pusher->trigger('dv-requests-imsd', 'document-aging-alert', [
+                    'dv_request_id' => $request->id,
+                    'control_number' => $request->accounting_control_number 
+                        ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                        : 'Not assigned',
+                    'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+                    'program' => $request->program->prcode ?? 'N/A',
+                    'status' => $request->status,
+                    'days_old' => $daysOld,
+                    'urgency' => $this->getUrgencyLevel($daysOld),
+                    'alert_type' => 'all',
+                    'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                ]);
+            }
+
+            $this->pusher->trigger('dv-requests-imsd', 'imsd-aging-update', [
+                'updated_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'total_aging' => $agingRequests->count(),
+                'alert_type' => 'all',
+            ]);
+
+            Log::info('IMSD all aging alerts sent', [
+                'count' => $agingRequests->count(),
+                'threshold' => $agingThreshold,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'alerted_count' => $agingRequests->count(),
+                'threshold_days' => $agingThreshold,
+                'alert_type' => 'all',
+                'message' => "IMSD aging document alerts sent (3+ days)",
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error sending all IMSD aging alerts: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Send alerts for CRITICAL aging IMSD documents (10+ days)
+     */
+    private function sendCriticalIMSDAgingAlerts()
+    {
+        try {
+            $criticalThreshold = 10;
+            $cutoffTime = now()->subDays($criticalThreshold);
+
+            $criticalRequests = DvRequest::with(['focalPerson', 'program'])
+                ->whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process'])
+                ->where('created_at', '<=', $cutoffTime)
+                ->get();
+
+            $alertedCount = 0;
+            $autoRejectedCount = 0;
+
+            foreach ($criticalRequests as $request) {
+                $daysOld = now()->diffInDays($request->created_at);
+                
+                // Check for auto-rejection (15+ days)
+                if ($daysOld >= 15) {
+                    try {
+                        $this->autoRejectIMSDRequest($request, $daysOld);
+                        $autoRejectedCount++;
+                    } catch (\Exception $rejectError) {
+                        Log::error("IMSD - Failed to auto-reject request {$request->id} in critical alerts: " . $rejectError->getMessage());
+                    }
+                } else {
+                    // Only send alerts for requests that are 10+ days old but less than 15 days
+                    $this->pusher->trigger('dv-requests-imsd', 'document-aging-alert', [
+                        'dv_request_id' => $request->id,
+                        'control_number' => $request->accounting_control_number 
+                            ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                            : 'Not assigned',
+                        'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+                        'program' => $request->program->prcode ?? 'N/A',
+                        'status' => $request->status,
+                        'days_old' => $daysOld,
+                        'urgency' => $this->getUrgencyLevel($daysOld),
+                        'alert_type' => 'critical',
+                        'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    ]);
+                    $alertedCount++;
+                }
+            }
+
+            $this->pusher->trigger('dv-requests-imsd', 'imsd-critical-aging-update', [
+                'updated_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'total_critical' => $criticalRequests->count(),
+                'alerted_count' => $alertedCount,
+                'auto_rejected_count' => $autoRejectedCount,
+                'alert_type' => 'critical',
+                'threshold_days' => $criticalThreshold,
+            ]);
+
+            Log::warning('IMSD critical aging alerts sent', [
+                'count' => $alertedCount,
+                'auto_rejected_count' => $autoRejectedCount,
+                'threshold' => $criticalThreshold,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'alerted_count' => $alertedCount,
+                'auto_rejected_count' => $autoRejectedCount,
+                'threshold_days' => $criticalThreshold,
+                'alert_type' => 'critical',
+                'message' => "IMSD critical aging document alerts sent (10+ days). Auto-rejected: {$autoRejectedCount}",
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error sending critical IMSD aging alerts: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+    
     /**
      * Auto-reject an IMSD request that has been pending for 15+ days
      * STATUS: IMSD_rejected
@@ -437,12 +598,34 @@ class DvRequestAgingController extends Controller
                 'status' => 'IMSD_rejected', // Updated status
             ]);
             
-           
+            // Also send to IMSD channel for dashboard updates
+            $this->pusher->trigger('dv-requests-imsd', 'document-auto-rejected-imsd', [
+                'dv_request_id' => $request->id,
+                'reference_number' => $request->reference_number,
+                'control_number' => $request->accounting_control_number 
+                    ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                    : 'Not assigned',
+                'submitted_by' => trim(($request->focalPerson->fname ?? '') . ' ' . ($request->focalPerson->lname ?? '')),
+                'program' => $request->program->prcode ?? 'N/A',
+                'days_old' => $daysOld,
+                'status' => 'IMSD_rejected',
+                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            ]);
             
         } catch (\Exception $e) {
             Log::error("IMSD - Pusher notification failed: " . $e->getMessage());
             
             // Log Pusher failure - ONLY 'action', NO 'status'
+            DB::table('dv_request_logs')->insert([
+                'dv_request_id' => $request->id,
+                'focalperson_id' => null,
+                'accountingunit_id' => null,
+                'external_actor' => 'System',
+                'action' => 'Pusher-Notification-Failed',
+                'remarks' => "Failed to send Pusher notification for auto-rejection: " . $e->getMessage(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         }
     }
 
@@ -466,25 +649,36 @@ class DvRequestAgingController extends Controller
             $submittedDate = $createdAt->format('M d, Y');
             $rejectedDate = now('Asia/Manila')->format('M d, Y');
             $rejectedTime = now('Asia/Manila')->format('h:i A');
-            
             $programName = $request->program->prcode ?? 'N/A';
             
-            $htmlContent = view('emails.document_auto_rejected', [
+            // Define variables for the email template
+            $statusFormatted = str_replace('_', ' ', ucwords($request->status, '_'));
+            $currentDate = $rejectedDate;
+            $currentTime = $rejectedTime;
+            $urgencyLevel = 'critical';
+            $actionUrl = route('dv.verify', $request->reference_number);
+            $controlNumber = $request->accounting_control_number 
+                ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                : 'Not assigned';
+            
+            $htmlContent = view('emails.document_aging_alert', [
                 'subject' => $subject,
                 'focalPersonName' => $focalPersonName,
                 'referenceNumber' => $request->reference_number,
+                'controlNumber' => $controlNumber,
                 'program' => $programName,
+                'status' => $statusFormatted,
                 'daysOld' => $daysOld,
                 'submittedDate' => $submittedDate,
-                'rejectedDate' => $rejectedDate,
-                'rejectedTime' => $rejectedTime,
-                'rejectionReason' => "Auto-rejected by system after {$daysOld} days of inactivity. Status: IMSD_rejected",
+                'currentDate' => $currentDate,
+                'currentTime' => $currentTime,
+                'urgencyLevel' => $urgencyLevel,
+                'urgencyText' => $this->getUrgencyText($urgencyLevel),
+                'urgencyEmoji' => $this->getUrgencyEmoji($urgencyLevel),
+                'actionUrl' => $actionUrl,
                 'organizationName' => 'DOLE XI Regional Office',
                 'systemName' => 'ACCUDOCS',
                 'department' => 'IMSD Department',
-                'contactEmail' => 'dolexi.accudocs@example.com',
-                'contactPhone' => '(082) 221-3141',
-               
             ])->render();
             
             return app(\App\Services\SendPulseServices::class)->sendAgingEmail(

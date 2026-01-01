@@ -28,9 +28,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
-
+use App\Traits\BudgetThresholdAnalysis;
 class DvRequestController extends Controller
 {
+        use BudgetThresholdAnalysis;
     protected PusherService $pusher;
 
     public function __construct(PusherService $pusher)
@@ -64,8 +65,8 @@ public function index()
             ->where(function ($query) {
                 $query->where('status', 'not like', '%_rejected');
             })
-            ->latest()
-            ->paginate($perPage); // Changed from get() to paginate()
+            ->oldest() // Changed from latest() to oldest() - shows older requests first
+            ->paginate($perPage);
 
     } catch (\Exception $e) {
         return back()->with('error', 'Database error: ' . $e->getMessage());
@@ -168,6 +169,52 @@ public function history()
         abort(403, 'Only focal persons can submit DV requests.');
     }
 
+    // ✅ BUDGET CHECK - BLOCKS SUBMISSION IF BUDGET EXCEEDED
+    $program = Program::findOrFail($request->program_id);
+    $programCode = $program->prcode;
+    
+    // Check if budget is available
+    $budgetCheck = $this->canAcceptNewRequest($programCode);
+    
+    if (!$budgetCheck['allowed']) {
+        \Log::warning('DV Request blocked - Budget exceeded', [
+            'program' => $programCode,
+            'allocated' => $budgetCheck['allocated_budget'],
+            'obligated' => $budgetCheck['obligated_budget'],
+            'remaining' => $budgetCheck['remaining_budget'],
+            'user_id' => $focalpersonId
+        ]);
+        
+        return redirect()->back()
+            ->withInput()
+            ->with('error', "⛔ Cannot submit DV request for {$programCode}. " . 
+                           $budgetCheck['reason']);
+    }
+    
+    // Check if the specific amount can be accommodated
+    $amountCheck = $this->canAccommodateAmount($programCode, $request->amount);
+    
+    if (!$amountCheck['allowed']) {
+        \Log::warning('DV Request blocked - Amount exceeds remaining budget', [
+            'program' => $programCode,
+            'request_amount' => $request->amount,
+            'remaining_budget' => $amountCheck['remaining_budget'],
+            'user_id' => $focalpersonId
+        ]);
+        
+        return redirect()->back()
+            ->withInput()
+            ->with('error', "⛔ Cannot submit DV request for {$programCode}. " . 
+                           $amountCheck['reason']);
+    }
+    
+    \Log::info('Budget check passed', [
+        'program' => $programCode,
+        'request_amount' => $request->amount,
+        'remaining_budget' => $amountCheck['remaining_budget']
+    ]);
+
+    // ✅ Continue with the rest of your store method...
     $submissionKey = 'dv_submission_' . $focalpersonId . '_' . md5(
         $request->program_id . 
         $request->amount . 
@@ -238,7 +285,7 @@ public function history()
                 ]);
             }
             
-            // QR Code generation - make it non-blocking
+            // QR Code generation
             try {
                 $verifyUrl = route('dv.verify', $dv->reference_number);
                 $qrPath = 'qrcodes/' . $dv->reference_number . '.png';
@@ -263,13 +310,11 @@ public function history()
                 if ($qrCodeContent !== false) {
                     file_put_contents($fullPath, $qrCodeContent);
                     
-                    // Verify file was created
                     if (file_exists($fullPath) && filesize($fullPath) > 0) {
                         $dv->qr_code_path = $qrPath;
                         $dv->save();
                     }
                 }
-                // If QR generation fails, just continue without it
             } catch (\Exception $qrError) {
                 \Log::warning('QR Code generation failed but continuing', [
                     'dv_id' => $dv->id,
@@ -278,7 +323,6 @@ public function history()
             }
         });
 
-        // Check if DV was created successfully
         if (!$dv) {
             throw new \Exception('Failed to create DV request in transaction');
         }
@@ -296,7 +340,6 @@ public function history()
         ]);
         Cache::forget($submissionKey);
 
-        // EXPLICIT REDIRECT - This should fix the issue
         return redirect()->route('FocalPerson.dvrequest.preview', $dv->id)
             ->with('success', 'DV Request submitted successfully!');
 

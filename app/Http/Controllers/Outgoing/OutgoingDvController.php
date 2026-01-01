@@ -104,11 +104,7 @@ public function fetchDvRequests(Request $request)
             // Calculate days old
             $daysOld = now()->diffInDays($request->created_at);
             
-            // Priority scoring system for Outgoing:
-            // - Critical (10+ days): 1000 points
-            // - High (7-9 days): 500 points
-            // - Medium (3-6 days): 200 points
-            // - Recent (0-2 days): 0 points
+          
             
             $priorityScore = 0;
             

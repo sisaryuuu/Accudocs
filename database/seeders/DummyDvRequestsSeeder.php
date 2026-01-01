@@ -37,12 +37,12 @@ class DummyDvRequestsSeeder extends Seeder
             // Create Mode of Payments
             $modeOfPayments = $this->createModeOfPayments();
             
-            // Create DV Requests with different statuses
-            $this->createDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments);
+            // Create DV Requests with only submitted status
+            $this->createSubmittedDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments);
             
             DB::commit();
             
-            $this->command->info('✅ DV Request seeder completed successfully!');
+            $this->command->info('✅ DV Request seeder completed successfully! Only "submitted" status created.');
             
         } catch (\Exception $e) {
             DB::rollBack();
@@ -223,11 +223,11 @@ class DummyDvRequestsSeeder extends Seeder
     }
     
     /**
-     * Create DV Requests
+     * Create DV Requests with only submitted status
      */
-    private function createDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments): void
+    private function createSubmittedDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments): void
     {
-        $this->command->info('Creating DV Requests...');
+        $this->command->info('Creating DV Requests for December 2025 (submitted status only)...');
         
         $particularsTemplates = [
             'Payment for training materials and supplies',
@@ -238,155 +238,158 @@ class DummyDvRequestsSeeder extends Seeder
             'Food and accommodation for training participants',
             'Honorarium for resource speakers',
             'Internet and communication expenses',
+            'Year-end bonuses for program coordinators',
+            'Christmas party expenses for beneficiaries',
+            '13th month pay for project-based employees',
+            'Year-end incentive allowance',
+            'Procurement of Christmas gift packages',
+            'Year-end training and development seminar',
+            'Annual program review and assessment costs',
+            'Year-end reporting and documentation',
+            'Holiday season operational expenses',
+            'New Year preparation activities',
+            'Annual maintenance of equipment',
+            'Year-end financial audit services',
         ];
         
-        // Monthly distribution based on your data
-        $monthlyData = [
-            ['month' => 1, 'count' => 8],   // January
-            ['month' => 2, 'count' => 6],   // February
-            ['month' => 3, 'count' => 6],   // March
-            ['month' => 4, 'count' => 5],   // April
-            ['month' => 5, 'count' => 5],   // May
-            ['month' => 6, 'count' => 5],   // June
-            ['month' => 7, 'count' => 5],   // July
-            ['month' => 8, 'count' => 5],   // August
-            ['month' => 9, 'count' => 5],   // September
-            ['month' => 10, 'count' => 5],  // October
-            ['month' => 11, 'count' => 3],  // November (up to Nov 12)
-        ];
-        
+        // Total number of requests to create (100 for December)
+        $totalRequests = 100;
         $userSequence = 200;
         $createdCount = 0;
         
-        foreach ($monthlyData as $monthInfo) {
-            $month = $monthInfo['month'];
-            $count = $monthInfo['count'];
+        // Create 100 DV requests spread throughout December
+        for ($i = 0; $i < $totalRequests; $i++) {
+            $focal = $focalPersons[array_rand($focalPersons)];
+            $program = $programs[array_rand($programs)];
+            $respoCenter = $respoCenters[array_rand($respoCenters)];
+            $mop = $modeOfPayments[array_rand($modeOfPayments)];
             
-            for ($i = 0; $i < $count; $i++) {
-                $focal = $focalPersons[array_rand($focalPersons)];
-                $program = $programs[array_rand($programs)];
-                $respoCenter = $respoCenters[array_rand($respoCenters)];
-                $mop = $modeOfPayments[array_rand($modeOfPayments)];
-                
-                // Generate reference number: DVORS-XXXXXXXX (8 random uppercase characters)
-                do {
-                    $referenceNumber = 'DVORS-' . strtoupper(Str::random(8));
-                } while (DvRequest::where('reference_number', $referenceNumber)->exists());
-                
-                // Generate dates within the month
-                $day = rand(1, $month == 11 ? 12 : 28);
-                $createdAt = Carbon::create(2025, $month, $day, rand(8, 17), rand(0, 59));
-                $updatedAt = $createdAt->copy()->addHours(rand(1, 5));
-                
-                // Generate Accounting Control Number (simple incrementing number)
-                $accountingControlNumber = $userSequence;
-                                
-               try {
-                    $qrFileName = $referenceNumber . '.png';
-                    $qrStoragePath = storage_path('app/public/qr_codes/' . $qrFileName);
-                    $verifyUrl = url('dv/verify/' . $referenceNumber);
-                
-                    // Create directory if it doesn't exist
-                    $directory = dirname($qrStoragePath);
-                    if (!is_dir($directory)) {
-                        mkdir($directory, 0777, true);
-                    }
-                
-                    // Use external QR API
-                    $apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&data=' . urlencode($verifyUrl);
-                    $qrCodeContent = @file_get_contents($apiUrl);
-                
-                    if ($qrCodeContent === false) {
-                        // Fallback: Try alternative API
-                        $apiUrl2 = 'https://chart.googleapis.com/chart?chs=600x600&cht=qr&chl=' . urlencode($verifyUrl);
-                        $qrCodeContent = @file_get_contents($apiUrl2);
-                    }
-                
-                    if ($qrCodeContent !== false) {
-                        file_put_contents($qrStoragePath, $qrCodeContent);
-                
-                        if (file_exists($qrStoragePath) && filesize($qrStoragePath) > 0) {
-                            // ✅ Public URL (for viewing)
-                            $qrCodePath = '/qr_codes/' . $qrFileName;
-                        }
-                    }
-                } catch (\Exception $qrError) {
-                    $this->command->warn('QR Code generation failed for ' . $referenceNumber . ': ' . $qrError->getMessage());
+            // Generate reference number: DVORS-XXXXXXXX (8 random uppercase characters)
+            do {
+                $referenceNumber = 'DVORS-' . strtoupper(Str::random(8));
+            } while (DvRequest::where('reference_number', $referenceNumber)->exists());
+            
+            // Generate dates within December 2025 (1st to 31st)
+            $day = rand(1, 31);
+            $createdAt = Carbon::create(2025, 12, $day, rand(8, 17), rand(0, 59));
+            $updatedAt = $createdAt->copy()->addHours(rand(1, 5));
+            
+            // Generate Accounting Control Number (simple incrementing number)
+            $accountingControlNumber = $userSequence;
+            
+            // STATUS IS ALWAYS "submitted"
+            $status = 'submitted';
+            
+            // DV number should be null for submitted requests
+            $dvNumber = null;
+            
+            // Set confirmation flags - all submitted requests should be confirmed
+            $confirmedByFocalPerson = true;
+            $confirmedAt = $createdAt->copy()->addHours(rand(1, 24));
+            
+            // QR code generation with error handling
+            $qrCodePath = null;
+            try {
+                $qrFileName = $referenceNumber . '.png';
+                $qrStoragePath = storage_path('app/public/qr_codes/' . $qrFileName);
+                $verifyUrl = url('dv/verify/' . $referenceNumber);
+            
+                // Create directory if it doesn't exist
+                $directory = dirname($qrStoragePath);
+                if (!is_dir($directory)) {
+                    mkdir($directory, 0777, true);
                 }
-
-                                
-                // Create DV Request with accounting control number
-                $dvRequest = DvRequest::create([
-                    'focalperson_id' => $focal->id,
-                    'reference_number' => $referenceNumber,
-                    'accounting_control_number' => $accountingControlNumber,
-                    'user_sequence' => $userSequence++,
-                    'program_id' => $program->id,
-                    'respocenter_id' => $respoCenter->id,
-                    'amount' => rand(8900, 18200),
-                    'particulars' => $particularsTemplates[array_rand($particularsTemplates)],
-                    'status' => 'submitted',
-                    'dv_number' => null,
-                    'qr_code_path' => $qrCodePath,
-                    'confirmed_by_focal_person' => false,
-                    'confirmed_at' => null,
-                    'locked_by' => null,
-                    'locked_at' => null,
-                    'created_at' => $createdAt,
-                    'updated_at' => $updatedAt,
+            
+                // Use external QR API
+                $apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&data=' . urlencode($verifyUrl);
+                $qrCodeContent = @file_get_contents($apiUrl);
+            
+                if ($qrCodeContent === false) {
+                    // Fallback: Try alternative API
+                    $apiUrl2 = 'https://chart.googleapis.com/chart?chs=600x600&cht=qr&chl=' . urlencode($verifyUrl);
+                    $qrCodeContent = @file_get_contents($apiUrl2);
+                }
+            
+                if ($qrCodeContent !== false) {
+                    file_put_contents($qrStoragePath, $qrCodeContent);
+            
+                    if (file_exists($qrStoragePath) && filesize($qrStoragePath) > 0) {
+                        $qrCodePath = '/qr_codes/' . $qrFileName;
+                    }
+                }
+            } catch (\Exception $qrError) {
+                $this->command->warn('QR Code generation failed for ' . $referenceNumber . ': ' . $qrError->getMessage());
+            }
+                            
+            // Create DV Request
+            $dvRequest = DvRequest::create([
+                'focalperson_id' => $focal->id,
+                'reference_number' => $referenceNumber,
+                'accounting_control_number' => $accountingControlNumber,
+                'user_sequence' => $userSequence++,
+                'program_id' => $program->id,
+                'respocenter_id' => $respoCenter->id,
+                'amount' => rand(8900, 18200),
+                'particulars' => $particularsTemplates[array_rand($particularsTemplates)],
+                'status' => $status,
+                'dv_number' => $dvNumber,
+                'qr_code_path' => $qrCodePath,
+                'confirmed_by_focal_person' => $confirmedByFocalPerson,
+                'confirmed_at' => $confirmedAt,
+                'locked_by' => null,
+                'locked_at' => null,
+                'created_at' => $createdAt,
+                'updated_at' => $updatedAt,
+            ]);
+            
+            // Attach Mode of Payment
+            try {
+                $dvRequestMopId = DB::table('dv_request_mode_of_payment')->insertGetId([
+                    'dv_request_id' => $dvRequest->id,
+                    'mode_of_payment_id' => $mop->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
                 
-                // Attach Mode of Payment with better error handling
-                try {
-                    // Use DB insert for better error visibility
-                    $dvRequestMopId = DB::table('dv_request_mode_of_payment')->insertGetId([
-                        'dv_request_id' => $dvRequest->id,
-                        'mode_of_payment_id' => $mop->id,
+                if (!$dvRequestMopId) {
+                    throw new \Exception("Failed to insert DvRequestModeOfPayment");
+                }
+                
+                // Create Payment Details only for MDS Check and ADA
+                if (in_array($mop->mopname, ['MDS Check', 'ADA'])) {
+                    DB::table('payment_details')->insert([
+                        'dv_request_mode_of_payment_id' => $dvRequestMopId,
+                        'bank_name' => ['BDO', 'BPI', 'Metrobank', 'Landbank'][array_rand(['BDO', 'BPI', 'Metrobank', 'Landbank'])],
+                        'bank_accnum' => (string) rand(100000000, 999999999),
+                        'bank_address' => 'Davao City Branch',
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
-                    
-                    if (!$dvRequestMopId) {
-                        throw new \Exception("Failed to insert DvRequestModeOfPayment");
-                    }
-                    
-                    // Create Payment Details only for MDS Check and ADA
-                    if (in_array($mop->mopname, ['MDS Check', 'ADA'])) {
-                        DB::table('payment_details')->insert([
-                            'dv_request_mode_of_payment_id' => $dvRequestMopId,
-                            'bank_name' => ['BDO', 'BPI', 'Metrobank', 'Landbank'][array_rand(['BDO', 'BPI', 'Metrobank', 'Landbank'])],
-                            'bank_accnum' => (string) rand(100000000, 999999999),
-                            'bank_address' => 'Davao City Branch',
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
-                    }
-                } catch (\Exception $e) {
-                    $this->command->error("Error creating payment records: " . $e->getMessage());
-                    $this->command->info("DV Request ID: {$dvRequest->id}, Mode of Payment ID: {$mop->id}");
-                    throw $e;
                 }
-                
-                // Create initial submission log
-                DvRequestLog::create([
-                    'dv_request_id' => $dvRequest->id,
-                    'focalperson_id' => $focal->id,
-                    'accountingunit_id' => null,
-                    'action' => 'Submitted',
-                    'remarks' => 'DV Request submitted by Focal Person',
-                    'created_at' => $createdAt,
-                ]);
-                
-                $createdCount++;
-                
-                // Progress indicator
-                if ($createdCount % 10 === 0) {
-                    sleep(1);
-                    $this->command->info("Created {$createdCount} requests...");
-                }
+            } catch (\Exception $e) {
+                $this->command->error("Error creating payment records: " . $e->getMessage());
+                throw $e;
+            }
+            
+            // Create ONLY the initial submission log (no additional logs for other statuses)
+            DvRequestLog::create([
+                'dv_request_id' => $dvRequest->id,
+                'focalperson_id' => $focal->id,
+                'accountingunit_id' => null,
+                'action' => 'Submitted',
+                'remarks' => 'DV Request submitted by Focal Person',
+                'created_at' => $createdAt,
+            ]);
+            
+            $createdCount++;
+            
+            // Progress indicator
+            if ($createdCount % 20 === 0) {
+                sleep(1);
+                $this->command->info("Created {$createdCount} submitted requests...");
             }
         }
         
-        $this->command->info('✓ Created ' . $createdCount . ' DV requests (all with "submitted" status and QR codes)');
+        $this->command->info('✓ Created ' . $createdCount . ' DV requests with "submitted" status for December 2025');
     }
 }

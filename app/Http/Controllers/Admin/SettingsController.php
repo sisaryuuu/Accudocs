@@ -10,12 +10,17 @@ class SettingsController extends Controller
 {
     public function edit()
     {
-        $imsd = Setting::get('imsd_head', '');
-        $accountant = Setting::get('accountant_name', '');
-        $regional = Setting::get('regional_director', '');
-        $budgetofficer = Setting::get('budget_officer', '');
+        $settings = [
+            'imsd_head' => Setting::get('imsd_head', ''),
+            'accountant_name' => Setting::get('accountant_name', ''),
+            'regional_director' => Setting::get('regional_director', ''),
+            'budget_officer' => Setting::get('budget_officer', ''),
+            'budget_tupad' => Setting::get('budget_tupad', 0.00),
+            'budget_gip' => Setting::get('budget_gip', 0.00),
+            'budget_tev' => Setting::get('budget_tev', 0.00),
+        ];
 
-        return view('Admin.settings.edit', compact('imsd', 'accountant', 'regional','budgetofficer'));
+        return view('Admin.settings.edit', compact('settings'));
     }
 
     public function update(Request $request)
@@ -25,13 +30,15 @@ class SettingsController extends Controller
             'accountant_name' => 'nullable|string|max:255',
             'regional_director' => 'nullable|string|max:255',
             'budget_officer' => 'nullable|string|max:255',
+            'budget_tupad' => 'required|numeric|min:0',
+            'budget_gip' => 'required|numeric|min:0',
+            'budget_tev' => 'required|numeric|min:0',
         ]);
 
-        Setting::set('imsd_head', $data['imsd_head'] ?? '');
-        Setting::set('accountant_name', $data['accountant_name'] ?? '');
-        Setting::set('regional_director', $data['regional_director'] ?? '');
-        Setting::set('budget_officer', $data['budget_officer'] ?? '');
+        foreach ($data as $key => $value) {
+            Setting::set($key, $value);
+        }
 
-        return redirect()->back()->with('success', 'Settings saved.');
+        return redirect()->back()->with('success', 'Settings saved successfully.');
     }
 }

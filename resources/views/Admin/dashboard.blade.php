@@ -271,6 +271,258 @@
     @endif
 </div>
 
+<div class="bg-white rounded-lg shadow-lg overflow-hidden mt-6">
+    <!-- Section Header -->
+    <div class="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div>
+                    <h2 class="text-xl font-bold text-white">Budget Threshold Analysis</h2>
+                    <p class="text-purple-100 text-sm">Real-time budget utilization and controls</p>
+                </div>
+            </div>
+            <div id="overall-status-badge" class="px-4 py-2 rounded-full text-sm font-semibold bg-white text-purple-700">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Status Alert -->
+    <div id="overall-budget-alert" class="hidden px-6 py-4 border-l-4">
+        <div class="flex items-start">
+            <svg class="w-6 h-6 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            <div class="flex-1">
+                <h3 id="overall-alert-title" class="font-semibold text-lg mb-1"></h3>
+                <p id="overall-alert-message" class="text-sm"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Program Budget Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
+        <!-- TUPAD Budget Card -->
+        <div class="budget-card" data-program="TUPAD">
+            <div class="bg-white border-2 rounded-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                <!-- Card Header -->
+                <div class="px-4 py-3 border-b bg-gradient-to-r from-blue-50 to-blue-100">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-lg text-blue-900">TUPAD</h3>
+                        <span id="tupad-status-badge" class="px-3 py-1 rounded-full text-xs font-semibold">
+                            Loading...
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Card Body -->
+                <div class="p-4 space-y-4">
+                    <!-- Budget Overview -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Allocated</p>
+                            <p id="tupad-allocated" class="text-lg font-bold text-gray-900">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Obligated</p>
+                            <p id="tupad-obligated" class="text-lg font-bold text-blue-600">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Remaining</p>
+                            <p id="tupad-remaining" class="text-lg font-bold text-green-600">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Requests</p>
+                            <p id="tupad-requests" class="text-lg font-bold text-gray-700">0</p>
+                        </div>
+                    </div>
+
+                    <!-- Utilization Progress Bar -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-600">Utilization Rate</span>
+                            <span id="tupad-utilization" class="font-bold">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-4 relative overflow-hidden">
+                            <div id="tupad-progress" class="h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            <!-- Threshold markers -->
+                            <div class="absolute top-0 bottom-0 w-0.5 bg-yellow-500" style="left: 75%"></div>
+                            <div class="absolute top-0 bottom-0 w-0.5 bg-red-500" style="left: 90%"></div>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0%</span>
+                            <span class="text-yellow-600">75%</span>
+                            <span class="text-red-600">90%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+
+                    <!-- Status Description -->
+                    <div id="tupad-description" class="text-xs bg-gray-50 p-3 rounded border-l-4 border-gray-300">
+                        Loading analysis...
+                    </div>
+
+                    <!-- Action Status -->
+                    <div id="tupad-action" class="flex items-center justify-between p-2 rounded">
+                        <span class="text-sm font-medium">New DV Requests</span>
+                        <span id="tupad-allow-badge" class="px-3 py-1 rounded-full text-xs font-bold">
+                            Checking...
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GIP Budget Card -->
+        <div class="budget-card" data-program="GIP">
+            <div class="bg-white border-2 rounded-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                <div class="px-4 py-3 border-b bg-gradient-to-r from-green-50 to-green-100">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-lg text-green-900">GIP</h3>
+                        <span id="gip-status-badge" class="px-3 py-1 rounded-full text-xs font-semibold">
+                            Loading...
+                        </span>
+                    </div>
+                </div>
+
+                <div class="p-4 space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Allocated</p>
+                            <p id="gip-allocated" class="text-lg font-bold text-gray-900">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Obligated</p>
+                            <p id="gip-obligated" class="text-lg font-bold text-green-600">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Remaining</p>
+                            <p id="gip-remaining" class="text-lg font-bold text-green-600">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Requests</p>
+                            <p id="gip-requests" class="text-lg font-bold text-gray-700">0</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-600">Utilization Rate</span>
+                            <span id="gip-utilization" class="font-bold">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-4 relative overflow-hidden">
+                            <div id="gip-progress" class="h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            <div class="absolute top-0 bottom-0 w-0.5 bg-yellow-500" style="left: 75%"></div>
+                            <div class="absolute top-0 bottom-0 w-0.5 bg-red-500" style="left: 90%"></div>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0%</span>
+                            <span class="text-yellow-600">75%</span>
+                            <span class="text-red-600">90%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+
+                    <div id="gip-description" class="text-xs bg-gray-50 p-3 rounded border-l-4 border-gray-300">
+                        Loading analysis...
+                    </div>
+
+                    <div id="gip-action" class="flex items-center justify-between p-2 rounded">
+                        <span class="text-sm font-medium">New DV Requests</span>
+                        <span id="gip-allow-badge" class="px-3 py-1 rounded-full text-xs font-bold">
+                            Checking...
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEV Budget Card -->
+        <div class="budget-card" data-program="TEV">
+            <div class="bg-white border-2 rounded-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                <div class="px-4 py-3 border-b bg-gradient-to-r from-orange-50 to-orange-100">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-lg text-orange-900">TEV</h3>
+                        <span id="tev-status-badge" class="px-3 py-1 rounded-full text-xs font-semibold">
+                            Loading...
+                        </span>
+                    </div>
+                </div>
+
+                <div class="p-4 space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Allocated</p>
+                            <p id="tev-allocated" class="text-lg font-bold text-gray-900">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Obligated</p>
+                            <p id="tev-obligated" class="text-lg font-bold text-orange-600">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Remaining</p>
+                            <p id="tev-remaining" class="text-lg font-bold text-green-600">₱0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase">Requests</p>
+                            <p id="tev-requests" class="text-lg font-bold text-gray-700">0</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-600">Utilization Rate</span>
+                            <span id="tev-utilization" class="font-bold">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-4 relative overflow-hidden">
+                            <div id="tev-progress" class="h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            <div class="absolute top-0 bottom-0 w-0.5 bg-yellow-500" style="left: 75%"></div>
+                            <div class="absolute top-0 bottom-0 w-0.5 bg-red-500" style="left: 90%"></div>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0%</span>
+                            <span class="text-yellow-600">75%</span>
+                            <span class="text-red-600">90%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+
+                    <div id="tev-description" class="text-xs bg-gray-50 p-3 rounded border-l-4 border-gray-300">
+                        Loading analysis...
+                    </div>
+
+                    <div id="tev-action" class="flex items-center justify-between p-2 rounded">
+                        <span class="text-sm font-medium">New DV Requests</span>
+                        <span id="tev-allow-badge" class="px-3 py-1 rounded-full text-xs font-bold">
+                            Checking...
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendations Section -->
+    <div id="budget-recommendations" class="px-6 pb-6">
+        <h3 class="font-semibold text-lg mb-4 flex items-center">
+            <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+            </svg>
+            Action Items & Recommendations
+        </h3>
+        <div id="recommendations-list" class="space-y-3">
+            <div class="text-center text-gray-500 py-4">
+                Loading recommendations...
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
 <!-- Charts Section -->
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
     <!-- Requests per Program -->
@@ -280,7 +532,74 @@
             <canvas id="requestsPerProgram"></canvas>
         </div>
     </div>
-    
+      <div class="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+            <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
+                <svg class="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Key Insights
+            </h3>
+            
+            @php
+                $programs = $requestsPerProgram ?? collect([]);
+                $total = $programs->sum();
+                $topProgram = $programs->sortDesc()->keys()->first();
+                $topCount = $programs->max();
+                $topPercentage = $total > 0 ? round(($topCount / $total) * 100, 1) : 0;
+                
+                // Calculate distribution balance
+                $programValues = $programs->values()->toArray();
+                $avgValue = $total > 0 ? $total / count($programs) : 0;
+                $variance = 0;
+                foreach ($programValues as $value) {
+                    $variance += pow($value - $avgValue, 2);
+                }
+                $variance = $variance / max(count($programValues), 1);
+                $isBalanced = $variance < ($avgValue * 0.5);
+            @endphp
+            
+            <div class="space-y-2 text-sm text-gray-700">
+                <!-- Top Program -->
+                <div class="flex items-start">
+                    <span class="text-blue-600 mr-2">•</span>
+                    <p><strong class="text-blue-700">{{ $topProgram }}</strong> leads with 
+                    <strong>{{ number_format($topCount) }}</strong> requests 
+                    (<strong>{{ $topPercentage }}%</strong> of total volume)</p>
+                </div>
+                
+                <!-- Distribution Analysis -->
+                <div class="flex items-start">
+                    <span class="text-blue-600 mr-2">•</span>
+                    <p>
+                        @if($isBalanced)
+                            <span class="text-green-700 font-semibold">Well-balanced</span> distribution across programs indicates effective resource allocation
+                        @else
+                            <span class="text-yellow-700 font-semibold">Imbalanced</span> distribution - consider reallocating resources to underserved programs
+                        @endif
+                    </p>
+                </div>
+                
+                <!-- Workload Indicator -->
+                @php
+                    $avgPerProgram = $total > 0 ? round($total / count($programs), 1) : 0;
+                @endphp
+                <div class="flex items-start">
+                    <span class="text-blue-600 mr-2">•</span>
+                    <p>Average workload: <strong>{{ number_format($avgPerProgram, 1) }}</strong> requests per program</p>
+                </div>
+                
+                <!-- Recommendation -->
+                @if($topPercentage > 50)
+                <div class="mt-3 p-2 bg-yellow-100 border-l-4 border-yellow-500 rounded">
+                    <p class="text-xs text-yellow-800">
+                        <strong>⚠ Recommendation:</strong> {{ $topProgram }} is receiving over 50% of requests. 
+                        Ensure adequate staffing and budget allocation to prevent service delays.
+                    </p>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
     <!-- Budget per Program -->
     <div class="bg-white p-4 rounded-lg shadow">
         <h2 class="text-lg font-semibold mb-4">Total Budget Obligated per Program</h2>
@@ -288,7 +607,91 @@
             <canvas id="budgetPerProgram"></canvas>
         </div>
     </div>
-    
+     <div class="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+            <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
+                <svg class="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Budget Insights
+            </h3>
+            
+            @php
+                $budgets = $budgetPerProgram ?? collect([]);
+                $totalBudget = $budgets->sum();
+                $topBudgetProgram = $budgets->sortDesc()->keys()->first();
+                $topBudgetAmount = $budgets->max();
+                $topBudgetPercentage = $totalBudget > 0 ? round(($topBudgetAmount / $totalBudget) * 100, 1) : 0;
+                
+                // Calculate average per request
+                $requestCounts = $requestsPerProgram ?? collect([]);
+                $budgetEfficiency = [];
+                foreach ($budgets as $program => $budget) {
+                    $requests = $requestCounts->get($program, 1);
+                    $budgetEfficiency[$program] = $requests > 0 ? round($budget / $requests, 2) : 0;
+                }
+                arsort($budgetEfficiency);
+                $mostExpensiveProgram = array_key_first($budgetEfficiency);
+                $leastExpensiveProgram = array_key_last($budgetEfficiency);
+            @endphp
+            
+            <div class="space-y-2 text-sm text-gray-700">
+                <!-- Total Obligated -->
+                <div class="flex items-start">
+                    <span class="text-green-600 mr-2">•</span>
+                    <p>Total obligated: <strong class="text-green-700">₱{{ number_format($totalBudget, 2) }}</strong> 
+                    across all programs</p>
+                </div>
+                
+                <!-- Top Budget Allocation -->
+                <div class="flex items-start">
+                    <span class="text-green-600 mr-2">•</span>
+                    <p><strong class="text-green-700">{{ $topBudgetProgram }}</strong> has the highest obligation at 
+                    <strong>₱{{ number_format($topBudgetAmount, 2) }}</strong> 
+                    (<strong>{{ $topBudgetPercentage }}%</strong>)</p>
+                </div>
+                
+                <!-- Cost Efficiency Analysis -->
+                <div class="flex items-start">
+                    <span class="text-green-600 mr-2">•</span>
+                    <p>Cost per request: 
+                        <strong>{{ $mostExpensiveProgram }}</strong> 
+                        (₱{{ number_format($budgetEfficiency[$mostExpensiveProgram] ?? 0, 2) }}) vs 
+                        <strong>{{ $leastExpensiveProgram }}</strong> 
+                        (₱{{ number_format($budgetEfficiency[$leastExpensiveProgram] ?? 0, 2) }})
+                    </p>
+                </div>
+                
+                <!-- Budget Utilization Status -->
+                @if(isset($budgetAnalysis['programs']))
+                <div class="flex items-start">
+                    <span class="text-green-600 mr-2">•</span>
+                    <p>
+                        @php
+                            $criticalPrograms = collect($budgetAnalysis['programs'])
+                                ->filter(fn($p) => $p['utilization_rate'] >= 90)
+                                ->count();
+                        @endphp
+                        @if($criticalPrograms > 0)
+                            <span class="text-red-700 font-semibold">{{ $criticalPrograms }} program(s)</span> at critical budget levels (≥90% utilized)
+                        @else
+                            <span class="text-green-700 font-semibold">All programs</span> have adequate remaining budget
+                        @endif
+                    </p>
+                </div>
+                @endif
+                
+                <!-- Alert -->
+                @if($topBudgetPercentage > 60)
+                <div class="mt-3 p-2 bg-blue-100 border-l-4 border-blue-500 rounded">
+                    <p class="text-xs text-blue-800">
+                        <strong>ℹ️ Note:</strong> {{ $topBudgetProgram }} consumes {{ $topBudgetPercentage }}% of total budget. 
+                        Monitor closely to ensure fiscal sustainability.
+                    </p>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
     <!-- Documents per Role -->
     <div class="bg-white p-4 rounded-lg shadow">
         <h2 class="text-lg font-semibold mb-4">Documents Handled per Role</h2>
@@ -296,7 +699,79 @@
             <canvas id="documentsPerRole"></canvas>
         </div>
     </div>
-    
+       <div class="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+            <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
+                <svg class="w-4 h-4 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+                Workload Distribution
+            </h3>
+            
+            @php
+                $docsPerRole = $documentsPerRole ?? collect([]);
+                $totalDocs = $docsPerRole->sum();
+                $busiestRole = $docsPerRole->sortDesc()->keys()->first();
+                $busiestCount = $docsPerRole->max();
+                $lightestRole = $docsPerRole->sort()->keys()->first();
+                $lightestCount = $docsPerRole->min();
+                $workloadGap = $busiestCount - $lightestCount;
+                $workloadGapPercent = $lightestCount > 0 ? round((($busiestCount - $lightestCount) / $lightestCount) * 100, 1) : 0;
+            @endphp
+            
+            <div class="space-y-2 text-sm text-gray-700">
+                <!-- Busiest Role -->
+                <div class="flex items-start">
+                    <span class="text-purple-600 mr-2">•</span>
+                    <p><strong class="text-purple-700">{{ $busiestRole }}</strong> handles the most documents 
+                    (<strong>{{ number_format($busiestCount) }}</strong>, 
+                    {{ round(($busiestCount / $totalDocs) * 100, 1) }}% of total)</p>
+                </div>
+                
+                <!-- Workload Balance -->
+                <div class="flex items-start">
+                    <span class="text-purple-600 mr-2">•</span>
+                    <p>Workload gap: <strong>{{ number_format($workloadGap) }}</strong> documents 
+                    between busiest ({{ $busiestRole }}) and lightest ({{ $lightestRole }}) roles</p>
+                </div>
+                
+                <!-- Average Workload -->
+                @php
+                    $avgDocsPerRole = $totalDocs > 0 ? round($totalDocs / count($docsPerRole), 1) : 0;
+                    $rolesAboveAvg = $docsPerRole->filter(fn($count) => $count > $avgDocsPerRole)->count();
+                    $rolesBelowAvg = count($docsPerRole) - $rolesAboveAvg;
+                @endphp
+                <div class="flex items-start">
+                    <span class="text-purple-600 mr-2">•</span>
+                    <p>Average per role: <strong>{{ number_format($avgDocsPerRole, 1) }}</strong> documents 
+                    ({{ $rolesAboveAvg }} above, {{ $rolesBelowAvg }} below average)</p>
+                </div>
+                
+                <!-- Critical Path -->
+                <div class="flex items-start">
+                    <span class="text-purple-600 mr-2">•</span>
+                    <p>
+                        @if($workloadGapPercent > 50)
+                            <span class="text-orange-700 font-semibold">Significant imbalance</span> detected - consider redistributing tasks
+                        @elseif($workloadGapPercent > 25)
+                            <span class="text-yellow-700 font-semibold">Moderate imbalance</span> - monitor for overload
+                        @else
+                            <span class="text-green-700 font-semibold">Balanced workload</span> across roles
+                        @endif
+                    </p>
+                </div>
+                
+                <!-- Recommendation -->
+                @if($workloadGapPercent > 50)
+                <div class="mt-3 p-2 bg-orange-100 border-l-4 border-orange-500 rounded">
+                    <p class="text-xs text-orange-800">
+                        <strong>⚠ Action Required:</strong> {{ $busiestRole }} is handling {{ $workloadGapPercent }}% more documents than {{ $lightestRole }}. 
+                        Consider adding staff or implementing parallel processing.
+                    </p>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
     <!-- Monthly Requests Trend -->
     <div class="bg-white p-4 rounded-lg shadow">
         <h2 class="text-lg font-semibold mb-4">Monthly Requests Trend</h2>
@@ -305,7 +780,114 @@
         </div>
     </div>
 </div>
-
+  <div class="mt-4 p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border border-orange-200">
+            <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
+                <svg class="w-4 h-4 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+                Trend Analysis
+            </h3>
+            
+            @php
+                $monthly = $monthlyRequests ?? collect([]);
+                $monthlyValues = $monthly->values();
+                $latestMonth = $monthly->keys()->last();
+                $latestValue = $monthlyValues->last();
+                $previousValue = $monthlyValues->count() > 1 ? $monthlyValues->slice(-2, 1)->first() : $latestValue;
+                
+                // Calculate growth
+                $growth = $previousValue > 0 ? round((($latestValue - $previousValue) / $previousValue) * 100, 1) : 0;
+                
+                // Calculate average
+                $avgMonthly = $monthlyValues->avg();
+                
+                // Peak month
+                $peakMonth = $monthly->sortDesc()->keys()->first();
+                $peakValue = $monthly->max();
+                
+                // Trend direction
+                $recentTrend = $monthlyValues->slice(-3)->values();
+                $isTrendingUp = $recentTrend->count() >= 2 && 
+                                $recentTrend->last() > $recentTrend->first();
+                
+                // Volatility
+                $variance = 0;
+                foreach ($monthlyValues as $value) {
+                    $variance += pow($value - $avgMonthly, 2);
+                }
+                $stdDev = sqrt($variance / max($monthlyValues->count(), 1));
+                $volatility = $avgMonthly > 0 ? round(($stdDev / $avgMonthly) * 100, 1) : 0;
+            @endphp
+            
+            <div class="space-y-2 text-sm text-gray-700">
+                <!-- Current Performance -->
+                <div class="flex items-start">
+                    <span class="text-orange-600 mr-2">•</span>
+                    <p><strong>{{ $latestMonth }}:</strong> 
+                    <strong class="{{ $growth > 0 ? 'text-green-700' : ($growth < 0 ? 'text-red-700' : 'text-gray-700') }}">
+                        {{ number_format($latestValue) }} requests
+                    </strong>
+                    @if($growth != 0)
+                        ({{ $growth > 0 ? '+' : '' }}{{ $growth }}% vs previous month)
+                    @endif
+                    </p>
+                </div>
+                
+                <!-- Trend Direction -->
+                <div class="flex items-start">
+                    <span class="text-orange-600 mr-2">•</span>
+                    <p>
+                        @if($isTrendingUp)
+                            <span class="text-green-700 font-semibold">↗ Upward trend</span> - volume increasing over last 3 months
+                        @else
+                            <span class="text-blue-700 font-semibold">→ Stable/declining</span> trend observed
+                        @endif
+                    </p>
+                </div>
+                
+                <!-- Peak Period -->
+                <div class="flex items-start">
+                    <span class="text-orange-600 mr-2">•</span>
+                    <p>Peak: <strong>{{ $peakMonth }}</strong> with 
+                    <strong>{{ number_format($peakValue) }}</strong> requests 
+                    ({{ round(($peakValue / $avgMonthly - 1) * 100, 1) }}% above average)</p>
+                </div>
+                
+                <!-- Volatility -->
+                <div class="flex items-start">
+                    <span class="text-orange-600 mr-2">•</span>
+                    <p>Volume volatility: <strong>{{ $volatility }}%</strong> 
+                    - 
+                    @if($volatility < 15)
+                        <span class="text-green-700">Very stable</span>
+                    @elseif($volatility < 30)
+                        <span class="text-blue-700">Moderately stable</span>
+                    @else
+                        <span class="text-yellow-700">High variation</span>
+                    @endif
+                    </p>
+                </div>
+                
+                <!-- Forecast/Recommendation -->
+                @if($growth > 15)
+                <div class="mt-3 p-2 bg-green-100 border-l-4 border-green-500 rounded">
+                    <p class="text-xs text-green-800">
+                        <strong>📈 Growth Alert:</strong> {{ abs($growth) }}% increase indicates rising demand. 
+                        Plan for additional capacity and budget allocation for next quarter.
+                    </p>
+                </div>
+                @elseif($growth < -15)
+                <div class="mt-3 p-2 bg-blue-100 border-l-4 border-blue-500 rounded">
+                    <p class="text-xs text-blue-800">
+                        <strong>📉 Volume Drop:</strong> {{ abs($growth) }}% decrease may indicate seasonal variation 
+                        or program changes. Investigate if unexpected.
+                    </p>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
 <!-- Staff Performance Chart -->
 <div class="bg-white p-4 rounded-lg shadow mb-8">
     <h2 class="text-lg font-semibold mb-4">Accounting Staff Performance Trends</h2>
@@ -328,11 +910,205 @@
     </div>
 </div>
 
-<!-- Bottleneck Chart -->
+<!-- Bottleneck Chart --> <div class="mt-4 p-4 bg-gradient-to-r from-cyan-50 to-sky-50 rounded-lg border border-cyan-200">
+        <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
+            <svg class="w-4 h-4 mr-2 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            Performance Insights
+        </h3>
+        
+        @php
+            $staffMetrics = $staffPerformance['individual_metrics'] ?? collect([]);
+            $topPerformers = $staffPerformance['top_performers'] ?? collect([]);
+            $workloadByRole = $staffPerformance['workload_by_role'] ?? collect([]);
+            
+            // Calculate metrics
+            $avgDocsProcessed = $staffMetrics->avg('documents_processed');
+            $avgProcessingHours = $staffMetrics->avg('avg_processing_hours');
+            $totalStaff = $staffMetrics->count();
+            
+            // Top performer
+            $topStaff = $staffMetrics->sortByDesc('documents_processed')->first();
+            
+            // Fastest processor
+            $fastestStaff = $topPerformers->sortBy('avg_processing_hours')->first();
+            
+            // Performance distribution
+            $highPerformers = $staffMetrics->filter(fn($s) => $s->documents_processed > $avgDocsProcessed * 1.2)->count();
+            $avgPerformers = $staffMetrics->filter(fn($s) => 
+                $s->documents_processed >= $avgDocsProcessed * 0.8 && 
+                $s->documents_processed <= $avgDocsProcessed * 1.2
+            )->count();
+            $lowPerformers = $staffMetrics->filter(fn($s) => $s->documents_processed < $avgDocsProcessed * 0.8)->count();
+        @endphp
+        
+        <div class="space-y-2 text-sm text-gray-700">
+            <!-- Team Overview -->
+            <div class="flex items-start">
+                <span class="text-cyan-600 mr-2">•</span>
+                <p>Team size: <strong>{{ $totalStaff }}</strong> active staff members 
+                processing average of <strong>{{ number_format($avgDocsProcessed, 1) }}</strong> documents each</p>
+            </div>
+            
+            <!-- Top Performer -->
+            @if($topStaff)
+            <div class="flex items-start">
+                <span class="text-cyan-600 mr-2">•</span>
+                <p>Top performer: <strong class="text-green-700">{{ $topStaff->first_name }} {{ $topStaff->last_name }}</strong> 
+                ({{ $topStaff->role }}) with <strong>{{ $topStaff->documents_processed }}</strong> documents processed</p>
+            </div>
+            @endif
+            
+            <!-- Fastest Processor -->
+            @if($fastestStaff)
+            <div class="flex items-start">
+                <span class="text-cyan-600 mr-2">•</span>
+                <p>Fastest: <strong class="text-blue-700">{{ $fastestStaff->staff_name }}</strong> 
+                averaging <strong>{{ $fastestStaff->avg_processing_hours }}</strong> hours per document</p>
+            </div>
+            @endif
+            
+            <!-- Performance Distribution -->
+            <div class="flex items-start">
+                <span class="text-cyan-600 mr-2">•</span>
+                <p>Performance distribution: 
+                    <strong class="text-green-600">{{ $highPerformers }}</strong> high, 
+                    <strong class="text-blue-600">{{ $avgPerformers }}</strong> average, 
+                    <strong class="text-orange-600">{{ $lowPerformers }}</strong> below average
+                </p>
+            </div>
+            
+            <!-- Average Processing Time -->
+            <div class="flex items-start">
+                <span class="text-cyan-600 mr-2">•</span>
+                <p>Team average processing time: <strong>{{ number_format($avgProcessingHours, 2) }}</strong> hours per document
+                @if($avgProcessingHours < 3)
+                    - <span class="text-green-700 font-semibold">Excellent efficiency</span>
+                @elseif($avgProcessingHours < 5)
+                    - <span class="text-blue-700 font-semibold">Good efficiency</span>
+                @else
+                    - <span class="text-yellow-700 font-semibold">Needs improvement</span>
+                @endif
+                </p>
+            </div>
+            
+            <!-- Recommendation -->
+            @if($lowPerformers > $highPerformers && $lowPerformers > 0)
+            <div class="mt-3 p-2 bg-yellow-100 border-l-4 border-yellow-500 rounded">
+                <p class="text-xs text-yellow-800">
+                    <strong>👥 HR Action:</strong> {{ $lowPerformers }} staff member(s) below average performance. 
+                    Conduct performance reviews, provide training, and identify support needs.
+                </p>
+            </div>
+            @elseif($highPerformers > $totalStaff * 0.3)
+            <div class="mt-3 p-2 bg-green-100 border-l-4 border-green-500 rounded">
+                <p class="text-xs text-green-800">
+                    <strong>✅ Strong Team:</strong> {{ round(($highPerformers / $totalStaff) * 100) }}% of staff are high performers. 
+                    Document best practices and share across the team.
+                </p>
+            </div>
+            @endif
+        </div>
+    </div>
+</div>
 <div class="bg-white p-4 rounded-lg shadow mb-8">
     <h2 class="text-lg font-semibold mb-4">Workflow Bottlenecks by Role (Processing Time)</h2>
     <div class="chart-container" style="height: 300px;">
         <canvas id="bottleneckChart"></canvas>
+    </div>
+</div>  <!-- Insights Panel -->
+    <div class="mt-4 p-4 bg-gradient-to-r from-red-50 to-rose-50 rounded-lg border border-red-200">
+        <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
+            <svg class="w-4 h-4 mr-2 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            Bottleneck Analysis
+        </h3>
+        
+        @php
+            $bottlenecks = $bottlenecks ?? collect([]);
+            $slowestRole = $bottlenecks->sortByDesc('avg_hours')->first();
+            $fastestRole = $bottlenecks->sortBy('avg_hours')->first();
+            
+            // Calculate impact
+            $totalAvgHours = $bottlenecks->sum('avg_hours');
+            $avgHours = $bottlenecks->avg('avg_hours');
+            
+            // Critical bottlenecks (>4 hours)
+            $criticalBottlenecks = $bottlenecks->filter(fn($b) => $b->avg_hours > 4);
+        @endphp
+        
+        <div class="space-y-2 text-sm text-gray-700">
+            <!-- Primary Bottleneck -->
+            @if($slowestRole)
+            <div class="flex items-start">
+                <span class="text-red-600 mr-2">•</span>
+                <p><strong class="text-red-700">{{ $slowestRole->role_name }}</strong> is the primary bottleneck 
+                with <strong>{{ number_format($slowestRole->avg_hours, 2) }}</strong> hours average processing time</p>
+            </div>
+            @endif
+            
+            <!-- Impact Assessment -->
+            @if($slowestRole && $fastestRole)
+            <div class="flex items-start">
+                <span class="text-red-600 mr-2">•</span>
+                <p>Processing gap: <strong>{{ number_format($slowestRole->avg_hours - $fastestRole->avg_hours, 2) }}</strong> hours 
+                between slowest ({{ $slowestRole->role_name }}) and fastest ({{ $fastestRole->role_name }}) stages</p>
+            </div>
+            @endif
+            
+            <!-- Critical Stages -->
+            <div class="flex items-start">
+                <span class="text-red-600 mr-2">•</span>
+                <p>
+                    @if($criticalBottlenecks->count() > 0)
+                        <strong class="text-red-700">{{ $criticalBottlenecks->count() }}</strong> critical stage(s) 
+                        exceeding 4-hour threshold require immediate optimization
+                    @else
+                        <span class="text-green-700 font-semibold">No critical bottlenecks</span> - all stages within acceptable ranges
+                    @endif
+                </p>
+            </div>
+            
+            <!-- Cumulative Impact -->
+            <div class="flex items-start">
+                <span class="text-red-600 mr-2">•</span>
+                <p>Cumulative workflow time: <strong>{{ number_format($totalAvgHours, 2) }}</strong> hours 
+                ({{ number_format($totalAvgHours / 24, 1) }} days) across all processing stages</p>
+            </div>
+            
+            <!-- Days into Process -->
+            @if($slowestRole && $slowestRole->avg_days_into_process > 5)
+            <div class="flex items-start">
+                <span class="text-red-600 mr-2">•</span>
+                <p><span class="text-orange-700 font-semibold">Late-stage delay:</span> 
+                {{ $slowestRole->role_name }} occurs at day {{ number_format($slowestRole->avg_days_into_process, 1) }}, 
+                contributing to SLA violations</p>
+            </div>
+            @endif
+            
+            <!-- Action Required -->
+            @if($criticalBottlenecks->count() > 0)
+            <div class="mt-3 p-2 bg-red-100 border-l-4 border-red-500 rounded">
+                <p class="text-xs text-red-800">
+                    <strong>🚨 Urgent Action:</strong> 
+                    @if($slowestRole)
+                        Focus on {{ $slowestRole->role_name }} optimization: 
+                        streamline approval process, add parallel workflows, or increase staffing at this stage.
+                    @endif
+                </p>
+            </div>
+            @elseif($slowestRole && $slowestRole->avg_hours > 3)
+            <div class="mt-3 p-2 bg-yellow-100 border-l-4 border-yellow-500 rounded">
+                <p class="text-xs text-yellow-800">
+                    <strong>💡 Recommendation:</strong> 
+                    {{ $slowestRole->role_name }} could be optimized further. 
+                    Review process requirements and explore automation opportunities.
+                </p>
+            </div>
+            @endif
+        </div>
     </div>
 </div>
 
@@ -406,6 +1182,66 @@
             transform: scale(1);
         }
     }
+
+    /* Add these styles to your dashboard */
+.budget-card {
+    transition: transform 0.2s ease;
+}
+
+.budget-card:hover {
+    transform: translateY(-2px);
+}
+
+@keyframes pulse-slow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.pulse-slow {
+    animation: pulse-slow 2s ease-in-out infinite;
+}
+
+/* Status badge colors */
+.status-exceeded {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+.status-critical {
+    background-color: #fed7aa;
+    color: #9a3412;
+    border: 1px solid #fb923c;
+}
+
+.status-warning {
+    background-color: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fbbf24;
+}
+
+.status-healthy {
+    background-color: #d1fae5;
+    color: #065f46;
+    border: 1px solid #34d399;
+}
+
+/* Progress bar colors */
+.progress-exceeded {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.progress-critical {
+    background: linear-gradient(90deg, #f97316, #ea580c);
+}
+
+.progress-warning {
+    background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.progress-healthy {
+    background: linear-gradient(90deg, #10b981, #059669);
+}
 </style>
 @endpush
 
@@ -760,6 +1596,214 @@ let staffCharts = {
     efficiency: null,
     workload: null
 };
+
+function updateBudgetThresholds(budgetAnalysis) {
+    if (!budgetAnalysis || !budgetAnalysis.programs) {
+        console.warn('No budget analysis data available');
+        return;
+    }
+
+    // Update overall status
+    updateOverallBudgetStatus(budgetAnalysis.overall_status);
+
+    // Update each program card
+    ['TUPAD', 'GIP', 'TEV'].forEach(program => {
+        const programData = budgetAnalysis.programs[program];
+        if (programData) {
+            updateProgramCard(program, programData);
+        }
+    });
+
+    // Update recommendations
+    updateRecommendations(budgetAnalysis.recommendations);
+}
+
+/**
+ * Update overall budget status alert
+ */
+function updateOverallBudgetStatus(overallStatus) {
+    const badge = document.getElementById('overall-status-badge');
+    const alert = document.getElementById('overall-budget-alert');
+    const title = document.getElementById('overall-alert-title');
+    const message = document.getElementById('overall-alert-message');
+
+    if (!badge || !alert) return;
+
+    const statusConfig = {
+        'CRITICAL': {
+            badge: 'bg-red-100 text-red-800',
+            alert: 'bg-red-50 border-red-500 text-red-900',
+            icon: 'text-red-600'
+        },
+        'HIGH_RISK': {
+            badge: 'bg-orange-100 text-orange-800',
+            alert: 'bg-orange-50 border-orange-500 text-orange-900',
+            icon: 'text-orange-600'
+        },
+        'ATTENTION_NEEDED': {
+            badge: 'bg-yellow-100 text-yellow-800',
+            alert: 'bg-yellow-50 border-yellow-500 text-yellow-900',
+            icon: 'text-yellow-600'
+        },
+        'HEALTHY': {
+            badge: 'bg-green-100 text-green-800',
+            alert: 'bg-green-50 border-green-500 text-green-900',
+            icon: 'text-green-600'
+        }
+    };
+
+    const config = statusConfig[overallStatus.status] || statusConfig.HEALTHY;
+
+    badge.textContent = overallStatus.status.replace(/_/g, ' ');
+    badge.className = `px-4 py-2 rounded-full text-sm font-semibold ${config.badge}`;
+
+    if (overallStatus.status !== 'HEALTHY') {
+        alert.className = `px-6 py-4 border-l-4 ${config.alert}`;
+        title.textContent = overallStatus.status.replace(/_/g, ' ');
+        message.textContent = overallStatus.message;
+        alert.classList.remove('hidden');
+    } else {
+        alert.classList.add('hidden');
+    }
+}
+
+/**
+ * Update individual program card
+ */
+/**
+ * Update individual program card
+ */
+function updateProgramCard(program, data) {
+    const prefix = program.toLowerCase();
+
+    // Update amounts
+    safeUpdateElement(`${prefix}-allocated`, `₱${formatNumber(data.allocated_budget)}`);
+    safeUpdateElement(`${prefix}-obligated`, `₱${formatNumber(data.obligated_budget)}`);
+    safeUpdateElement(`${prefix}-remaining`, `₱${formatNumber(data.remaining_budget)}`);
+    safeUpdateElement(`${prefix}-requests`, formatNumber(data.request_count));
+    safeUpdateElement(`${prefix}-utilization`, `${data.utilization_rate}%`);
+
+    // Update status badge
+    const statusBadge = document.getElementById(`${prefix}-status-badge`);
+    if (statusBadge) {
+        statusBadge.textContent = data.status;
+        
+        // Map alert_level to CSS classes
+        const alertClassMap = {
+            'danger': 'bg-red-100 text-red-800',
+            'critical': 'bg-orange-100 text-orange-800',
+            'warning': 'bg-yellow-100 text-yellow-800',
+            'normal': 'bg-green-100 text-green-800'
+        };
+        
+        const badgeClass = alertClassMap[data.alert_level] || 'bg-gray-100 text-gray-800';
+        statusBadge.className = `px-3 py-1 rounded-full text-xs font-semibold ${badgeClass}`;
+    }
+
+    // Update progress bar
+    const progressBar = document.getElementById(`${prefix}-progress`);
+    if (progressBar) {
+        const utilization = Math.min(data.utilization_rate, 100);
+        progressBar.style.width = `${utilization}%`;
+        
+        // Map alert_level to progress bar colors
+        const progressColorMap = {
+            'danger': 'bg-red-500',          // >= 100%
+            'critical': 'bg-orange-500',     // >= 90%
+            'warning': 'bg-yellow-500',      // >= 75%
+            'normal': 'bg-green-500'         // < 75%
+        };
+        
+        const progressClass = progressColorMap[data.alert_level] || 'bg-blue-500';
+        progressBar.className = `h-4 rounded-full transition-all duration-500 ${progressClass}`;
+        
+        if (data.utilization_rate >= 100) {
+            progressBar.classList.add('pulse-slow');
+        } else {
+            progressBar.classList.remove('pulse-slow');
+        }
+    }
+
+    // Update description
+    const description = document.getElementById(`${prefix}-description`);
+    if (description) {
+        description.innerHTML = data.description;
+        
+        // Map alert_level to border colors
+        const borderColorMap = {
+            'danger': 'border-red-500',
+            'critical': 'border-orange-500',
+            'warning': 'border-yellow-500',
+            'normal': 'border-green-500'
+        };
+        
+        const borderClass = borderColorMap[data.alert_level] || 'border-gray-300';
+        description.className = `text-xs bg-gray-50 p-3 rounded border-l-4 ${borderClass}`;
+    }
+
+    // Update allow/block badge
+    const allowBadge = document.getElementById(`${prefix}-allow-badge`);
+    const actionDiv = document.getElementById(`${prefix}-action`);
+    
+    if (allowBadge && actionDiv) {
+        if (data.allow_new_requests) {
+            allowBadge.textContent = '✓ ALLOWED';
+            allowBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800';
+            actionDiv.className = 'flex items-center justify-between p-2 rounded bg-green-50';
+        } else {
+            allowBadge.textContent = '✗ BLOCKED';
+            allowBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800';
+            actionDiv.className = 'flex items-center justify-between p-2 rounded bg-red-50';
+        }
+    }
+}
+
+/**
+ * Update recommendations list
+ */
+function updateRecommendations(recommendations) {
+    const list = document.getElementById('recommendations-list');
+    if (!list) return;
+
+    if (!recommendations || recommendations.length === 0) {
+        list.innerHTML = '<div class="text-center text-gray-500 py-4">No action items at this time. All budgets are within acceptable ranges.</div>';
+        return;
+    }
+
+    const priorityConfig = {
+        'HIGH': { bg: 'bg-red-50', border: 'border-red-500', text: 'text-red-800', badge: 'bg-red-100 text-red-800' },
+        'MEDIUM': { bg: 'bg-yellow-50', border: 'border-yellow-500', text: 'text-yellow-800', badge: 'bg-yellow-100 text-yellow-800' },
+        'LOW': { bg: 'bg-blue-50', border: 'border-blue-500', text: 'text-blue-800', badge: 'bg-blue-100 text-blue-800' }
+    };
+
+    list.innerHTML = recommendations.map(rec => {
+        const config = priorityConfig[rec.priority] || priorityConfig.LOW;
+        return `
+            <div class="${config.bg} border-l-4 ${config.border} p-4 rounded ${config.text}">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <span class="px-2 py-1 rounded text-xs font-bold ${config.badge}">
+                                ${rec.priority} PRIORITY
+                            </span>
+                            <span class="font-semibold">${rec.program}</span>
+                            <span class="text-xs px-2 py-1 bg-white rounded">${rec.action}</span>
+                        </div>
+                        <p class="text-sm">${rec.message}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Helper function to format numbers
+ */
+function formatNumber(num) {
+    if (typeof num !== 'number') num = parseFloat(num) || 0;
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeDashboard();
@@ -1140,6 +2184,7 @@ function updateDashboard(data) {
     safelyAnimateValue('kpi-approved', data.approvedRequests || 0);
     safelyAnimateValue('kpi-rejected', data.rejectedRequests || 0);
 
+
     if (data.slaAnalysis) {
         updateSLACompliance(data.slaAnalysis);
     }
@@ -1176,6 +2221,10 @@ function updateDashboard(data) {
         updateInsights(data.insights || []);
     } catch (error) {
         console.error('Error updating charts:', error);
+    }
+    
+     if (data.budgetAnalysis) {
+        updateBudgetThresholds(data.budgetAnalysis);
     }
 }
 
@@ -1326,4 +2375,5 @@ window.manualRefresh = manualRefresh;
 window.openKPIModal = openKPIModal;
 window.closeKPIModal = closeKPIModal;
 window.exportKPIData = exportKPIData;
+
 </script>

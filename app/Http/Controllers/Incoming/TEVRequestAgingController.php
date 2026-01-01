@@ -100,79 +100,75 @@ class TEVRequestAgingController extends Controller
         }
     }
 
-    /**
-     * Get TEV aging statistics
-     */
-    public function getAgingStatistics()
-    {
-        try {
-            Log::info('Fetching TEV aging statistics');
-            
-            // Define completed statuses for TEV - INCLUDE Incoming-TEV_rejected
-            $completedStatuses = [
-                'cashier_released',
-                'Incoming-TEV_rejected',
-                '%_rejected',
-                'completed',
-            ];
-            
-            $rejectionThreshold = 15; // days for auto-rejection
-            $tenDaysAgo = now()->subDays(10);
-            $sevenDaysAgo = now()->subDays(7);
-            $threeDaysAgo = now()->subDays(3);
-            $rejectionCutoff = now()->subDays($rejectionThreshold);
-            
-            $baseQuery = function() {
-                return DvRequest::whereHas('program', function($query) {
-                    $query->where('prcode', 'TEV'); // ONLY TEV PROGRAM
-                });
-            };
-            
-            $statistics = [
-                'critical' => $baseQuery()
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '<', $tenDaysAgo)
-                    ->count(),
-                'high' => $baseQuery()
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '>=', $tenDaysAgo)
-                    ->where('created_at', '<', $sevenDaysAgo)
-                    ->count(),
-                'medium' => $baseQuery()
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '>=', $sevenDaysAgo)
-                    ->where('created_at', '<', $threeDaysAgo)
-                    ->count(),
-                'total_aging' => $baseQuery()
-                    ->whereNotIn('status', $completedStatuses)
-                    ->where('created_at', '<', $threeDaysAgo)
-                    ->count(),
-                'auto_rejection_candidates' => $baseQuery()
-                    ->whereIn('status', ['IMSD_verified', 'Incoming-TEV_received', 'Incoming-TEV_in_process'])
-                    ->where('created_at', '<=', $rejectionCutoff)
-                    ->count(),
-                'rejection_threshold_days' => $rejectionThreshold,
-            ];
+   public function getAgingStatistics()
+{
+    try {
+        Log::info('Fetching TEV aging statistics');
+        
+        // Define the statuses that should be counted as "aging"
+        $agingStatuses = ['IMSD_verified', 'Incoming-TEV_received'];
+        
+        $rejectionThreshold = 15; // days for auto-rejection
+        $tenDaysAgo = now()->subDays(10);
+        $sevenDaysAgo = now()->subDays(7);
+        $threeDaysAgo = now()->subDays(3);
+        $rejectionCutoff = now()->subDays($rejectionThreshold);
+        
+        $statistics = [
+            'critical' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TEV');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '<', $tenDaysAgo)
+                ->count(),
+            'high' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TEV');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '>=', $tenDaysAgo)
+                ->where('created_at', '<', $sevenDaysAgo)
+                ->count(),
+            'medium' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TEV');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '>=', $sevenDaysAgo)
+                ->where('created_at', '<', $threeDaysAgo)
+                ->count(),
+            'total_aging' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TEV');
+                })
+                ->whereIn('status', $agingStatuses)
+                ->where('created_at', '<', $threeDaysAgo)
+                ->count(),
+            'auto_rejection_candidates' => DvRequest::whereHas('program', function($q) {
+                    $q->where('prcode', 'TEV');
+                })
+                ->whereIn('status', ['IMSD_verified', 'Incoming-TEV_received', 'TEV_in_process'])
+                ->where('created_at', '<=', $rejectionCutoff)
+                ->count(),
+            'rejection_threshold_days' => $rejectionThreshold,
+        ];
 
-            Log::info('TEV aging statistics fetched successfully', $statistics);
+        Log::info('TEV aging statistics fetched successfully', $statistics);
 
-            return response()->json([
-                'success' => true,
-                ...$statistics
-            ]);
+        return response()->json([
+            'success' => true,
+            ...$statistics
+        ]);
 
-        } catch (\Exception $e) {
-            Log::error('Error fetching TEV aging statistics: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch aging statistics',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    } catch (\Exception $e) {
+        Log::error('Error fetching TEV aging statistics: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to fetch TEV aging statistics',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * Notify focal persons of aging TEV documents with auto-rejection
@@ -499,17 +495,7 @@ class TEVRequestAgingController extends Controller
         } catch (\Exception $e) {
             Log::error("TEV - Pusher notification failed: " . $e->getMessage());
             
-            // Log Pusher failure - ONLY 'action', NO 'status'
-            DB::table('dv_request_logs')->insert([
-                'dv_request_id' => $request->id,
-                'focalperson_id' => $request->focalPerson->id,
-                'accountingunit_id' => null,
-                'external_actor' => 'System',
-                'action' => 'Pusher_Failed',
-                'remarks' => "TEV: Failed to send Pusher notification: " . $e->getMessage(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+
         }
     }
 

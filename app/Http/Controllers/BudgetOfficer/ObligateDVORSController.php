@@ -22,12 +22,14 @@ use App\Models\ContinuingOrCurrent;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Traits\TriggersDashboardUpdate; // ADD DASHBOARD UPDATE TRAIT
+use App\Traits\BudgetThresholdAnalysis; // ADD BUDGET THRESHOLD ANALYSIS TRAIT
 
 class ObligateDVORSController extends Controller
 {
     protected PusherService $pusher;
     protected IprogSmsService $smsService;
     use TriggersDashboardUpdate; // USE THE TRAIT
+    use BudgetThresholdAnalysis; // USE BUDGET THRESHOLD ANALYSIS TRAIT
 
     public function __construct(PusherService $pusher, IprogSmsService $smsService) // Update constructor
     {
@@ -779,7 +781,42 @@ protected function getOrsUrgencyLevel($daysInStatus)
             'message' => $exists ? 'ADL Code already exists' : 'ADL Code is available'
         ]);
     }
+  public function checkBudgetAvailability(Request $request, $dvRequestId)
+    {
+        try {
+            $dvRequest = DvRequest::with('program')->findOrFail($dvRequestId);
+            $programCode = $dvRequest->program->prcode;
+            $requestAmount = $dvRequest->amount;
 
+            // Check if program can accept new requests
+            $budgetCheck = $this->canAccommodateAmount($programCode, $requestAmount);
+
+            return response()->json([
+                'success' => true,
+                'allowed' => $budgetCheck['allowed'],
+                'program' => $programCode,
+                'request_amount' => number_format($requestAmount, 2),
+                'remaining_budget' => number_format($budgetCheck['remaining_budget'], 2),
+                'reason' => $budgetCheck['reason'],
+                'details' => [
+                    'allocated_budget' => $budgetCheck['allocated_budget'] ?? 0,
+                    'obligated_budget' => $budgetCheck['obligated_budget'] ?? 0,
+                    'budget_exceeded' => $budgetCheck['budget_exceeded'] ?? false
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Budget availability check failed', [
+                'dv_request_id' => $dvRequestId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check budget availability: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 public function store(Request $request, $dvRequestId)
 {
     $request->validate([
@@ -800,6 +837,26 @@ public function store(Request $request, $dvRequestId)
     $totalUacsAmount = array_sum($request->uacs_amounts);
     $dvRequest = DvRequest::findOrFail($dvRequestId)->fresh();
     $grossAmount = $dvRequest->amount;
+
+      $budgetCheck = $this->canAccommodateAmount($programCode, $requestAmount);
+
+        if (!$budgetCheck['allowed']) {
+            \Log::warning('ORS obligation blocked due to budget threshold', [
+                'dv_request_id' => $dvRequestId,
+                'program' => $programCode,
+                'request_amount' => $requestAmount,
+                'remaining_budget' => $budgetCheck['remaining_budget'],
+                'reason' => $budgetCheck['reason']
+            ]);
+
+            return back()->withErrors([
+                'budget' => "❌ OBLIGATION RESTRICTED: " . $budgetCheck['reason'] . 
+                           "<br><br>📊 <strong>Budget Status for {$programCode}:</strong>" .
+                           "<br>• Remaining Budget: ₱" . number_format($budgetCheck['remaining_budget'], 2) .
+                           "<br>• Request Amount: ₱" . number_format($requestAmount, 2) .
+                           "<br><br>⚠️ Please contact the Budget Officer to request budget augmentation."
+            ])->withInput();
+        }
 
     if (abs($totalUacsAmount - $grossAmount) > 0.01) { // Allow 1 cent tolerance for rounding
         return back()->withErrors([

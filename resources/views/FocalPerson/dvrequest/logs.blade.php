@@ -12,12 +12,32 @@
     // Get the last log entry's action
     $lastLogAction = $logs->last()?->action ?? 'Submitted';
     
-    // Calculate pending days
+    // Calculate age of document (days since submission)
     $submittedDate = $dvRequest->created_at;
     $currentDate = now();
-   $pendingDays = floor($submittedDate->diffInDays($currentDate));
-    $isNearThreshold = $pendingDays >= 8 && $pendingDays < 10;
-    $isOverThreshold = $pendingDays >= 10;
+    $documentAgeInDays = floor($submittedDate->diffInDays($currentDate));
+    
+    // Determine color based on document age
+    $ageColor = 'blue'; // Default
+    $ageIcon = 'clock';
+    
+    if ($documentAgeInDays < 3) {
+        $ageColor = 'green';
+        $ageLabel = 'Fresh';
+        $ageIcon = 'check-circle';
+    } elseif ($documentAgeInDays >= 3 && $documentAgeInDays <= 5) {
+        $ageColor = 'yellow';
+        $ageLabel = 'Moderate';
+        $ageIcon = 'exclamation-circle';
+    } elseif ($documentAgeInDays >= 6 && $documentAgeInDays <= 9) {
+        $ageColor = 'orange';
+        $ageLabel = 'Aging';
+        $ageIcon = 'clock';
+    } elseif ($documentAgeInDays >= 10) {
+        $ageColor = 'red';
+        $ageLabel = 'Delayed';
+        $ageIcon = 'exclamation-triangle';
+    }
     
     // Check if request is completed
     $isCompleted = $dvRequest->status === 'Cashier_released';
@@ -107,12 +127,12 @@
 
 <style>
     [x-cloak] { display: none !important; }
-    @keyframes pulse-warning {
+    @keyframes pulse-info {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.7; }
     }
-    .animate-pulse-warning {
-        animation: pulse-warning 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    .animate-pulse-info {
+        animation: pulse-info 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
 </style>
 
@@ -136,48 +156,98 @@
             </div>
         </div>
 
-        <!-- Pending Days Alert (only show if not completed or rejected) -->
-        @if(!$isCompleted && !$isRejected)
-            @if($isOverThreshold)
-            <div class="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg animate-pulse-warning">
+        <!-- Document Age Indicator with color coding -->
+        <div class="mb-6 bg-{{ $ageColor }}-50 border-l-4 border-{{ $ageColor }}-500 p-4 rounded-lg {{ $documentAgeInDays >= 10 ? 'animate-pulse-info' : '' }}">
+            <div class="flex items-center justify-between">
                 <div class="flex items-center">
-                    <svg class="w-6 h-6 text-red-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    @if($ageIcon === 'check-circle')
+                    <svg class="w-6 h-6 text-{{ $ageColor }}-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
-                    <div class="flex-1">
-                        <h3 class="text-red-800 font-semibold">Request Pending: {{ $pendingDays }} Days</h3>
-                        <p class="text-red-700 text-sm mt-1">
-                            This request has exceeded the 10-day threshold. It has been pending for <strong>{{ $pendingDays }} days</strong> since submission on {{ $submittedDate->format('M d, Y') }}.
-                        </p>
-                    </div>
-                    <div class="ml-4 flex-shrink-0">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                            {{ $pendingDays }} days
-                        </span>
-                    </div>
-                </div>
-            </div>
-            @elseif($isNearThreshold)
-            <div class="mb-6 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg">
-                <div class="flex items-center">
-                    <svg class="w-6 h-6 text-yellow-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    @elseif($ageIcon === 'exclamation-circle')
+                    <svg class="w-6 h-6 text-{{ $ageColor }}-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                     </svg>
-                    <div class="flex-1">
-                        <h3 class="text-yellow-800 font-semibold">Request Approaching Threshold</h3>
-                        <p class="text-yellow-700 text-sm mt-1">
-                            This request has been pending for <strong>{{ $pendingDays }} days</strong>. It will exceed the 10-day threshold in {{ 10 - $pendingDays }} day(s).
+                    @elseif($ageIcon === 'exclamation-triangle')
+                    <svg class="w-6 h-6 text-{{ $ageColor }}-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    @else
+                    <svg class="w-6 h-6 text-{{ $ageColor }}-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    @endif
+                    <div>
+                        <h3 class="text-{{ $ageColor }}-800 font-semibold">
+                            Document Age: {{ $ageLabel }}
+                            @if($isCompleted)
+                                <span class="text-sm font-normal text-green-600 ml-2">(Completed)</span>
+                            @elseif($isRejected)
+                                <span class="text-sm font-normal text-red-600 ml-2">(Rejected)</span>
+                            @endif
+                        </h3>
+                        <p class="text-{{ $ageColor }}-700 text-sm mt-1">
+                            This document was submitted on <strong>{{ $submittedDate->format('F j, Y') }}</strong> 
+                            and has been in process for <strong>{{ $documentAgeInDays }} {{ Str::plural('day', $documentAgeInDays) }}</strong>.
+                            
+                            @if($documentAgeInDays < 3)
+                                <span class="ml-2 text-green-600 font-medium">✓ Within normal processing time</span>
+                            @elseif($documentAgeInDays >= 3 && $documentAgeInDays <= 5)
+                                <span class="ml-2 text-yellow-600 font-medium">⚠️ Moderate processing time</span>
+                            @elseif($documentAgeInDays >= 6 && $documentAgeInDays <= 9)
+                                <span class="ml-2 text-orange-600 font-medium">⚠️ Document is aging</span>
+                            @elseif($documentAgeInDays >= 10)
+                                <span class="ml-2 text-red-600 font-medium">❌ Delayed - exceeds 10 days</span>
+                            @endif
                         </p>
                     </div>
-                    <div class="ml-4 flex-shrink-0">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-                            {{ $pendingDays }} days
-                        </span>
+                </div>
+                <div class="ml-4 flex-shrink-0">
+                    <span class="inline-flex items-center px-3 py-2 rounded-full text-sm font-medium bg-{{ $ageColor }}-100 text-{{ $ageColor }}-800 border border-{{ $ageColor }}-200">
+                        @if($ageIcon === 'check-circle')
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        @elseif($ageIcon === 'exclamation-circle')
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        @elseif($ageIcon === 'exclamation-triangle')
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        @else
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        @endif
+                        {{ $documentAgeInDays }} {{ Str::plural('day', $documentAgeInDays) }}
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Age Legend -->
+            <div class="mt-4 pt-3 border-t border-{{ $ageColor }}-200">
+                <div class="grid grid-cols-4 gap-2 text-xs">
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                        <span class="text-gray-600">Fresh (0-2 days)</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
+                        <span class="text-gray-600">Moderate (3-5 days)</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full bg-orange-500 mr-2"></div>
+                        <span class="text-gray-600">Aging (6-9 days)</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+                        <span class="text-gray-600">Delayed (10+ days)</span>
                     </div>
                 </div>
             </div>
-            @endif
-        @endif
+        </div>
 
         <!-- Horizontal Progress Bar (shown on all screens) -->
         <div class="mb-8">
@@ -190,7 +260,10 @@
                     </svg>
                     <div>
                         <h3 class="text-green-800 font-semibold">Request Completed Successfully!</h3>
-                        <p class="text-green-700 text-sm mt-1">Payment has been released by the cashier. This DV request is now completed. (Processed in {{ $pendingDays }} days)</p>
+                        <p class="text-green-700 text-sm mt-1">
+                            Payment has been released by the cashier. 
+                            This DV request was completed in {{ $documentAgeInDays }} {{ Str::plural('day', $documentAgeInDays) }}.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -205,7 +278,10 @@
                     </svg>
                     <div>
                         <h3 class="text-red-800 font-semibold">Request Rejected</h3>
-                        <p class="text-red-700 text-sm mt-1">This DV request has been rejected. Please check the remarks for more details.</p>
+                        <p class="text-red-700 text-sm mt-1">
+                            This DV request has been rejected after {{ $documentAgeInDays }} {{ Str::plural('day', $documentAgeInDays) }}. 
+                            Please check the remarks for more details.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -520,6 +596,17 @@
                         </div>
                         
                         <div class="p-6">
+                            <!-- Document Age Summary with color coding -->
+                                <p class="text-xs text-{{ $ageColor }}-600 mt-1">
+                                  
+                                    @if($isCompleted)
+                                        <span class="ml-2 text-green-600 font-medium">✓ Completed</span>
+                                    @elseif($isRejected)
+                                        <span class="ml-2 text-red-600 font-medium">✗ Rejected</span>
+                                    @endif
+                                </p>
+                                
+                            
                             <template x-for="(step, stepIndex) in steps" :key="'step-' + stepIndex">
                                 <div class="mb-6 relative last:mb-0" 
                                      x-data="{ 

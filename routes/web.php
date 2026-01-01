@@ -675,7 +675,11 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|Budget_Officer'])->prefix
     Route::put('/dvrequests/{id}/update-amount', [ObligateDVORSController::class, 'updateAmount'])
         ->middleware('permission:budget.edit')
         ->name('dvrequests.updateAmount');
-        
+
+      Route::post('dv-requests/{id}/check-budget', [ObligateDVORSController::class, 'checkBudgetAvailability'])
+      ->middleware('permission:budget.view')
+        ->name('dvrequests.checkBudget');
+
     Route::post('/dvrequests/{id}/obligate', [ObligateDVORSController::class, 'store'])
         ->middleware('permission:budget.approve')
         ->name('dvrequests.store');

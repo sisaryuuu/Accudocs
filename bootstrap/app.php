@@ -51,7 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->name('morning-dashboard-all')
-    ->dailyAt('08:00')
+    ->dailyAt('8:00')
     ->weekdays()
     ->timezone('Asia/Manila');
 
@@ -76,7 +76,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->name('focal-notifications-all')
-    ->dailyAt('09:00')
+    ->dailyAt('8:30')
     ->weekdays()
     ->timezone('Asia/Manila');
 
