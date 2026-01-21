@@ -637,8 +637,105 @@ document.addEventListener('DOMContentLoaded', function() {
             
             return b.days_old - a.days_old;
         });
-    }
+    }// Replace the performSearch() function in your TUPAD index.blade.php with this:
 
+// Replace the performSearch() function in your TUPAD index.blade.php with this:
+
+function performSearch() {
+    // Start with all requests
+    filteredRequests = allRequests;
+    
+    // Apply search filter first
+    if (searchTerm) {
+        filteredRequests = filterRequests(filteredRequests, searchTerm);
+    }
+    
+    // Ensure days_old is positive
+    filteredRequests = filteredRequests.map(req => ({
+        ...req,
+        days_old: Math.abs(req.days_old) || 0
+    }));
+    
+    // Apply critical filter if active
+    if (isCriticalOnlyView) {
+        filteredRequests = filteredRequests.filter(req => req.days_old >= 10);
+    }
+    
+    // Apply sorting - DEFAULT: Priority sort with Incoming-TUPAD_received FIRST
+    if (currentSort === 'priority') {
+        // PRIMARY SORT: Incoming-TUPAD_received status ALWAYS comes FIRST
+        filteredRequests.sort((a, b) => {
+            // 1. HIGHEST PRIORITY: Incoming-TUPAD_received status comes FIRST
+            const aIsReceived = a.status === 'Incoming-TUPAD_received';
+            const bIsReceived = b.status === 'Incoming-TUPAD_received';
+            
+            if (aIsReceived && !bIsReceived) return -1; // a comes first
+            if (!aIsReceived && bIsReceived) return 1;  // b comes first
+            
+            // 2. SECONDARY SORT: If both are Incoming-TUPAD_received or both aren't, sort by age
+            // Within same status, oldest documents come first
+            return b.days_old - a.days_old;
+        });
+    } else if (currentSort === 'date') {
+        // Sort by date (created_at) - oldest first
+        filteredRequests.sort((a, b) => {
+            const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
+            const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
+            return aDate - bDate;
+        });
+    }
+    
+    totalRecords = filteredRequests.length;
+    totalPages = Math.ceil(totalRecords / perPage);
+    currentPage = 1;
+    
+    renderTable(getPaginatedData());
+    updatePaginationInfo();
+}
+
+// Replace the sortByPriority() function with this updated version:
+
+function sortByPriority() {
+    filteredRequests.sort((a, b) => {
+        // 1. PRIMARY SORT: Incoming-TUPAD_received status ALWAYS comes FIRST
+        const aIsReceived = a.status === 'Incoming-TUPAD_received';
+        const bIsReceived = b.status === 'Incoming-TUPAD_received';
+        
+        if (aIsReceived && !bIsReceived) return -1; // a comes first
+        if (!aIsReceived && bIsReceived) return 1;  // b comes first
+        
+        // 2. SECONDARY SORT: Within Incoming-TUPAD_received group, sort by urgency and age
+        if (aIsReceived && bIsReceived) {
+            // Both are Incoming-TUPAD_received, sort by age (oldest first)
+            return b.days_old - a.days_old;
+        }
+        
+        // 3. TERTIARY SORT: For non-Incoming-TUPAD_received (IMSD_verified), sort by urgency level
+        // Critical (10+ days) comes first
+        const aCritical = a.days_old >= 10;
+        const bCritical = b.days_old >= 10;
+        
+        if (aCritical && !bCritical) return -1;
+        if (!aCritical && bCritical) return 1;
+        
+        // Then high priority (7-9 days)
+        const aHigh = a.days_old >= 7;
+        const bHigh = b.days_old >= 7;
+        
+        if (aHigh && !bHigh) return -1;
+        if (!aHigh && bHigh) return 1;
+        
+        // Then medium priority (3-6 days)
+        const aMedium = a.days_old >= 3;
+        const bMedium = b.days_old >= 3;
+        
+        if (aMedium && !bMedium) return -1;
+        if (!aMedium && bMedium) return 1;
+        
+        // Finally by days old descending within same priority
+        return b.days_old - a.days_old;
+    });
+}
     function sortByDate() {
         filteredRequests.sort((a, b) => {
             const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);

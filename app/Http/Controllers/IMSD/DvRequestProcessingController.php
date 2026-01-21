@@ -65,101 +65,100 @@ class DvRequestProcessingController extends Controller
         return view('RegionalOffices.IMSD.index', compact('dvRequests'));
     }
 
-    // For JSON polling with search
-    public function fetchAll(Request $request)
-    {
-        $currentUserId = auth()->id();
-        $lockDuration = now()->subMinutes(10);
+  // For JSON polling with search
+public function fetchAll(Request $request)
+{
+    $currentUserId = auth()->id();
+    $lockDuration = now()->subMinutes(10);
 
-        $query = DvRequest::with(['focalPerson', 'program', 'respocenter', 'accountingUnit'])
-            ->whereIn('status', ['submitted', 'IMSD_received'])
-            ->where(function ($q) use ($currentUserId, $lockDuration) {
-                $q->whereNull('locked_by')
-                ->orWhere('locked_by', $currentUserId)
-                ->orWhere('locked_at', '<=', $lockDuration);
-            });
-
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
-                ->orWhereHas('focalPerson', fn($fp) =>
-                    $fp->where('fname', 'like', "%{$search}%")
-                        ->orWhere('lname', 'like', "%{$search}%")
-                )
-                ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%"))
-                ->orWhere('amount', 'like', "%{$search}%")
-                ->orWhere('status', 'like', "%{$search}%");
-            });
-        }
-
-        // Get all DV requests
-        $dvRequests = $query->get();
-        
-        // Calculate age for each request and add priority score with IMSD_received as highest priority
-        $dvRequests = $dvRequests->map(function ($request) {
-            $daysOld = now()->diffInDays($request->created_at);
-            
-            // UPDATED PRIORITY SCORING: IMSD_received gets highest priority
-            $priorityScore = 0;
-            
-            // Age-based priority
-            if ($daysOld >= 10) {
-                $priorityScore += 1000; // Critical priority
-            } elseif ($daysOld >= 7) {
-                $priorityScore += 500; // High priority
-            } elseif ($daysOld >= 3) {
-                $priorityScore += 200; // Medium priority
-            }
-            
-            // Status-based priority - IMSD_received gets HIGHEST priority
-            if ($request->status === 'IMSD_received') {
-                $priorityScore += 1500; // HIGHEST: Higher than critical aging (1000)
-            } elseif ($request->status === 'submitted') {
-                $priorityScore += 50;
-            }
-            
-            // Add small random factor to prevent exact ties
-            $priorityScore += rand(0, 10);
-            
-            $request->days_old = $daysOld;
-            $request->priority_score = $priorityScore;
-            
-            return $request;
-        });
-        
-        // Sort by priority score (descending) so highest priority comes first
-        // This ensures IMSD_received documents appear at the top
-        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
-
-        $result = $dvRequests->map(function ($request) {
-            $urgency = $this->getUrgencyLevel($request->days_old);
-            $base = [
-                'id'             => $request->id,
-                'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT): '—', 
-                'submitted_by'   => trim(($request->payee_fname ?? $request->focalPerson->fname) . ' ' . ($request->payee_lname ?? $request->focalPerson->lname)),
-                'submitted_to'   => auth()->id(),
-                'program'        => $request->program->prcode ?? 'N/A',
-                'respocenter'    => $request->respocenter->rccode ?? 'N/A',
-                'amount'         => number_format($request->amount, 2),
-                'status'         => $request->status,
-                'date'           => $request->created_at->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                'days_old'       => $request->days_old,
-                'urgency'        => $urgency,
-                'priority_score' => $request->priority_score,
-                'created_at_timestamp' => $request->created_at->timestamp,
-            ];
-
-            if (auth()->guard('focal')->check()) {
-                $base['user_sequence'] = $request->user_sequence;
-            }
-
-            return $base;
+    $query = DvRequest::with(['focalPerson', 'program', 'respocenter', 'accountingUnit'])
+        ->whereIn('status', ['submitted', 'IMSD_received'])
+        ->where(function ($q) use ($currentUserId, $lockDuration) {
+            $q->whereNull('locked_by')
+            ->orWhere('locked_by', $currentUserId)
+            ->orWhere('locked_at', '<=', $lockDuration);
         });
 
-        return response()->json($result);
+    if ($request->filled('search')) {
+        $search = $request->input('search');
+        $query->where(function ($q) use ($search) {
+            $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
+            ->orWhereHas('focalPerson', fn($fp) =>
+                $fp->where('fname', 'like', "%{$search}%")
+                    ->orWhere('lname', 'like', "%{$search}%")
+            )
+            ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%"))
+            ->orWhere('amount', 'like', "%{$search}%")
+            ->orWhere('status', 'like', "%{$search}%");
+        });
     }
 
+    // Get all DV requests
+    $dvRequests = $query->get();
+    
+    // Calculate age for each request and add priority score
+    $dvRequests = $dvRequests->map(function ($request) {
+        $daysOld = now()->diffInDays($request->created_at);
+        
+        // PRIORITY SCORING: IMSD_received gets HIGHEST priority
+        $priorityScore = 0;
+        
+        // Status-based priority - IMSD_received gets HIGHEST priority (comes FIRST)
+        if ($request->status === 'IMSD_received') {
+            $priorityScore += 10000; // EXTREMELY HIGH priority - ensures it's always first
+        } elseif ($request->status === 'submitted') {
+            $priorityScore += 50;
+        }
+        
+        // Age-based priority (secondary factor)
+        if ($daysOld >= 10) {
+            $priorityScore += 1000; // Critical priority
+        } elseif ($daysOld >= 7) {
+            $priorityScore += 500; // High priority
+        } elseif ($daysOld >= 3) {
+            $priorityScore += 200; // Medium priority
+        }
+        
+        // Add small random factor to prevent exact ties
+        $priorityScore += rand(0, 10);
+        
+        $request->days_old = $daysOld;
+        $request->priority_score = $priorityScore;
+        
+        return $request;
+    });
+    
+    // Sort by priority score (descending) - HIGHEST priority comes FIRST
+    // This ensures IMSD_received documents (10000+ score) appear at the top
+    $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+
+    $result = $dvRequests->map(function ($request) {
+        $urgency = $this->getUrgencyLevel($request->days_old);
+        $base = [
+            'id'             => $request->id,
+            'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT): '—', 
+            'submitted_by'   => trim(($request->payee_fname ?? $request->focalPerson->fname) . ' ' . ($request->payee_lname ?? $request->focalPerson->lname)),
+            'submitted_to'   => auth()->id(),
+            'program'        => $request->program->prcode ?? 'N/A',
+            'respocenter'    => $request->respocenter->rccode ?? 'N/A',
+            'amount'         => number_format($request->amount, 2),
+            'status'         => $request->status,
+            'date'           => $request->created_at->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'days_old'       => $request->days_old,
+            'urgency'        => $urgency,
+            'priority_score' => $request->priority_score,
+            'created_at_timestamp' => $request->created_at->timestamp,
+        ];
+
+        if (auth()->guard('focal')->check()) {
+            $base['user_sequence'] = $request->user_sequence;
+        }
+
+        return $base;
+    });
+
+    return response()->json($result);
+}
     /**
      * Get urgency level based on whole number of days
      */

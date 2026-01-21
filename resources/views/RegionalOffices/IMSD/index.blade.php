@@ -1173,7 +1173,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-   function performSearch() {
+  // Replace the performSearch() function with this updated version:
+
+function performSearch() {
     // First, filter all requests based on search term
     let tempFiltered = filterRequests(allRequests, searchTerm);
     
@@ -1183,12 +1185,28 @@ document.addEventListener('DOMContentLoaded', function() {
         days_old: Math.abs(req.days_old) || 0
     }));
     
-    // Apply priority sort by default (sort by days_old descending)
+    // Apply sorting - DEFAULT: Priority sort with IMSD_received FIRST
     if (currentSort === 'priority') {
-        tempFiltered.sort((a, b) => b.days_old - a.days_old);
+        // PRIMARY SORT: IMSD_received status ALWAYS comes FIRST
+        tempFiltered.sort((a, b) => {
+            // 1. HIGHEST PRIORITY: IMSD_received status comes FIRST
+            const aIsReceived = a.status === 'IMSD_received';
+            const bIsReceived = b.status === 'IMSD_received';
+            
+            if (aIsReceived && !bIsReceived) return -1; // a comes first
+            if (!aIsReceived && bIsReceived) return 1;  // b comes first
+            
+            // 2. SECONDARY SORT: If both are IMSD_received or both aren't, sort by age
+            // Within same status, oldest documents come first
+            return b.days_old - a.days_old;
+        });
     } else if (currentSort === 'date') {
-        // Sort by date (created_at)
-        tempFiltered.sort((a, b) => new Date(a.created_at_timestamp || a.date) - new Date(b.created_at_timestamp || b.date));
+        // Sort by date (created_at) - oldest first
+        tempFiltered.sort((a, b) => {
+            const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
+            const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
+            return aDate - bDate;
+        });
     }
     
     // Apply critical filter if active
@@ -1217,11 +1235,28 @@ document.addEventListener('DOMContentLoaded', function() {
     renderTable(getPaginatedData());
     updatePaginationInfo();
 }
+
+// Replace the sortByPriority() function with this updated version:
+
 function sortByPriority() {
     // Create a copy to sort
     const sorted = [...filteredRequests];
     
     sorted.sort((a, b) => {
+        // 1. PRIMARY SORT: IMSD_received status ALWAYS comes FIRST
+        const aIsReceived = a.status === 'IMSD_received';
+        const bIsReceived = b.status === 'IMSD_received';
+        
+        if (aIsReceived && !bIsReceived) return -1; // a comes first
+        if (!aIsReceived && bIsReceived) return 1;  // b comes first
+        
+        // 2. SECONDARY SORT: Within IMSD_received group, sort by urgency and age
+        if (aIsReceived && bIsReceived) {
+            // Both are IMSD_received, sort by age (oldest first)
+            return b.days_old - a.days_old;
+        }
+        
+        // 3. TERTIARY SORT: For non-IMSD_received, sort by urgency level
         // Critical (10+ days) comes first
         const aCritical = a.days_old >= 10;
         const bCritical = b.days_old >= 10;
@@ -1243,7 +1278,7 @@ function sortByPriority() {
         if (aMedium && !bMedium) return -1;
         if (!aMedium && bMedium) return 1;
         
-        // Then by days old descending within same priority
+        // Finally by days old descending within same priority
         return b.days_old - a.days_old;
     });
     

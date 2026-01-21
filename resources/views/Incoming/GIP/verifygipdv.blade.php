@@ -423,7 +423,6 @@
                         </button>
                         <a href="{{ route('Incoming.GIP.index') }}"
                             class="inline-flex items-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-colors duration-200" 
-                            onclick="releaseLock(event, ${dvRequestId})">
                             Back
                         </a>
                     </div>
@@ -1066,11 +1065,23 @@ async function handleReceiveAction(dvRequestId, buttonElement) {
         });
 
         const responseText = await response.text();
-        let data = JSON.parse(responseText);
+        let data;
+        
+        try {
+            data = JSON.parse(responseText);
+        } catch (e) {
+            console.error('JSON parse error:', e);
+            throw new Error('Invalid server response');
+        }
 
         if (response.ok && data.success) {
             showMessage(data.message, 'success');
-            updateButtonsToVerifyMode(dvRequestId);
+            
+            // Refresh the page after successful receive
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+            
         } else {
             throw new Error(data.message || 'Error receiving request');
         }

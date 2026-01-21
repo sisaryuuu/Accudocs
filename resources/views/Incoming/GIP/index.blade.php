@@ -579,66 +579,123 @@ document.addEventListener('DOMContentLoaded', function() {
             );
         });
     }
+// Replace the performSearch() function in your GIP index.blade.php with this:
 
-    function performSearch() {
-        // Start with all requests
-        filteredRequests = allRequests;
-        
-        // Apply search filter first
-        if (searchTerm) {
-            filteredRequests = filterRequests(filteredRequests, searchTerm);
-        }
-        
-        // Ensure days_old is positive
-        filteredRequests = filteredRequests.map(req => ({
-            ...req,
-            days_old: Math.abs(req.days_old) || 0
-        }));
-        
-        // Apply critical filter if active
-        if (isCriticalOnlyView) {
-            filteredRequests = filteredRequests.filter(req => req.days_old >= 10);
-        }
-        
-        // Apply sorting
-        if (currentSort === 'priority') {
-            sortByPriority();
-        } else if (currentSort === 'date') {
-            sortByDate();
-        }
-        
-        totalRecords = filteredRequests.length;
-        totalPages = Math.ceil(totalRecords / perPage);
-        currentPage = 1;
-        
-        renderTable(getPaginatedData());
-        updatePaginationInfo();
-    }
-
-    function sortByPriority() {
-        filteredRequests.sort((a, b) => {
-            const aCritical = a.days_old >= 10;
-            const bCritical = b.days_old >= 10;
+function performSearch() {
+    // First, filter all requests based on search term
+    let tempFiltered = filterRequests(allRequests, searchTerm);
+    
+    // Ensure days_old is positive for all requests
+    tempFiltered = tempFiltered.map(req => ({
+        ...req,
+        days_old: Math.abs(req.days_old) || 0
+    }));
+    
+    // Apply sorting - DEFAULT: Priority sort with Incoming-GIP_received FIRST
+    if (currentSort === 'priority') {
+        // PRIMARY SORT: Incoming-GIP_received status ALWAYS comes FIRST
+        tempFiltered.sort((a, b) => {
+            // 1. HIGHEST PRIORITY: Incoming-GIP_received status comes FIRST
+            const aIsReceived = a.status === 'Incoming-GIP_received';
+            const bIsReceived = b.status === 'Incoming-GIP_received';
             
-            if (aCritical && !bCritical) return -1;
-            if (!aCritical && bCritical) return 1;
+            if (aIsReceived && !bIsReceived) return -1; // a comes first
+            if (!aIsReceived && bIsReceived) return 1;  // b comes first
             
-            const aHigh = a.days_old >= 7;
-            const bHigh = b.days_old >= 7;
-            
-            if (aHigh && !bHigh) return -1;
-            if (!aHigh && bHigh) return 1;
-            
-            const aMedium = a.days_old >= 3;
-            const bMedium = b.days_old >= 3;
-            
-            if (aMedium && !bMedium) return -1;
-            if (!aMedium && bMedium) return 1;
-            
+            // 2. SECONDARY SORT: If both are Incoming-GIP_received or both aren't, sort by age
+            // Within same status, oldest documents come first
             return b.days_old - a.days_old;
         });
+    } else if (currentSort === 'date') {
+        // Sort by date (created_at) - oldest first
+        tempFiltered.sort((a, b) => {
+            const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
+            const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
+            return aDate - bDate;
+        });
     }
+    
+    // Apply critical filter if active
+    if (isCriticalOnlyView) {
+        tempFiltered = tempFiltered.filter(req => req.days_old >= 10);
+    }
+    
+    // Store the filtered results
+    filteredRequests = tempFiltered;
+    
+    // Update pagination
+    totalRecords = filteredRequests.length;
+    totalPages = Math.ceil(totalRecords / perPage);
+    
+    // Reset to first page only if search term changed or critical filter toggled
+    if (searchTerm || isCriticalOnlyView) {
+        currentPage = 1;
+    } else {
+        // Keep current page but ensure it's within bounds
+        if (currentPage > totalPages && totalPages > 0) {
+            currentPage = totalPages;
+        }
+    }
+    
+    // Render the current page
+    renderTable(getPaginatedData());
+    updatePaginationInfo();
+}
 
+// Replace the sortByPriority() function with this updated version:
+
+function sortByPriority() {
+    // Create a copy to sort
+    const sorted = [...filteredRequests];
+    
+    sorted.sort((a, b) => {
+        // 1. PRIMARY SORT: Incoming-GIP_received status ALWAYS comes FIRST
+        const aIsReceived = a.status === 'Incoming-GIP_received';
+        const bIsReceived = b.status === 'Incoming-GIP_received';
+        
+        if (aIsReceived && !bIsReceived) return -1; // a comes first
+        if (!aIsReceived && bIsReceived) return 1;  // b comes first
+        
+        // 2. SECONDARY SORT: Within Incoming-GIP_received group, sort by urgency and age
+        if (aIsReceived && bIsReceived) {
+            // Both are Incoming-GIP_received, sort by age (oldest first)
+            return b.days_old - a.days_old;
+        }
+        
+        // 3. TERTIARY SORT: For non-Incoming-GIP_received (IMSD_verified), sort by urgency level
+        // Critical (10+ days) comes first
+        const aCritical = a.days_old >= 10;
+        const bCritical = b.days_old >= 10;
+        
+        if (aCritical && !bCritical) return -1;
+        if (!aCritical && bCritical) return 1;
+        
+        // Then high priority (7-9 days)
+        const aHigh = a.days_old >= 7;
+        const bHigh = b.days_old >= 7;
+        
+        if (aHigh && !bHigh) return -1;
+        if (!aHigh && bHigh) return 1;
+        
+        // Then medium priority (3-6 days)
+        const aMedium = a.days_old >= 3;
+        const bMedium = b.days_old >= 3;
+        
+        if (aMedium && !bMedium) return -1;
+        if (!aMedium && bMedium) return 1;
+        
+        // Finally by days old descending within same priority
+        return b.days_old - a.days_old;
+    });
+    
+    // Update the filteredRequests array
+    filteredRequests = sorted;
+    
+    // Reset to first page when sorting
+    currentPage = 1;
+    renderTable(getPaginatedData());
+    updatePaginationInfo();
+}
     function sortByDate() {
         filteredRequests.sort((a, b) => {
             const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);

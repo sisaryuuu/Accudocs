@@ -616,33 +616,44 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function sortByPriority() {
-        filteredRequests.sort((a, b) => {
-            // RANCA priority: critical (10+ days), high (7-10), medium (3-7)
-            const aCritical = a.days_old >= 10;
-            const bCritical = b.days_old >= 10;
-            
-            if (aCritical && !bCritical) return -1;
-            if (!aCritical && bCritical) return 1;
-            
-            const aHigh = a.days_old >= 7;
-            const bHigh = b.days_old >= 7;
-            
-            if (aHigh && !bHigh) return -1;
-            if (!aHigh && bHigh) return 1;
-            
-            const aMedium = a.days_old >= 3;
-            const bMedium = b.days_old >= 3;
-            
-            if (aMedium && !bMedium) return -1;
-            if (!aMedium && bMedium) return 1;
-            
-            // Higher priority for pending receipt (Outgoing_finalized)
-            if (a.status === 'Outgoing_finalized' && b.status !== 'Outgoing_finalized') return -1;
-            if (a.status !== 'Outgoing_finalized' && b.status === 'Outgoing_finalized') return 1;
-            
-            return b.days_old - a.days_old;
-        });
-    }
+    filteredRequests.sort((a, b) => {
+        // 1. PRIMARY SORT: RANCA_received status comes FIRST
+        const aIsRancaReceived = a.status === 'RANCA_received';
+        const bIsRancaReceived = b.status === 'RANCA_received';
+        
+        if (aIsRancaReceived && !bIsRancaReceived) return -1;
+        if (!aIsRancaReceived && bIsRancaReceived) return 1;
+        
+        // 2. SECONDARY SORT: Outgoing_finalized status comes second
+        const aIsFinalized = a.status === 'Outgoing_finalized';
+        const bIsFinalized = b.status === 'Outgoing_finalized';
+        
+        if (aIsFinalized && !bIsFinalized) return -1;
+        if (!aIsFinalized && bIsFinalized) return 1;
+        
+        // 3. TERTIARY SORT: Age-based priority for the rest
+        const aCritical = a.days_old >= 10;
+        const bCritical = b.days_old >= 10;
+        
+        if (aCritical && !bCritical) return -1;
+        if (!aCritical && bCritical) return 1;
+        
+        const aHigh = a.days_old >= 7;
+        const bHigh = b.days_old >= 7;
+        
+        if (aHigh && !bHigh) return -1;
+        if (!aHigh && bHigh) return 1;
+        
+        const aMedium = a.days_old >= 3;
+        const bMedium = b.days_old >= 3;
+        
+        if (aMedium && !bMedium) return -1;
+        if (!aMedium && bMedium) return 1;
+        
+        // Then by days old descending within same priority
+        return b.days_old - a.days_old;
+    });
+}
 
     function sortByDate() {
         filteredRequests.sort((a, b) => {

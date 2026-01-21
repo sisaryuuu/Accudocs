@@ -33,7 +33,7 @@ class SendDocumentAgingEmailNotifications extends Command
         // ⭐ IMSD Department - Documents waiting for IMSD action
         'imsd' => [
             'name' => 'IMSD',
-            'statuses' => ['submitted', 'IMSD_received', 'IMSD_in_process'],
+            'statuses' => ['submitted', 'IMSD_received'],
             'program_filter' => null,
             'recipient_role' => 'IMSD',
             'route_name' => 'IMSD.dvrequests.withid',

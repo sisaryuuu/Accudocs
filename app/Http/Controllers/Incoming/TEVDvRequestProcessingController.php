@@ -460,134 +460,138 @@ class TEVDvRequestProcessingController extends Controller
         return response()->json($recentDvRequests);
     }
 
-    public function fetchAll(Request $request)
-    {
-        try {
-            $currentUserId = auth()->id();
-            $lockDuration = now()->subMinutes(10);
+   public function fetchAll(Request $request)
+{
+    try {
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
 
-            \Log::info('TEV fetchAll called', [
-                'user_id' => $currentUserId,
-                'search' => $request->input('search'),
-                'url' => $request->fullUrl()
-            ]);
+        \Log::info('TEV fetchAll called', [
+            'user_id' => $currentUserId,
+            'search' => $request->input('search'),
+            'url' => $request->fullUrl()
+        ]);
 
-            $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
-                ->whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
-                ->whereIn('status', ['IMSD_verified', 'Incoming-TEV_received'])
-                ->where(function($q) use ($currentUserId, $lockDuration) {
-                    $q->whereNull('locked_by')
-                        ->orWhere('locked_by', $currentUserId)
-                        ->orWhere('locked_at', '<=', $lockDuration);
-                });
-
-            if ($request->filled('search')) {
-                $search = $request->input('search');
-
-                $query->where(function ($q) use ($search) {
-                    $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
-                      ->orWhereHas('focalPerson', fn($fp) =>
-                          $fp->where('fname', 'like', "%{$search}%")
-                             ->orWhere('lname', 'like', "%{$search}%")
-                             ->orWhereRaw("CONCAT(fname, ' ', lname) LIKE ?", ["%{$search}%"])
-                      )
-                      ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%")
-                                                              ->orWhere('description', 'like', "%{$search}%"))
-                      ->orWhere('amount', 'like', "%{$search}%")
-                      ->orWhere('status', 'like', "%{$search}%")
-                      ->orWhere('particulars', 'like', "%{$search}%")
-                      ->orWhere('accounting_control_number', 'like', "%{$search}%");
-                });
-            }
-
-            // Get the results
-            $dvRequests = $query->get();
-            
-            \Log::info('TEV fetchAll results count', ['count' => $dvRequests->count()]);
-
-            // Calculate age for each request and add priority score
-            $dvRequests = $dvRequests->map(function ($request) {
-                // For TEV, use tev_received_at if available, otherwise created_at
-                $baseDate = $request->tev_received_at ?? $request->created_at;
-                $daysOld = now()->diffInDays($baseDate);
-                
-                // Priority scoring system:
-                $priorityScore = 0;
-                
-                if ($daysOld >= 10) {
-                    $priorityScore += 1000; // Critical priority
-                } elseif ($daysOld >= 7) {
-                    $priorityScore += 500; // High priority
-                } elseif ($daysOld >= 3) {
-                    $priorityScore += 200; // Medium priority
-                }
-                
-                // Higher priority for 'IMSD_verified' vs 'Incoming-TEV_received'
-                if ($request->status === 'IMSD_verified') {
-                    $priorityScore += 50;
-                }
-                
-                // Add small random factor to prevent exact ties
-                $priorityScore += rand(0, 10);
-                
-                $request->days_old = $daysOld;
-                $request->priority_score = $priorityScore;
-                $request->urgency = $this->getUrgencyLevel($daysOld);
-                
-                return $request;
-            });
-            
-            // Sort by priority score (descending) so highest priority comes first
-            $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
-
-            $result = $dvRequests->map(function ($request) {
-                // Show which date was used for age calculation
-                $dateUsed = $request->tev_received_at ? 'tev_received_at' : 'created_at';
-                $baseDate = $request->tev_received_at ?? $request->created_at;
-                
-                return [
-                    'id'           => $request->id,
-                    'accounting_control_number' => $request->accounting_control_number 
-                        ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
-                        : '—',
-                    'submitted_by' => trim(($request->payee_fname ?? $request->focalPerson?->fname ?? '') 
-                        . ' ' . ($request->payee_lname ?? $request->focalPerson?->lname ?? '')),
-                    'program'      => $request->program->prcode ?? 'N/A',
-                    'respocenter'  => $request->respocenter 
-                        ? trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? ''))
-                        : 'N/A',
-                    'particulars'  => $request->particulars ?? 'N/A',
-                    'amount'       => number_format($request->amount ?? 0, 2),
-                    'status'       => $request->status ?? 'N/A',
-                    'date'         => $baseDate->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                    'created_at_timestamp' => $request->created_at->toISOString(),
-                    'tev_received_at' => $request->tev_received_at ? $request->tev_received_at->toISOString() : null,
-                    'tev_last_action_at' => $request->tev_last_action_at ? $request->tev_last_action_at->toISOString() : null,
-                    'last_action_at' => $request->last_action_at ? $request->last_action_at->toISOString() : null,
-                    'days_old'     => $request->days_old ?? 0,
-                    'urgency'      => $request->urgency ?? 'low',
-                    'priority_score' => $request->priority_score ?? 0,
-                    'date_used_for_age' => $dateUsed,
-                ];
+        $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
+            ->whereHas('program', fn($q) => $q->where('prcode', 'TEV'))
+            ->whereIn('status', ['IMSD_verified', 'Incoming-TEV_received'])
+            ->where(function($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by')
+                    ->orWhere('locked_by', $currentUserId)
+                    ->orWhere('locked_at', '<=', $lockDuration);
             });
 
-            \Log::info('TEV fetchAll returning', ['result_count' => $result->count()]);
+        if ($request->filled('search')) {
+            $search = $request->input('search');
 
-            return response()->json($result);
-
-        } catch (\Exception $e) {
-            \Log::error('Error in TEV fetchAll: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
-            ]);
-            
-            return response()->json([
-                'error' => 'Server Error',
-                'message' => $e->getMessage(),
-                'trace' => config('app.debug') ? $e->getTraceAsString() : null
-            ], 500);
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
+                  ->orWhereHas('focalPerson', fn($fp) =>
+                      $fp->where('fname', 'like', "%{$search}%")
+                         ->orWhere('lname', 'like', "%{$search}%")
+                         ->orWhereRaw("CONCAT(fname, ' ', lname) LIKE ?", ["%{$search}%"])
+                  )
+                  ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%")
+                                                          ->orWhere('description', 'like', "%{$search}%"))
+                  ->orWhere('amount', 'like', "%{$search}%")
+                  ->orWhere('status', 'like', "%{$search}%")
+                  ->orWhere('particulars', 'like', "%{$search}%")
+                  ->orWhere('accounting_control_number', 'like', "%{$search}%");
+            });
         }
+
+        // Get the results
+        $dvRequests = $query->get();
+        
+        \Log::info('TEV fetchAll results count', ['count' => $dvRequests->count()]);
+
+        // Calculate age for each request and add priority score
+        $dvRequests = $dvRequests->map(function ($request) {
+            // For TEV, use tev_received_at if available, otherwise created_at
+            $baseDate = $request->tev_received_at ?? $request->created_at;
+            $daysOld = now()->diffInDays($baseDate);
+            
+            // PRIORITY SCORING: Incoming-TEV_received gets HIGHEST priority
+            $priorityScore = 0;
+            
+            // Status-based priority - Incoming-TEV_received gets HIGHEST priority (comes FIRST)
+            if ($request->status === 'Incoming-TEV_received') {
+                $priorityScore += 10000; // EXTREMELY HIGH priority - ensures it's always first
+            } elseif ($request->status === 'IMSD_verified') {
+                $priorityScore += 50;
+            }
+            
+            // Age-based priority (secondary factor)
+            if ($daysOld >= 10) {
+                $priorityScore += 1000; // Critical priority
+            } elseif ($daysOld >= 7) {
+                $priorityScore += 500; // High priority
+            } elseif ($daysOld >= 3) {
+                $priorityScore += 200; // Medium priority
+            }
+            
+            // Add small random factor to prevent exact ties
+            $priorityScore += rand(0, 10);
+            
+            $request->days_old = $daysOld;
+            $request->priority_score = $priorityScore;
+            $request->urgency = $this->getUrgencyLevel($daysOld);
+            
+            return $request;
+        });
+        
+        // Sort by priority score (descending) - HIGHEST priority comes FIRST
+        // This ensures Incoming-TEV_received documents (10000+ score) appear at the top
+        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+
+        $result = $dvRequests->map(function ($request) {
+            // Show which date was used for age calculation
+            $dateUsed = $request->tev_received_at ? 'tev_received_at' : 'created_at';
+            $baseDate = $request->tev_received_at ?? $request->created_at;
+            
+            return [
+                'id'           => $request->id,
+                'accounting_control_number' => $request->accounting_control_number 
+                    ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                    : '—',
+                'submitted_by' => trim(($request->payee_fname ?? $request->focalPerson?->fname ?? '') 
+                    . ' ' . ($request->payee_lname ?? $request->focalPerson?->lname ?? '')),
+                'program'      => $request->program->prcode ?? 'N/A',
+                'respocenter'  => $request->respocenter 
+                    ? trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? ''))
+                    : 'N/A',
+                'particulars'  => $request->particulars ?? 'N/A',
+                'amount'       => number_format($request->amount ?? 0, 2),
+                'status'       => $request->status ?? 'N/A',
+                'date'         => $baseDate->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'created_at_timestamp' => $request->created_at->toISOString(),
+                'tev_received_at' => $request->tev_received_at ? $request->tev_received_at->toISOString() : null,
+                'tev_last_action_at' => $request->tev_last_action_at ? $request->tev_last_action_at->toISOString() : null,
+                'last_action_at' => $request->last_action_at ? $request->last_action_at->toISOString() : null,
+                'days_old'     => $request->days_old ?? 0,
+                'urgency'      => $request->urgency ?? 'low',
+                'priority_score' => $request->priority_score ?? 0,
+                'date_used_for_age' => $dateUsed,
+            ];
+        });
+
+        \Log::info('TEV fetchAll returning', ['result_count' => $result->count()]);
+
+        return response()->json($result);
+
+    } catch (\Exception $e) {
+        \Log::error('Error in TEV fetchAll: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+            'request' => $request->all()
+        ]);
+        
+        return response()->json([
+            'error' => 'Server Error',
+            'message' => $e->getMessage(),
+            'trace' => config('app.debug') ? $e->getTraceAsString() : null
+        ], 500);
     }
+}
     
     /**
      * Get urgency level based on whole number of days

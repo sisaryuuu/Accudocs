@@ -358,20 +358,23 @@ class GIPDvRequestProcessingController extends Controller
             $baseDate = $request->gip_received_at ?? $request->created_at;
             $daysOld = now()->diffInDays($baseDate);
             
-            // Priority scoring system:
+            // PRIORITY SCORING: Incoming-GIP_received gets HIGHEST priority
             $priorityScore = 0;
             
+            // Status-based priority - Incoming-GIP_received gets HIGHEST priority (comes FIRST)
+            if ($request->status === 'Incoming-GIP_received') {
+                $priorityScore += 10000; // EXTREMELY HIGH priority - ensures it's always first
+            } elseif ($request->status === 'IMSD_verified') {
+                $priorityScore += 50;
+            }
+            
+            // Age-based priority (secondary factor)
             if ($daysOld >= 10) {
                 $priorityScore += 1000; // Critical priority
             } elseif ($daysOld >= 7) {
                 $priorityScore += 500; // High priority
             } elseif ($daysOld >= 3) {
                 $priorityScore += 200; // Medium priority
-            }
-            
-            // Higher priority for 'IMSD_verified' vs 'Incoming-GIP_received'
-            if ($request->status === 'IMSD_verified') {
-                $priorityScore += 50;
             }
             
             // Add small random factor to prevent exact ties
@@ -384,7 +387,8 @@ class GIPDvRequestProcessingController extends Controller
             return $request;
         });
         
-        // Sort by priority score (descending) so highest priority comes first
+        // Sort by priority score (descending) - HIGHEST priority comes FIRST
+        // This ensures Incoming-GIP_received documents (10000+ score) appear at the top
         $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
         $result = $dvRequests->map(function ($request) {

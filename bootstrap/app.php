@@ -38,172 +38,155 @@ return Application::configure(basePath: dirname(__DIR__))
     $middleware->trustProxies(at: '*');
     
     })->withSchedule(function (Illuminate\Console\Scheduling\Schedule $schedule) {
-
     Log::info('Scheduler loaded: ' . now());
 
     // ==========================================================
-    // 0️⃣ MORNING AGING EMAIL NOTIFICATIONS - ALL DEPARTMENTS
+    // DAILY AGING EMAIL NOTIFICATIONS AT 6 AM
+    // All notifications run on weekdays at 6:00-7:00 AM
+    // ==========================================================
+
+    // ==========================================================
+    // 1️⃣ TRANSITION CHECKS (Documents awaiting transfer between departments)
+    // All at 6:00-6:25 AM with 5-minute intervals
     // ==========================================================
     
-    // GIP Department - 2 days threshold (default)
+    // IMSD → GIP transition (2 days threshold)
     $schedule->command('aging:send-emails gip')
-        ->name('aging-emails-gip')
+        ->name('aging-emails-gip-transition')
+        ->dailyAt('6:00')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ GIP transition: IMSD → GIP');
+        });
+
+    // IMSD → TUPAD transition (2 days threshold)
+    $schedule->command('aging:send-emails tupad')
+        ->name('aging-emails-tupad-transition')
+        ->dailyAt('6:05')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ TUPAD transition: IMSD → TUPAD');
+        });
+
+    // IMSD → TEV transition (2 days threshold)
+    $schedule->command('aging:send-emails tev')
+        ->name('aging-emails-tev-transition')
+        ->dailyAt('6:10')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ TEV transition: IMSD → TEV');
+        });
+
+    // Program Departments → Budget transition (3 days threshold)
+    $schedule->command('aging:send-emails budget')
+        ->name('aging-emails-budget-transition')
+        ->dailyAt('6:15')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ Budget transition: Programs → Budget');
+        });
+
+    // Budget → Outgoing transition (2 days threshold)
+    $schedule->command('aging:send-emails outgoing')
+        ->name('aging-emails-outgoing-transition')
+        ->dailyAt('6:20')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ Outgoing transition: Budget → Outgoing');
+        });
+
+    // Outgoing → Accountant transition (3 days threshold)
+    $schedule->command('aging:send-emails accountant')
+        ->name('aging-emails-accountant-transition')
+        ->dailyAt('6:25')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ Accountant transition: Outgoing → Accountant');
+        });
+
+    // ==========================================================
+    // 2️⃣ DEPARTMENT ACTION CHECKS (Documents waiting within departments)
+    // All at 6:30-7:00 AM with 5-minute intervals
+    // ==========================================================
+    
+    // IMSD department action (3 days threshold)
+    $schedule->command('aging:send-emails imsd')
+        ->name('aging-emails-imsd-action')
+        ->dailyAt('6:30')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ IMSD department action');
+        });
+
+    // GIP received action (3 days threshold)
+    $schedule->command('aging:send-emails gip_received')
+        ->name('aging-emails-gip-received-action')
+        ->dailyAt('6:35')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ GIP received action');
+        });
+
+    // TUPAD received action (3 days threshold)
+    $schedule->command('aging:send-emails tupad_received')
+        ->name('aging-emails-tupad-received-action')
+        ->dailyAt('6:40')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ TUPAD received action');
+        });
+
+    // TEV received action (3 days threshold)
+    $schedule->command('aging:send-emails tev_received')
+        ->name('aging-emails-tev-received-action')
+        ->dailyAt('6:45')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ TEV received action');
+        });
+
+    // Budget received action (3 days threshold)
+    $schedule->command('aging:send-emails budget_received')
+        ->name('aging-emails-budget-received-action')
+        ->dailyAt('6:50')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ Budget received action');
+        });
+
+    // Outgoing received action (3 days threshold)
+    $schedule->command('aging:send-emails outgoing_received')
+        ->name('aging-emails-outgoing-received-action')
+        ->dailyAt('6:55')
+        ->weekdays()
+        ->timezone('Asia/Manila')
+        ->after(function () {
+            Log::info('✅ Outgoing received action');
+        });
+
+    // Accountant received action (3 days threshold)
+    $schedule->command('aging:send-emails accountant_received')
+        ->name('aging-emails-accountant-received-action')
         ->dailyAt('7:00')
         ->weekdays()
         ->timezone('Asia/Manila')
         ->after(function () {
-            Log::info('✅ GIP aging emails sent');
-        });
-
-    // TUPAD Department - 2 days threshold (default)
-    $schedule->command('aging:send-emails tupad')
-        ->name('aging-emails-tupad')
-        ->dailyAt('7:05')
-        ->weekdays()
-        ->timezone('Asia/Manila')
-        ->after(function () {
-            Log::info('✅ TUPAD aging emails sent');
-        });
-
-    // TEV Department - 2 days threshold (default)
-    $schedule->command('aging:send-emails tev')
-        ->name('aging-emails-tev')
-        ->dailyAt('7:10')
-        ->weekdays()
-        ->timezone('Asia/Manila')
-        ->after(function () {
-            Log::info('✅ TEV aging emails sent');
-        });
-
-    // Budget Officer Department - 3 days threshold (default)
-    $schedule->command('aging:send-emails budget')
-        ->name('aging-emails-budget')
-        ->dailyAt('7:15')
-        ->weekdays()
-        ->timezone('Asia/Manila')
-        ->after(function () {
-            Log::info('✅ Budget Officer aging emails sent');
-        });
-
-    // Accountant Department - 3 days threshold (default)
-    $schedule->command('aging:send-emails accountant')
-        ->name('aging-emails-accountant')
-        ->dailyAt('7:20')
-        ->weekdays()
-        ->timezone('Asia/Manila')
-        ->after(function () {
-            Log::info('✅ Accountant aging emails sent');
-        });
-
-    // Outgoing Department - 2 days threshold (default)
-    $schedule->command('aging:send-emails outgoing')
-        ->name('aging-emails-outgoing')
-        ->dailyAt('7:25')
-        ->weekdays()
-        ->timezone('Asia/Manila')
-        ->after(function () {
-            Log::info('✅ Outgoing aging emails sent');
+            Log::info('✅ Accountant received action');
         });
 
     // ==========================================================
-    // 1️⃣ MORNING DASHBOARD UPDATES (3+ days) - ALL ROLES
-    // ==========================================================
-    
-    $schedule->call(function () {
-        Log::info('🔄 Morning dashboard update started (all roles, 3+ days)');
-        
-        $result = app(\App\Services\AgingDocumentService::class)
-            ->updateAllDashboards(daysThreshold: 3);
-        
-        // Log summary
-        $summary = $result['summary'];
-        Log::info("✅ Morning dashboard update completed", [
-            'successful' => $summary['successful'],
-            'failed' => $summary['failed'],
-            'total_alerted' => $summary['total_alerted'],
-            'duration_ms' => $summary['total_duration_ms'],
-        ]);
-    })
-    ->name('morning-dashboard-all')
-    ->dailyAt('8:00')
-    ->weekdays()
-    ->timezone('Asia/Manila');
-
-    // ==========================================================
-    // 2️⃣ FOCAL PERSON NOTIFICATIONS (10+ days) - ALL ROLES
-    // ==========================================================
-    
-    $schedule->call(function () {
-        Log::info('📧 Focal notifications started (all roles, 10+ days)');
-        
-        $result = app(\App\Services\AgingDocumentService::class)
-            ->notifyAllFocalPersons(daysThreshold: 10);
-        
-        // Log summary
-        $summary = $result['summary'];
-        Log::info("✅ Focal notifications completed", [
-            'successful' => $summary['successful'],
-            'failed' => $summary['failed'],
-            'total_notified' => $summary['total_notified'],
-            'total_skipped' => $summary['total_skipped'],
-            'duration_ms' => $summary['total_duration_ms'],
-        ]);
-    })
-    ->name('focal-notifications-all')
-    ->dailyAt('8:30')
-    ->weekdays()
-    ->timezone('Asia/Manila');
-
-    // ==========================================================
-    // 3️⃣ AFTERNOON CRITICAL ALERTS (10+ days) - ALL ROLES
-    // ==========================================================
-    
-    $schedule->call(function () {
-        Log::info('🚨 Critical alerts started (all roles, 10+ days)');
-        
-        $result = app(\App\Services\AgingDocumentService::class)
-            ->sendAllCriticalAlerts(daysThreshold: 10);
-        
-        // Log summary
-        $summary = $result['summary'];
-        Log::info("✅ Critical alerts completed", [
-            'successful' => $summary['successful'],
-            'failed' => $summary['failed'],
-            'total_alerted' => $summary['total_alerted'],
-            'duration_ms' => $summary['total_duration_ms'],
-        ]);
-    })
-    ->name('critical-alerts-all')
-    ->dailyAt('15:00')
-    ->weekdays()
-    ->timezone('Asia/Manila');
-
-    // ==========================================================
-    // 4️⃣ EVENING AGING EMAIL REMINDERS - ALL DEPARTMENTS
-    // ==========================================================
-    
-    // Budget Officer - Evening reminder (use 2 days for urgency)
-    $schedule->command('aging:send-emails budget --threshold=2')
-        ->name('evening-aging-emails-budget')
-        ->dailyAt('16:00')
-        ->weekdays()
-        ->timezone('Asia/Manila')
-        ->after(function () {
-            Log::info('✅ Evening Budget Officer aging emails sent');
-        });
-
-    // Accountant - Evening reminder (use 2 days for urgency)
-    $schedule->command('aging:send-emails accountant --threshold=2')
-        ->name('evening-aging-emails-accountant')
-        ->dailyAt('16:05')
-        ->weekdays()
-        ->timezone('Asia/Manila')
-        ->after(function () {
-            Log::info('✅ Evening Accountant aging emails sent');
-        });
-
-    // ==========================================================
-    // 5️⃣ SESSION CLEANUP
+    // SYSTEM MAINTENANCE
     // ==========================================================
     
     $schedule->call(function () {
@@ -214,38 +197,6 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->name('cleanup-expired-sessions')
     ->hourly();
-
-    // ==========================================================
-    // 6️⃣ WEEKLY SUMMARY REPORT (Monday morning)
-    // ==========================================================
-    
-    $schedule->call(function () {
-        Log::info('📊 Weekly aging summary started');
-        
-        // Run all departments with stricter threshold for weekly report
-        $commands = [
-            'aging:send-emails gip --threshold=5',
-            'aging:send-emails tupad --threshold=5',
-            'aging:send-emails tev --threshold=5',
-            'aging:send-emails budget --threshold=5',
-            'aging:send-emails accountant --threshold=5',
-            'aging:send-emails outgoing --threshold=5',
-        ];
-        
-        foreach ($commands as $command) {
-            try {
-                \Artisan::call($command);
-                Log::info("✅ Weekly command executed: {$command}");
-            } catch (\Exception $e) {
-                Log::error("❌ Weekly command failed: {$command}", ['error' => $e->getMessage()]);
-            }
-        }
-        
-        Log::info('📊 Weekly aging summary completed');
-    })
-    ->name('weekly-aging-summary')
-    ->weeklyOn(1, '7:30')  // Every Monday at 7:30 AM
-    ->timezone('Asia/Manila');
 
 })
 ->create();
