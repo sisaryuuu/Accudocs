@@ -1576,7 +1576,7 @@ function renderTable(dvRequests) {
     updateSelectAllCheckbox();
 
 }
-   function renderAgingAlerts(documents, count) {
+function renderAgingAlerts(documents, count) {
     if (!agingAlertsContainer || !documents || documents.length === 0) {
         if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
         return;
@@ -1588,42 +1588,132 @@ function renderTable(dvRequests) {
         return;
     }
 
-    // ✅ FIX: Use absolute value for days_old throughout
+    // Ensure positive days_old values
     agingDocs.forEach(doc => {
-        const days = Math.abs(Math.floor(Number(doc.days_old))) || 0; // Ensure positive whole number
-        doc.days_old = days; // Update the document with positive value
+        const days = Math.abs(Math.floor(Number(doc.days_old))) || 0;
+        doc.days_old = days;
         doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
     });
 
-    const highestUrgency = agingDocs.reduce((highest, doc) => {
-        const order = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
-        return order[doc.urgency] > order[highest] ? doc.urgency : highest;
-    }, 'low');
+    // Calculate statistics
+    const stats = {
+        critical: agingDocs.filter(doc => doc.days_old >= 10).length,
+        high: agingDocs.filter(doc => doc.days_old >= 7 && doc.days_old < 10).length,
+        medium: agingDocs.filter(doc => doc.days_old >= 3 && doc.days_old < 7).length,
+        total: agingDocs.length
+    };
+
+    // Find oldest document
+    const oldestDoc = agingDocs.reduce((oldest, doc) => 
+        doc.days_old > oldest.days_old ? doc : oldest
+    , agingDocs[0]);
+
+    // Calculate average age
+    const avgAge = Math.round(agingDocs.reduce((sum, doc) => sum + doc.days_old, 0) / agingDocs.length);
+
+    // Determine overall urgency level
+    const highestUrgency = stats.critical > 0 ? 'critical' : 
+                          stats.high > 0 ? 'high' : 
+                          stats.medium > 0 ? 'medium' : 'low';
 
     const config = {
-        'critical': { icon: '🚨', bg: 'bg-red-50 border-red-500', text: 'text-red-900' },
-        'high': { icon: '⚠️', bg: 'bg-orange-50 border-orange-500', text: 'text-orange-900' },
-        'medium': { icon: '⏰', bg: 'bg-yellow-50 border-yellow-500', text: 'text-yellow-900' },
-        'low': { icon: 'ℹ️', bg: 'bg-blue-50 border-blue-500', text: 'text-blue-900' }
+        'critical': { 
+            icon: '🚨', 
+            bg: 'bg-red-50 border-red-500', 
+            text: 'text-red-900',
+            accentBg: 'bg-red-100',
+            accentText: 'text-red-700'
+        },
+        'high': { 
+            icon: '⚠️', 
+            bg: 'bg-orange-50 border-orange-500', 
+            text: 'text-orange-900',
+            accentBg: 'bg-orange-100',
+            accentText: 'text-orange-700'
+        },
+        'medium': { 
+            icon: '⏰', 
+            bg: 'bg-yellow-50 border-yellow-500', 
+            text: 'text-yellow-900',
+            accentBg: 'bg-yellow-100',
+            accentText: 'text-yellow-700'
+        },
+        'low': { 
+            icon: 'ℹ️', 
+            bg: 'bg-blue-50 border-blue-500', 
+            text: 'text-blue-900',
+            accentBg: 'bg-blue-100',
+            accentText: 'text-blue-700'
+        }
     };
 
     const c = config[highestUrgency];
 
-    // Check if we have a saved state for the alert container
+    // Check if minimized
     const alertState = JSON.parse(localStorage.getItem('agingAlertMinimized') || 'false');
     const isMinimized = alertState === true;
 
+    // Build summary text
+    let summaryText = `You currently have <strong>${stats.total} aging document${stats.total > 1 ? 's' : ''}</strong> that require attention. `;
+    
+    // Add breakdown by priority
+    const priorities = [];
+    if (stats.critical > 0) priorities.push(`<strong class="text-red-700">${stats.critical} critical</strong> (10+ days old)`);
+    if (stats.high > 0) priorities.push(`<strong class="text-orange-700">${stats.high} high priority</strong> (7-10 days)`);
+    if (stats.medium > 0) priorities.push(`<strong class="text-yellow-700">${stats.medium} medium priority</strong> (3-7 days)`);
+    
+    if (priorities.length > 0) {
+        if (priorities.length === 1) {
+            summaryText += `This includes ${priorities[0]}. `;
+        } else if (priorities.length === 2) {
+            summaryText += `This includes ${priorities[0]} and ${priorities[1]}. `;
+        } else {
+            summaryText += `This includes ${priorities[0]}, ${priorities[1]}, and ${priorities[2]}. `;
+        }
+    }
+    
+    summaryText += `The average age of pending documents is <strong>${avgAge} days</strong>, with the oldest being <strong class="${c.accentText}">${oldestDoc.control_number}</strong> at <strong>${oldestDoc.days_old} days old</strong> from ${oldestDoc.submitted_by}.`;
+    
+    // Add urgent action message if critical
+    let urgentMessage = '';
+    if (stats.critical > 0) {
+        urgentMessage = `
+            <div class="mt-3 pt-3 border-t ${c.accentText === 'text-red-700' ? 'border-red-200' : 'border-gray-200'}">
+                <div class="flex items-start gap-2">
+                    <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <p class="text-sm text-red-800 leading-relaxed">
+                        <strong>Urgent:</strong> ${stats.critical} document${stats.critical > 1 ? 's have' : ' has'} exceeded the 10-day processing threshold and require${stats.critical === 1 ? 's' : ''} immediate attention.
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+
     agingAlertsContainer.innerHTML = `
-        <div class="rounded-lg border-l-4 p-5 ${c.bg} shadow-md aging-alert-container">
-            <div class="flex items-start justify-between mb-3">
-                <div class="flex items-center gap-3">
-                    <span class="text-2xl">${c.icon}</span>
-                    <div>
-                        <h3 class="font-bold text-lg ${c.text}">Documents Need Processing</h3>
-                        <p class="text-sm opacity-80 ${c.text}">${agingDocs.length} document(s) older than 3 days</p>
+        <div class="rounded-lg border-l-4 p-4 ${c.bg} shadow-md aging-alert-container">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex items-start gap-3 flex-1">
+                    <span class="text-2xl flex-shrink-0">${c.icon}</span>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-base ${c.text} mb-2">Aging Documents Summary</h3>
+                        <div class="alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
+                            <p class="text-sm ${c.text} leading-relaxed opacity-90">
+                                ${summaryText}
+                            </p>
+                            ${urgentMessage}
+                        </div>
+                        <div class="alert-collapsed transition-all duration-300 ease-in-out ${isMinimized ? 'block' : 'hidden'}">
+                            <p class="text-sm ${c.text} opacity-90">
+                                <strong>${stats.total}</strong> aging document${stats.total > 1 ? 's' : ''} 
+                                ${stats.critical > 0 ? `(<strong class="text-red-700">${stats.critical} critical</strong>)` : ''} • 
+                                Oldest: <strong>${oldestDoc.days_old} days</strong>
+                            </p>
+                        </div>
                     </div>
                 </div>
-                <button class="minimize-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50" 
+                <button class="minimize-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50 flex-shrink-0" 
                         title="${isMinimized ? 'Expand' : 'Minimize'}">
                     <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                          style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
@@ -1631,21 +1721,6 @@ function renderTable(dvRequests) {
                               d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
                     </svg>
                 </button>
-            </div>
-            <div class="alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
-                <div class="space-y-2 mt-4">
-                    ${agingDocs.slice(0, 5).map(doc => {
-                        const daysOld = Math.abs(Math.floor(doc.days_old)) || 0; // ✅ Ensure positive whole number
-                        return `
-                            <div class="p-3 bg-white/50 border rounded-lg">
-                                <p class="font-semibold text-sm ${c.text}">${doc.control_number}</p>
-                                <p class="text-xs opacity-70 ${c.text}">${doc.submitted_by} • ${doc.program}</p>
-                                <p class="text-xs font-medium mt-1 text-red-700">${daysOld} days old</p>
-                            </div>
-                        `;
-                    }).join('')}
-                    ${agingDocs.length > 5 ? `<p class="text-xs mt-3 opacity-75 ${c.text}">+${agingDocs.length - 5} more documents</p>` : ''}
-                </div>
             </div>
         </div>
     `;
@@ -1659,7 +1734,6 @@ function renderTable(dvRequests) {
             const isCurrentlyMinimized = alertContent.classList.contains('hidden');
             
             if (isCurrentlyMinimized) {
-                // Expand
                 alertContent.classList.remove('hidden');
                 alertContent.classList.add('block');
                 this.innerHTML = `
@@ -1670,7 +1744,6 @@ function renderTable(dvRequests) {
                 this.setAttribute('title', 'Minimize');
                 localStorage.setItem('agingAlertMinimized', 'false');
             } else {
-                // Minimize
                 alertContent.classList.remove('block');
                 alertContent.classList.add('hidden');
                 this.innerHTML = `
@@ -1684,7 +1757,6 @@ function renderTable(dvRequests) {
         });
     }
 }
-
     // ============ EVENT LISTENERS ============
     perPageSelect.addEventListener('change', function() {
         perPage = parseInt(this.value);

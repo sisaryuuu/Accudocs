@@ -169,7 +169,7 @@ private function validateDateRange($dateFrom, $dateTo)
         ->count();
     
     $pendingRequests = DB::table('dv_requests')
-        ->where('status', 'submitted')
+        ->whereNot('status', 'submitted')
         ->whereBetween('created_at', [$dateFrom, $dateTo])
         ->count();
 

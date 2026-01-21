@@ -269,7 +269,7 @@ class DummyDvRequestsSeeder extends Seeder
                 $referenceNumber = 'DVORS-' . strtoupper(Str::random(8));
             } while (DvRequest::where('reference_number', $referenceNumber)->exists());
             
-            // Generate dates within December 2025 (1st to 31st)
+            // Generate dates within December 2026 (1st to 31st)
             $day = rand(1, 31);
             $createdAt = Carbon::create(2025, 12, $day, rand(8, 17), rand(0, 59));
             $updatedAt = $createdAt->copy()->addHours(rand(1, 5));

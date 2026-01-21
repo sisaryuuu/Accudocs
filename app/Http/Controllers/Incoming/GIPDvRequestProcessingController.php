@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Incoming;
 
 use App\Http\Controllers\Controller;
-use App\Traits\TriggersDashboardUpdate; // ✅ Add trait
+use App\Traits\TriggersDashboardUpdate;
+use App\Traits\HandlesDepartmentTransitions; // ⭐ ADD THIS
 use Illuminate\Http\Request;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
@@ -22,7 +23,7 @@ use Illuminate\Support\Facades\Mail;
 
 class GIPDvRequestProcessingController extends Controller
 {
-    use TriggersDashboardUpdate; // ✅ Add trait for dashboard updates
+    use TriggersDashboardUpdate, HandlesDepartmentTransitions; // ⭐ ADD THE TRAIT
     
     protected PusherService $pusher;
     protected IprogSmsService $smsService;
@@ -31,14 +32,13 @@ class GIPDvRequestProcessingController extends Controller
     {
         $this->pusher = $pusher;
         $this->smsService = $smsService;
-
     }
 
     public function index(Request $request)
     {
         $currentUserId = auth()->id();
         $lockDuration = now()->subMinutes(10);
-
+     
         $query = DvRequest::whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
             ->whereIn('status', ['IMSD_verified', 'Incoming-GIP_received'])
             ->where(function ($q) use ($currentUserId, $lockDuration) {
@@ -67,7 +67,7 @@ class GIPDvRequestProcessingController extends Controller
         return view('Incoming.GIP.index', compact('dvRequests'));
     }
     
-          public function show($id)
+    public function show($id)
     {
         $dvRequest = DvRequest::with(['accountingUnit','program','gipAttachments','logs', 'focalPerson', 'respocenter', 'modeOfPayments', 'paymentDetails'])
                             ->whereHas('program', fn($q) => 
@@ -90,7 +90,7 @@ class GIPDvRequestProcessingController extends Controller
             ]);
         }
     
-        // ✅ FIX: Initialize GIP attachments if they don't exist
+        // Initialize GIP attachments if they don't exist
         $checklistItems = [
             'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
             'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
@@ -103,7 +103,7 @@ class GIPDvRequestProcessingController extends Controller
                 $dvRequest->gipAttachments()->firstOrCreate(
                     ['name' => $item], 
                    [
-                'is_present' => null,  // ✅ Changed from false to null (N/A by default)
+                'is_present' => null,
                 'remarks' => null
                    ]
                 );
@@ -128,13 +128,16 @@ class GIPDvRequestProcessingController extends Controller
         return view('Incoming.GIP.verifygipdv', compact('dvRequest', 'recentDvRequests', 'lastStep'));
     }
 
-      public function receive(Request $request, $id)
+    // ⭐ REMOVE the old updateDepartmentTimestamp method - it's now in the trait
+
+    public function receive(Request $request, $id)
     {
         try {
             $dvRequest = DvRequest::findOrFail($id);
             $statusBefore = $dvRequest->status;
             $receivedAt = now();
             $currentUserId = auth()->id();
+            $newStatus = 'Incoming-GIP_received';
     
             // Validation checks
             if ($dvRequest->status === 'Incoming-GIP_received') {
@@ -157,17 +160,22 @@ class GIPDvRequestProcessingController extends Controller
                 return redirect()->back()->with('error', 'This request cannot be received. Current status: ' . $statusBefore);
             }
     
-            DB::transaction(function () use ($dvRequest, $statusBefore, $receivedAt, $currentUserId) {
+            DB::transaction(function () use ($dvRequest, $statusBefore, $receivedAt, $currentUserId, $newStatus) {
+                // ⭐ UPDATED: Use trait method for timestamp updates
+                $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+                
                 $dvRequest->update([
-                    'status'           => 'Incoming-GIP_received',
+                    'status'           => $newStatus,
                     'accountingunit_id'=> $currentUserId,
                     'received_by'      => $currentUserId,
                     'received_at'      => $receivedAt,
                     'locked_by'        => $currentUserId,
                     'locked_at'        => $receivedAt,
+                    // ⭐ NOTE: gip_received_at, last_action_at, last_action_type, last_acted_by
+                    // are set by updateDepartmentTimestamp method
                 ]);
                 
-                // ✅ FIX: Initialize GIP attachments when receiving the document
+                // Initialize GIP attachments when receiving the document
                 $checklistItems = [
                     'EUP Payroll', 'Payroll', 'Pacsval', 'DTR with Accomplishment Report',
                     'DTR Log', 'Profile', 'Brgy. Certification', 'TOR/My Grade', 'Insurance',
@@ -178,7 +186,7 @@ class GIPDvRequestProcessingController extends Controller
                     $dvRequest->gipAttachments()->firstOrCreate(
                         ['name' => $item], 
                                 [
-            'is_present' => null,  // ✅ Changed from false to null (N/A by default)
+            'is_present' => null,
             'remarks' => null
         ]
 
@@ -193,7 +201,9 @@ class GIPDvRequestProcessingController extends Controller
                         'status_before' => $statusBefore,
                         'status_after' =>'Incoming-GIP_received',
                         'received_by' => $currentUserId,
-                        'received_at' => $receivedAt->toISOString()
+                        'received_at' => $receivedAt->toISOString(),
+                        'gip_received_at' => $dvRequest->gip_received_at ? $dvRequest->gip_received_at->toISOString() : null,
+                        'last_action_at' => $dvRequest->last_action_at ? $dvRequest->last_action_at->toISOString() : null,
                     ]
                 );
                 
@@ -201,7 +211,7 @@ class GIPDvRequestProcessingController extends Controller
                     $dvRequest->id,
                     'Incoming',
                     'Incoming-GIP_received',
-                    'Request officially received by Incoming-GIP'
+                    'Request officially received by Incoming-GIP. Timestamp: ' . ($dvRequest->gip_received_at ? $dvRequest->gip_received_at->format('M d, Y H:i:s') : 'Not set')
                 );
                 
                 // Notify focal person
@@ -222,19 +232,20 @@ class GIPDvRequestProcessingController extends Controller
                     'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);
                 
-                                    $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-received', [
-                        'dv_request_id' => $dvRequest->id,
+                $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-received', [
+                    'dv_request_id' => $dvRequest->id,
+                    'accounting_control_number' => $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) : 'Pending-CN',
+                    'status'        => 'Incoming-GIP_received',
+                    'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                    'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'action_performer_id' => $currentUserId,
+                    'received_by' => auth()->user()->name ?? 'Incoming-GIP User',
+                    // Include the nested structure for compatibility
+                    'dv_request' => [
                         'accounting_control_number' => $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) : 'Pending-CN',
-                        'status'        => 'Incoming-GIP_received',
-                        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-                        'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                        'action_performer_id' => $currentUserId,
-                        'received_by' => auth()->user()->name ?? 'Incoming-GIP User', // Add this
-                        // Include the nested structure for compatibility
-                        'dv_request' => [
-                            'accounting_control_number' => $dvRequest->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) : 'Pending-CN',
-                        ]
-                    ]);
+                    ],
+                    'gip_received_at' => $dvRequest->gip_received_at ? $dvRequest->gip_received_at->toISOString() : null,
+                ]);
             });
     
             // ✅ TRIGGER DASHBOARD UPDATE
@@ -247,7 +258,9 @@ class GIPDvRequestProcessingController extends Controller
                     'data' => [
                         'id' => $dvRequest->id,
                         'status' => 'Incoming-GIP_received',
-                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'gip_received_at' => $dvRequest->gip_received_at ? $dvRequest->gip_received_at->format('M d, Y h:i A') : null,
+                        'last_action_at' => $dvRequest->last_action_at ? $dvRequest->last_action_at->format('M d, Y H:i:s') : null,
                     ]
                 ]);
             }
@@ -294,100 +307,134 @@ class GIPDvRequestProcessingController extends Controller
         return response()->json($recentDvRequests);
     }
 
-   public function fetchAll(Request $request)
+ public function fetchAll(Request $request)
 {
-    $currentUserId = auth()->id();
-    $lockDuration = now()->subMinutes(10);
+    try {
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
 
-    $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
-        ->whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
-        ->whereIn('status', ['IMSD_verified','Incoming-GIP_received'])
-        ->where(function($q) use ($currentUserId, $lockDuration) {
-            $q->whereNull('locked_by')
-            ->orWhere('locked_by', $currentUserId)
-            ->orWhere('locked_at','<=',$lockDuration);
+        \Log::info('GIP fetchAll called', [
+            'user_id' => $currentUserId,
+            'search' => $request->input('search'),
+            'url' => $request->fullUrl()
+        ]);
+
+        $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
+            ->whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
+            ->whereIn('status', ['IMSD_verified','Incoming-GIP_received'])
+            ->where(function($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by')
+                ->orWhere('locked_by', $currentUserId)
+                ->orWhere('locked_at','<=',$lockDuration);
+            });
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
+                  ->orWhereHas('focalPerson', fn($fp) =>
+                      $fp->where('fname', 'like', "%{$search}%")
+                         ->orWhere('lname', 'like', "%{$search}%")
+                         ->orWhereRaw("CONCAT(fname, ' ', lname) LIKE ?", ["%{$search}%"])
+                  )
+                  ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%")
+                                                          ->orWhere('description', 'like', "%{$search}%"))
+                  ->orWhere('amount', 'like', "%{$search}%")
+                  ->orWhere('status', 'like', "%{$search}%")
+                  ->orWhere('particulars', 'like', "%{$search}%")
+                  ->orWhere('accounting_control_number', 'like', "%{$search}%");
+            });
+        }
+
+        // Get the results
+        $dvRequests = $query->get();
+        
+        \Log::info('GIP fetchAll results count', ['count' => $dvRequests->count()]);
+
+        // Calculate age for each request and add priority score
+        $dvRequests = $dvRequests->map(function ($request) {
+            // For GIP, use gip_received_at if available, otherwise created_at
+            $baseDate = $request->gip_received_at ?? $request->created_at;
+            $daysOld = now()->diffInDays($baseDate);
+            
+            // Priority scoring system:
+            $priorityScore = 0;
+            
+            if ($daysOld >= 10) {
+                $priorityScore += 1000; // Critical priority
+            } elseif ($daysOld >= 7) {
+                $priorityScore += 500; // High priority
+            } elseif ($daysOld >= 3) {
+                $priorityScore += 200; // Medium priority
+            }
+            
+            // Higher priority for 'IMSD_verified' vs 'Incoming-GIP_received'
+            if ($request->status === 'IMSD_verified') {
+                $priorityScore += 50;
+            }
+            
+            // Add small random factor to prevent exact ties
+            $priorityScore += rand(0, 10);
+            
+            $request->days_old = $daysOld;
+            $request->priority_score = $priorityScore;
+            $request->urgency = $this->getUrgencyLevel($daysOld);
+            
+            return $request;
+        });
+        
+        // Sort by priority score (descending) so highest priority comes first
+        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+
+        $result = $dvRequests->map(function ($request) {
+            // Show which date was used for age calculation
+            $dateUsed = $request->gip_received_at ? 'gip_received_at' : 'created_at';
+            $baseDate = $request->gip_received_at ?? $request->created_at;
+            
+            return [
+                'id'           => $request->id,
+                'accounting_control_number' => $request->accounting_control_number 
+                    ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                    : '—',
+                'submitted_by' => trim(($request->payee_fname ?? $request->focalPerson?->fname ?? '') 
+                    . ' ' . ($request->payee_lname ?? $request->focalPerson?->lname ?? '')),
+                'program'      => $request->program->prcode ?? 'N/A',
+                'respocenter'  => $request->respocenter 
+                    ? trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? ''))
+                    : 'N/A',
+                'particulars'  => $request->particulars ?? 'N/A',
+                'amount'       => number_format($request->amount ?? 0, 2),
+                'status'       => $request->status ?? 'N/A',
+                'date'         => $baseDate->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'created_at_timestamp' => $request->created_at->toISOString(),
+                'gip_received_at' => $request->gip_received_at ? $request->gip_received_at->toISOString() : null,
+                'gip_last_action_at' => $request->gip_last_action_at ? $request->gip_last_action_at->toISOString() : null,
+                'last_action_at' => $request->last_action_at ? $request->last_action_at->toISOString() : null,
+                'days_old'     => $request->days_old ?? 0,
+                'urgency'      => $request->urgency ?? 'low',
+                'priority_score' => $request->priority_score ?? 0,
+                'date_used_for_age' => $dateUsed,
+            ];
         });
 
-    if ($request->filled('search')) {
-        $search = $request->input('search');
+        \Log::info('GIP fetchAll returning', ['result_count' => $result->count()]);
 
-        $query->where(function ($q) use ($search) {
-            $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
-              ->orWhereHas('focalPerson', fn($fp) =>
-                  $fp->where('fname', 'like', "%{$search}%")
-                     ->orWhere('lname', 'like', "%{$search}%")
-              )
-              ->orWhereHas('respocenter', fn($r) => $r->where('rccode', 'like', "%{$search}%"))
-              ->orWhere('amount', 'like', "%{$search}%")
-              ->orWhere('status', 'like', "%{$search}%")
-              ->orWhere('particulars', 'like', "%{$search}%");
-        });
+        return response()->json($result);
+
+    } catch (\Exception $e) {
+        \Log::error('Error in GIP fetchAll: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+            'request' => $request->all()
+        ]);
+        
+        return response()->json([
+            'error' => 'Server Error',
+            'message' => $e->getMessage(),
+            'trace' => config('app.debug') ? $e->getTraceAsString() : null
+        ], 500);
     }
-
-    // Get all DV requests with created_at for age calculation
-    $dvRequests = $query->select('dv_requests.*')
-                        ->addSelect(DB::raw('TIMESTAMPDIFF(DAY, dv_requests.created_at, NOW()) as days_old'))
-                        ->get();
-    
-    // Calculate age for each request and add priority score
-    $dvRequests = $dvRequests->map(function ($request) {
-        $daysOld = now()->diffInDays($request->created_at);
-        
-        // Priority scoring system:
-        // - Critical (10+ days): 1000 points
-        // - High (7-9 days): 500 points
-        // - Medium (3-6 days): 200 points
-        // - Recent (0-2 days): 0 points
-        
-        $priorityScore = 0;
-        
-        if ($daysOld >= 10) {
-            $priorityScore += 1000; // Critical priority
-        } elseif ($daysOld >= 7) {
-            $priorityScore += 500; // High priority
-        } elseif ($daysOld >= 3) {
-            $priorityScore += 200; // Medium priority
-        }
-        
-        // Higher priority for 'IMSD_verified' vs 'Incoming-GIP_received'
-        if ($request->status === 'IMSD_verified') {
-            $priorityScore += 50;
-        }
-        
-        // Add small random factor to prevent exact ties
-        $priorityScore += rand(0, 10);
-        
-        $request->days_old = $daysOld;
-        $request->priority_score = $priorityScore;
-        $request->urgency = $this->getUrgencyLevel($daysOld);
-        
-        return $request;
-    });
-    
-    // Sort by priority score (descending) so highest priority comes first
-    $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
-
-    $result = $dvRequests->map(function ($request) {
-        return [
-            'id'           => $request->id,
-            'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT): '—',
-            'submitted_by' => trim(($request->payee_fname ?? $request->focalPerson->fname) . ' ' . ($request->payee_lname ?? $request->focalPerson->lname)),
-            'program'      => $request->program->prcode ?? 'N/A',
-            'respocenter'  => trim(($request->respocenter->rccode ?? '') . ' - ' . ($request->respocenter->description ?? '')) ?? 'N/A',
-            'particulars'  => $request->particulars,
-            'amount'       => number_format($request->amount, 2),
-            'status'       => $request->status,
-            'date'         => $request->created_at->timezone('Asia/Manila')->format('M d, Y h:i A'),
-            'created_at_timestamp' => $request->created_at->toISOString(),
-            'days_old'     => $request->days_old,
-            'urgency'      => $request->urgency,
-            'priority_score' => $request->priority_score,
-        ];
-    });
-
-    return response()->json($result);
 }
-
 /**
  * Get urgency level based on whole number of days
  */
@@ -403,6 +450,7 @@ protected function getUrgencyLevel($daysOld)
         return 'low';
     }
 }
+
     public function fetch($id)
     {
         $currentUserId = auth()->id();
@@ -417,6 +465,10 @@ protected function getUrgencyLevel($daysOld)
             })
             ->findOrFail($id);
         
+        // ⭐ ADDED: Calculate age based on gip_received_at
+        $baseDate = $dvRequest->gip_received_at ?? $dvRequest->created_at;
+        $daysOld = now()->diffInDays($baseDate);
+        
         return response()->json([
             'id'           => $dvRequest->id,
             'dv_number'    => $dvRequest->dv_number ?? '—',
@@ -427,7 +479,10 @@ protected function getUrgencyLevel($daysOld)
             'program'      => $dvRequest->program->prcode ?? 'N/A',
             'accountingunit' => trim(($dvRequest->accountingUnit->fname ?? '') . ' ' . ($dvRequest->accountingUnit->lname ?? '')),  
             'respocenter'  => $dvRequest->respocenter->rccode ?? 'N/A',
-            'date'         => $dvRequest->created_at->format('M d, Y h:i A'),
+            'date'         => $baseDate->format('M d, Y h:i A'),
+            'gip_received_at' => $dvRequest->gip_received_at ? $dvRequest->gip_received_at->format('M d, Y h:i A') : null,
+            'days_old'     => $daysOld,
+            'urgency'      => $this->getUrgencyLevel($daysOld),
         ]);
     }
 
@@ -461,13 +516,18 @@ protected function getUrgencyLevel($daysOld)
         }
 
         DB::transaction(function () use ($dvRequest, $statusBefore, $verifiedAt, $request, $newStatus, $currentUserId) {
+            // ⭐ UPDATED: Use trait method for timestamp updates
+            $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+            
             $dvRequest->update([
                 'status'    => $newStatus,
                 'locked_by' => null,
                 'locked_at' => null,
+                // ⭐ NOTE: last_action_at, last_action_type, last_acted_by
+                // are set by updateDepartmentTimestamp method
             ]);
 
-            // ✅ UPDATED: Read from hidden inputs instead of checkbox array
+            // Read from hidden inputs instead of checkbox array
             $attachmentStatuses = $request->input('gip_attachment_status_value', []);
             $attachmentRemarks = $request->input('gip_attachment_remarks', []);
             $attachmentData = [];
@@ -516,6 +576,9 @@ protected function getUrgencyLevel($daysOld)
                     'attachments_checked'  => $attachmentData,
                     'verified_by'          => $currentUserId,
                     'verified_at'          => $verifiedAt->toISOString(),
+                    'gip_received_at'      => $dvRequest->gip_received_at ? $dvRequest->gip_received_at->toISOString() : null,
+                    'gip_last_action_at'   => $dvRequest->gip_last_action_at ? $dvRequest->gip_last_action_at->toISOString() : null,
+                    'last_action_at'       => $dvRequest->last_action_at ? $dvRequest->last_action_at->toISOString() : null,
                 ]
             );
 
@@ -523,7 +586,8 @@ protected function getUrgencyLevel($daysOld)
                 $dvRequest->id,
                 'Incoming',
                 $newStatus,
-                $request->remarks ?? 'Request verified by Incoming-GIP'
+                ($request->remarks ?? 'Request verified by Incoming-GIP') . 
+                ' | Last action: ' . ($dvRequest->last_action_at ? $dvRequest->last_action_at->format('M d, Y H:i:s') : 'Not set')
             );
 
             Notification::create([
@@ -546,6 +610,8 @@ protected function getUrgencyLevel($daysOld)
                     'status'        => $newStatus,
                     'timestamp'     => $timestamp,
                     'action_performer_id' => $currentUserId,
+                    'gip_received_at' => $dvRequest->gip_received_at ? $dvRequest->gip_received_at->format('M d, Y H:i:s') : null,
+                    'gip_last_action_at' => $dvRequest->gip_last_action_at ? $dvRequest->gip_last_action_at->format('M d, Y H:i:s') : null,
                 ]);
 
                 $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
@@ -561,6 +627,7 @@ protected function getUrgencyLevel($daysOld)
                     'timestamp'     => $timestamp,
                     'action_performer_id' => $currentUserId,
                     'verified_by_user_id' => $currentUserId,
+                    'gip_last_action_at' => $dvRequest->gip_last_action_at ? $dvRequest->gip_last_action_at->toISOString() : null,
                 ]);
             }
         });
@@ -588,7 +655,7 @@ protected function getUrgencyLevel($daysOld)
 }
 
 /**
- * ✅ UPDATED: Handle attachment updates with three-state status and remarks
+ * Handle attachment updates with three-state status and remarks
  */
 public function updateAttachments(Request $request, $id)
 {
@@ -710,16 +777,20 @@ public function updateAttachments(Request $request, $id)
             $rejectedAt = now();
             $focalId = $dvRequest->focalperson_id;
             $remarks = trim($request->remarks);
+            $newStatus = 'Incoming-GIP_rejected';
     
             // ✅ PHASE 1: FAST DATABASE OPERATIONS ONLY
-            DB::transaction(function () use ($dvRequest, $statusBefore, $rejectedAt, $remarks, $focalId, $currentUserId) {
+            DB::transaction(function () use ($dvRequest, $statusBefore, $rejectedAt, $remarks, $focalId, $currentUserId, $newStatus) {
                 
                 // ✅ ARCHIVE TO HISTORY TABLE FIRST
-                $this->archiveToHistory($dvRequest, 'Incoming-GIP_rejected', $remarks);
+                $this->archiveToHistory($dvRequest, $newStatus, $remarks);
+                
+                // ⭐ UPDATED: Update department timestamp for rejection
+                $this->updateDepartmentTimestamp($dvRequest, $newStatus);
                 
                 // Update main request
                 $dvRequest->update([
-                    'status'    => 'Incoming-GIP_rejected',
+                    'status'    => $newStatus,
                     'locked_by' => null,
                     'locked_at' => null,
                 ]);
@@ -731,11 +802,12 @@ public function updateAttachments(Request $request, $id)
                     $remarks,
                     [
                         'status_before'   => $statusBefore,
-                        'status_after'    => 'Incoming-GIP_rejected',
+                        'status_after'    => $newStatus,
                         'action'          => 'rejected',
                         'rejected_by'     => $currentUserId,
                         'rejected_at'     => $rejectedAt->toISOString(),
                         'rejection_reason'=> $remarks,
+                        'last_action_at'  => $dvRequest->last_action_at ? $dvRequest->last_action_at->toISOString() : null,
                     ]
                 );
     
@@ -743,15 +815,16 @@ public function updateAttachments(Request $request, $id)
                 $this->logAction(
                     $dvRequest->id,
                     'Incoming-GIP',
-                    'Incoming-GIP_rejected',
-                    "Rejected by Incoming-GIP: {$remarks}"
+                    $newStatus,
+                    "Rejected by Incoming-GIP: {$remarks}. Last action: " . 
+                    ($dvRequest->last_action_at ? $dvRequest->last_action_at->format('M d, Y H:i:s') : 'Not set')
                 );
     
                 // Create notification
                 Notification::create([
                     'focalperson_id' => $focalId,
                     'dv_request_id'  => $dvRequest->id,
-                    'status'         => 'Incoming-GIP_rejected',
+                    'status'         => $newStatus,
                     'action'         => 'Rejected',
                     'remarks'        => $remarks,
                 ]);
@@ -762,7 +835,7 @@ public function updateAttachments(Request $request, $id)
     
                     $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                         'dv_request_id' => $dvRequest->id,
-                        'status'        => 'Incoming-GIP_rejected',
+                        'status'        => $newStatus,
                         'isRejected'    => true,
                         'remarks'       => $remarks,
                         'timestamp'     => $timestamp,
@@ -770,10 +843,11 @@ public function updateAttachments(Request $request, $id)
     
                     $this->pusher->trigger('dv-requests-incoming-gip', 'dv-request-rejected', [
                         'dv_request_id' => $dvRequest->id,
-                        'status'        => 'Incoming-GIP_rejected',
+                        'status'        => $newStatus,
                         'timestamp'     => $timestamp,
                         'action_performer_id' => $currentUserId,
                         'rejected_by_user_id' => $currentUserId,
+                        'last_action_at' => $dvRequest->last_action_at ? $dvRequest->last_action_at->toISOString() : null,
                     ]);
                 }
             });
@@ -798,10 +872,11 @@ public function updateAttachments(Request $request, $id)
                 'message' => $responseMessage,
                 'data' => [
                     'id'         => $dvRequest->id,
-                    'status'     => 'Incoming-GIP_rejected',
+                    'status'     => $newStatus,
                     'remarks'    => $remarks,
                     'sms_sent'   => $smsSent,
-                    'email_sent' => $emailSent
+                    'email_sent' => $emailSent,
+                    'last_action_at' => $dvRequest->last_action_at ? $dvRequest->last_action_at->format('M d, Y H:i:s') : null,
                 ]
             ], 200);
     
@@ -1162,8 +1237,4 @@ public function updateAttachments(Request $request, $id)
             ]);
         }
     }
-
-    /**
-     * Helper method to get sidebar counts
-     */
 }

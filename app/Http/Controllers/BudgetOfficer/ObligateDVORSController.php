@@ -7,9 +7,10 @@ use Illuminate\Http\Request;
 use App\Models\OrsRequest;
 use App\Models\DvRequest;
 use App\Models\DvRequestLog;
+use App\Models\DvRequestHistory;
 use App\Models\Program;
 use App\Services\PusherService;
-use App\Services\SendPulseServices; // ADD SENDPULSE SERVICE
+use App\Services\SendPulseServices;
 use App\Services\IprogSmsService;
 use App\Models\Notification;
 use App\Models\BudgetObligationHistory;
@@ -19,22 +20,24 @@ use App\Models\AdlCode;
 use App\Models\AllotmentClass;
 use App\Models\MfoPap;
 use App\Models\ContinuingOrCurrent;
+use App\Traits\TriggersDashboardUpdate;
+use App\Traits\BudgetThresholdAnalysis;
+use App\Traits\HandlesDepartmentTransitions;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use App\Traits\TriggersDashboardUpdate; // ADD DASHBOARD UPDATE TRAIT
-use App\Traits\BudgetThresholdAnalysis; // ADD BUDGET THRESHOLD ANALYSIS TRAIT
+use Illuminate\Support\Facades\Log;
 
 class ObligateDVORSController extends Controller
 {
+    use TriggersDashboardUpdate, BudgetThresholdAnalysis, HandlesDepartmentTransitions;
+
     protected PusherService $pusher;
     protected IprogSmsService $smsService;
-    use TriggersDashboardUpdate; // USE THE TRAIT
-    use BudgetThresholdAnalysis; // USE BUDGET THRESHOLD ANALYSIS TRAIT
 
-    public function __construct(PusherService $pusher, IprogSmsService $smsService) // Update constructor
+    public function __construct(PusherService $pusher, IprogSmsService $smsService)
     {
         $this->pusher = $pusher;
-        $this->smsService = $smsService; // Initialize SMS service
+        $this->smsService = $smsService;
     }
 
     public function index()
@@ -42,225 +45,184 @@ class ObligateDVORSController extends Controller
         return view('BudgetOfficer.index');
     }
 
-  public function fetchDvRequests(Request $request)
-{
-    try {
-        $currentUserId = auth()->id();
-        $lockDuration  = now()->subMinutes(10);
-        
-        // Get search parameter from request
-        $searchTerm = $request->input('search', '');
+    public function fetchDvRequests(Request $request)
+    {
+        try {
+            $currentUserId = auth()->id();
+            $lockDuration  = now()->subMinutes(10);
+            
+            $searchTerm = $request->input('search', '');
 
-        $query = DvRequest::with([
-                'program', 
-                'focalPerson', 
-                'respocenter',
-                'orsRequest',
-                'orsRequest.uacsCodes',
-                'orsRequest.AdlCode',
-                'orsRequest.Mfopap'
-            ])
-            ->whereIn('status', [
-                'Incoming-TUPAD_verified', 
-                'Incoming-GIP_verified',
-                'Incoming-TEV_verified',
-                'ORS_received',
-                'ORS_in_process',
-                'ORS_onhold',
-                'ORS_for_revision',
-            ])
-            ->where(function ($q) use ($currentUserId, $lockDuration) {
-                $q->whereNull('locked_by')
-                  ->orWhere('locked_by', $currentUserId)
-                  ->orWhere('locked_at', '<=', $lockDuration);
-            })
-            ->when($searchTerm, function ($query) use ($searchTerm) {
-                $query->where(function ($q) use ($searchTerm) {
-                    // Search in control number
-                    $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
-                      // Search in focal person name
-                      ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
-                          $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
-                                     ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
-                      })
-                      // Search in program code
-                      ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
-                          $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
-                      })
-                      // Search in respocenter
-                      ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
-                          $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
-                                     ->orWhere('description', 'LIKE', "%{$searchTerm}%");
-                      })
-                      // Search in particulars
-                      ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
-                      // Search in amount (handle numeric search)
-                      ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
-                      // Search in status
-                      ->orWhere('status', 'LIKE', "%{$searchTerm}%")
-                      // Search in ORS number
-                      ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
-                          $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
-                      });
+            $query = DvRequest::with([
+                    'program', 
+                    'focalPerson', 
+                    'respocenter',
+                    'orsRequest',
+                    'orsRequest.uacsCodes',
+                    'orsRequest.AdlCode',
+                    'orsRequest.Mfopap'
+                ])
+                ->whereIn('status', [
+                    'Incoming-TUPAD_verified', 
+                    'Incoming-GIP_verified',
+                    'Incoming-TEV_verified',
+                    'ORS_received',
+                    'ORS_in_process',
+                    'ORS_onhold',
+                    'ORS_for_revision',
+                ])
+                ->where(function ($q) use ($currentUserId, $lockDuration) {
+                    $q->whereNull('locked_by')
+                      ->orWhere('locked_by', $currentUserId)
+                      ->orWhere('locked_at', '<=', $lockDuration);
+                })
+                ->when($searchTerm, function ($query) use ($searchTerm) {
+                    $query->where(function ($q) use ($searchTerm) {
+                        $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
+                          ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
+                              $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
+                                         ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
+                          })
+                          ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
+                              $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
+                          })
+                          ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
+                              $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
+                                         ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+                          })
+                          ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
+                          ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
+                          ->orWhere('status', 'LIKE', "%{$searchTerm}%")
+                          ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
+                              $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
+                          });
+                    });
                 });
+
+            $dvRequests = $query->get();
+            
+            $dvRequests = $dvRequests->map(function ($request) {
+                $baseDate = $request->budget_received_at ?? $request->created_at;
+                $daysOld = now()->diffInDays($baseDate);
+                
+                $priorityScore = 0;
+                
+                if ($daysOld >= 10) {
+                    $priorityScore += 1000;
+                } elseif ($daysOld >= 7) {
+                    $priorityScore += 500;
+                } elseif ($daysOld >= 3) {
+                    $priorityScore += 200;
+                }
+                
+                if (in_array($request->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'Incoming-TEV_verified'])) {
+                    $priorityScore += 50;
+                } elseif ($request->status === 'ORS_received') {
+                    $priorityScore += 25;
+                }
+                
+                if ($request->status === 'ORS_onhold' || $request->status === 'ORS_for_revision') {
+                    $priorityScore += 100;
+                }
+                
+                $priorityScore += rand(0, 10);
+                
+                $request->days_old = $daysOld;
+                $request->priority_score = $priorityScore;
+                $request->urgency = $this->getUrgencyLevel($daysOld);
+                
+                return $request;
+            });
+            
+            $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+
+            $result = $dvRequests->map(function ($req) {
+                $dateUsed = $req->budget_received_at ? 'budget_received_at' : 'created_at';
+                $baseDate = $req->budget_received_at ?? $req->created_at;
+                
+                $orsRequest = $req->orsRequest;
+
+                $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
+                $uacsDisplay = $uacsCodes->isNotEmpty() 
+                    ? $uacsCodes->map(function($uacs) {
+                        return $uacs->uacscode . ' - ' . $uacs->description;
+                    })->implode('<br>') : '—';
+
+                $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
+                    $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
+                    '—';
+                
+                $mfopapCode = '—';
+                $mfocode = '—';
+                $mfodescription = '—';
+                
+                if ($orsRequest && $orsRequest->Mfopap) {
+                    $mfocode = $orsRequest->Mfopap->mfocode ?? '—';
+                    $mfodescription = $orsRequest->Mfopap->mfodescription ?? '—';
+                    $mfopapCode = $mfocode . ' - ' . $mfodescription;
+                }
+
+                $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
+
+                return [
+                    'id'           => $req->id,
+                    'control_no'   => $req->accounting_control_number ? 
+                        'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
+                        '—',
+                    'ors_number'   => $orsNumber,
+                    'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                    'program'      => $req->program->prcode ?? 'N/A',
+                    'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                    'particulars'  => $req->particulars,
+                    'amount'       => number_format($req->amount, 2),
+                    'status'       => $req->status,
+                    'date'         => $baseDate->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'created_at_timestamp' => $req->created_at->toISOString(),
+                    'budget_received_at' => $req->budget_received_at ? $req->budget_received_at->toISOString() : null,
+                    'budget_last_action_at' => $req->budget_last_action_at ? $req->budget_last_action_at->toISOString() : null,
+                    'last_action_at' => $req->last_action_at ? $req->last_action_at->toISOString() : null,
+                    'days_old'     => $req->days_old ?? 0,
+                    'urgency'      => $req->urgency ?? 'low',
+                    'priority_score' => $req->priority_score ?? 0,
+                    'date_used_for_age' => $dateUsed,
+                    'uacs_codes'   => $uacsDisplay,
+                    'adl_code'     => $adlCode,
+                    'mfopap_code'  => $mfopapCode,
+                    'mfocode'      => $mfocode,
+                    'mfodescription' => $mfodescription,
+                ];
             });
 
-        // Get all DV requests with created_at for age calculation
-        $dvRequests = $query->select('dv_requests.*')
-                            ->addSelect(DB::raw('TIMESTAMPDIFF(DAY, dv_requests.created_at, NOW()) as days_old'))
-                            ->get();
-        
-        // Calculate days_in_status for each request based on status timestamp
-        $dvRequests = $dvRequests->map(function ($request) {
-            // Determine the relevant timestamp based on status
-            $statusTimestamp = null;
-            
-            if (in_array($request->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'Incoming-TEV_verified'])) {
-                // These are pending receipt - use created_at or incoming_verified_at
-                $statusTimestamp = $request->incoming_verified_at ?? $request->created_at;
-            } elseif (in_array($request->status, ['ORS_received', 'ORS_in_process', 'ORS_onhold', 'ORS_for_revision'])) {
-                // These are ORS statuses - use ors_received_at or status_updated_at
-                $statusTimestamp = $request->ors_received_at ?? $request->status_updated_at ?? $request->created_at;
-            } else {
-                $statusTimestamp = $request->status_updated_at ?? $request->created_at;
-            }
-            
-            // Calculate days in current status
-            $daysInStatus = now()->diffInDays($statusTimestamp);
-            
-            // Priority scoring system for ORS (Budget Officer):
-            // - Critical (7+ days): 1000 points
-            // - High (5-6 days): 500 points
-            // - Medium (3-4 days): 200 points
-            // - Recent (0-2 days): 0 points
-            
-            $priorityScore = 0;
-            
-            if ($daysInStatus >= 7) {
-                $priorityScore += 1000; // Critical priority
-            } elseif ($daysInStatus >= 5) {
-                $priorityScore += 500; // High priority
-            } elseif ($daysInStatus >= 3) {
-                $priorityScore += 200; // Medium priority
-            }
-            
-            // Higher priority for pending receipt statuses
-            if (in_array($request->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'Incoming-TEV_verified'])) {
-                $priorityScore += 100; // Extra priority for unreceived documents
-            }
-            
-            // Higher priority for on-hold or for-revision statuses
-            if ($request->status === 'ORS_onhold' || $request->status === 'ORS_for_revision') {
-                $priorityScore += 150; // Extra priority for documents needing attention
-            }
-            
-            // Lower priority for already received but not processed
-            if ($request->status === 'ORS_received') {
-                $priorityScore += 75; // Medium priority for received documents
-            }
-            
-            // Add small random factor to prevent exact ties
-            $priorityScore += rand(0, 10);
-            
-            $request->days_in_status = $daysInStatus;
-            $request->days_old = now()->diffInDays($request->created_at); // Total age
-            $request->priority_score = $priorityScore;
-            $request->urgency = $this->getOrsUrgencyLevel($daysInStatus);
-            
-            return $request;
-        });
-        
-        // Sort by priority score (descending) so highest priority comes first
-        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+            return response()->json($result);
 
-        return response()->json($dvRequests->map(function ($req) {
-            // ✅ SAFE: Check if orsRequest exists first
-            $orsRequest = $req->orsRequest;
-
-            // ✅ SAFE: Handle UACS codes
-            $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
-            $uacsDisplay = $uacsCodes->isNotEmpty() 
-                ? $uacsCodes->map(function($uacs) {
-                    return $uacs->uacscode . ' - ' . $uacs->description;
-                })->implode('<br>') 
-                : '—';
-
-            // ✅ SAFE: Get ADL code
-            $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
-                $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
-                '—';
+        } catch (\Exception $e) {
+            \Log::error('Error in Budget Officer fetchDvRequests: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
             
-            // ✅ SAFE: Get MFO/PAP code (FIXED)
-            $mfopapCode = '—';
-            $mfocode = '—';
-            $mfodescription = '—';
-            
-            if ($orsRequest && $orsRequest->Mfopap) {
-                $mfocode = $orsRequest->Mfopap->mfocode ?? '—';
-                $mfodescription = $orsRequest->Mfopap->mfodescription ?? '—';
-                $mfopapCode = $mfocode . ' - ' . $mfodescription;
-            }
-
-            // ✅ SAFE: Get ORS number
-            $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
-
-            return [
-                'id'           => $req->id,
-                'control_no'   => $req->accounting_control_number ? 
-                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
-                    '—',
-                'ors_number'   => $orsNumber,
-                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                'program'      => $req->program->prcode ?? 'N/A',
-                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                'particulars'  => $req->particulars,
-                'amount'       => number_format($req->amount, 2),
-                'status'       => $req->status,
-                'date'         => $req->created_at->format('M d, Y'),
-                'created_at_timestamp' => $req->created_at->toISOString(),
-                'days_in_status' => $req->days_in_status,
-                'days_old'     => $req->days_old,
-                'urgency'      => $req->urgency,
-                'priority_score' => $req->priority_score,
-                'uacs_codes'   => $uacsDisplay,
-                'adl_code'     => $adlCode,
-                'mfopap_code'  => $mfopapCode,
-                'mfocode'      => $mfocode,
-                'mfodescription' => $mfodescription,
-            ];
-        }));
-
-    } catch (\Exception $e) {
-        \Log::error('Error in Budget Officer fetchDvRequests: ' . $e->getMessage());
-        \Log::error('Stack trace: ' . $e->getTraceAsString());
-        
-        return response()->json([
-            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
-        ], 500);
+            return response()->json([
+                'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+            ], 500);
+        }
     }
-}
 
-/**
- * Get ORS urgency level based on whole number of days in status
- */
-protected function getOrsUrgencyLevel($daysInStatus)
-{
-    if ($daysInStatus >= 7) {
-        return 'critical';
-    } elseif ($daysInStatus >= 5) {
-        return 'high';
-    } elseif ($daysInStatus >= 3) {
-        return 'medium';
-    } else {
-        return 'low';
+    protected function getUrgencyLevel($daysOld)
+    {
+        if ($daysOld >= 10) {
+            return 'critical';
+        } elseif ($daysOld >= 7) {
+            return 'high';
+        } elseif ($daysOld >= 3) {
+            return 'medium';
+        } else {
+            return 'low';
+        }
     }
-}
+
     public function redirectToFirstPending()
     {
         $currentUserId = auth()->id();
         $lockDuration = now()->subMinutes(10);
 
-        // ✅ FIXED: Corrected whereHas syntax
         $pendingRequests = DvRequest::whereHas('program', function($q) {
                                         $q->whereIn('prcode', ['GIP', 'TUPAD', 'TEV']);
                                     }) 
@@ -288,111 +250,108 @@ protected function getOrsUrgencyLevel($daysInStatus)
     }
 
     public function show($id)
-{
-    $dvRequest = DvRequest::with([
-        'respocenter',
-        'focalPerson',
-        'orsRequest',
-        'orsRequest.uacsCodes',
-        'logs',
-        'gipAttachments', // ✅ GIP attachments
-        'tupadAttachments', // ✅ TUPAD attachments  
-        'tevAttachments', // ✅ TEV attachments
-        'program' // ✅ Ensure program is loaded
-    ])->findOrFail($id);
+    {
+        $dvRequest = DvRequest::with([
+            'respocenter',
+            'focalPerson',
+            'orsRequest',
+            'orsRequest.uacsCodes',
+            'logs',
+            'gipAttachments',
+            'tupadAttachments',  
+            'tevAttachments',
+            'program'
+        ])->findOrFail($id);
 
-    $currentUserId = auth()->id();
-    $lockDuration = now()->subMinutes(10);
+        $currentUserId = auth()->id();
+        $lockDuration = now()->subMinutes(10);
 
-    // Lock handling
-    if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at >= $lockDuration) {
-        return redirect()->route('BudgetOfficer.dvrequests.index')
-            ->with('error', 'This DV Request is currently being processed by another user.');
-    }
+        if ($dvRequest->locked_by && $dvRequest->locked_by !== $currentUserId && $dvRequest->locked_at >= $lockDuration) {
+            return redirect()->route('BudgetOfficer.dvrequests.index')
+                ->with('error', 'This DV Request is currently being processed by another user.');
+        }
 
-    if (!$dvRequest->locked_by || $dvRequest->locked_at < $lockDuration || $dvRequest->locked_by === $currentUserId) {
-        $dvRequest->update([
-            'locked_by' => $currentUserId,
-            'locked_at' => now(),
+        if (!$dvRequest->locked_by || $dvRequest->locked_at < $lockDuration || $dvRequest->locked_by === $currentUserId) {
+            $dvRequest->update([
+                'locked_by' => $currentUserId,
+                'locked_at' => now(),
+            ]);
+        }
+        
+        $orsRequest = $dvRequest->orsRequest ?? null;
+        $lastLog = $dvRequest->logs()->latest()->first();
+        $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
+        
+        $uacsCodes = $orsRequest ? $orsRequest->uacsCodes()->orderBy('pivot_order')->get() : collect();
+        
+        $selectableUacsCodes = UacsCode::selectable()
+            ->with('parent.parent.parent')
+            ->orderBy('level')
+            ->orderBy('sort_order')
+            ->orderBy('uacscode')
+            ->get()
+            ->map(function($uacs) {
+                return [
+                    'id' => $uacs->id,
+                    'code' => $uacs->uacscode,
+                    'description' => $uacs->description,
+                    'full_path' => $uacs->full_path,
+                    'level' => $uacs->level,
+                ];
+            });
+
+        $attachments = collect();
+        $selectedModality = null;
+        $tevAttachments = collect();
+        $tevSelectedModality = null;
+        $tupadAttachments = collect();
+        $tupadSelectedModality = null;
+
+        switch ($dvRequest->program->prcode ?? '') {
+            case 'GIP':
+                $attachments = $dvRequest->gipAttachments ?? collect();
+                break;
+                
+            case 'TUPAD':
+                $tupadSelectedModality = $dvRequest->tupad_modality;
+                if ($tupadSelectedModality) {
+                    $tupadAttachments = $dvRequest->tupadAttachments()
+                        ->where('modality', $tupadSelectedModality)
+                        ->orderBy('sort_order')
+                        ->get();
+                }
+                break;
+                
+            case 'TEV':
+                $tevSelectedModality = $dvRequest->tev_modality;
+                if ($tevSelectedModality) {
+                    $tevAttachments = $dvRequest->tevAttachments()
+                        ->where('modality', $tevSelectedModality)
+                        ->orderBy('sort_order')
+                        ->get();
+                }
+                break;
+        }
+        
+        return view('BudgetOfficer.obligatedvors', [
+            'dvRequest'           => $dvRequest,
+            'orsRequest'          => $orsRequest,
+            'lastStep'            => $lastStep,
+            'selectableUacsCodes' => $selectableUacsCodes,
+            'adlCodes'            => AdlCode::orderBy('adlcode')->get(),
+            'allotment_classes'   => AllotmentClass::all(),
+            'mfopaps'             => MfoPap::all(),
+            'contcurrents'        => ContinuingOrCurrent::all(),
+            'uacsCodes'           => $uacsCodes,
+            'amount'              => $dvRequest->amount,
+            'attachments'         => $attachments,
+            'selectedModality'    => $selectedModality, 
+            'tevAttachments'      => $tevAttachments,
+            'tevSelectedModality' => $tevSelectedModality,
+            'tupadAttachments'    => $tupadAttachments,
+            'tupadSelectedModality' => $tupadSelectedModality,
         ]);
     }
-    
-    $orsRequest = $dvRequest->orsRequest ?? null;
-    $lastLog = $dvRequest->logs()->latest()->first();
-    $lastStep = $lastLog ? $lastLog->action : $dvRequest->status;
-    
-    $uacsCodes = $orsRequest ? $orsRequest->uacsCodes()->orderBy('pivot_order')->get() : collect();
-    
-    $selectableUacsCodes = UacsCode::selectable()
-        ->with('parent.parent.parent')
-        ->orderBy('level')
-        ->orderBy('sort_order')
-        ->orderBy('uacscode')
-        ->get()
-        ->map(function($uacs) {
-            return [
-                'id' => $uacs->id,
-                'code' => $uacs->uacscode,
-                'description' => $uacs->description,
-                'full_path' => $uacs->full_path,
-                'level' => $uacs->level,
-            ];
-        });
-
-    // ✅ GET ATTACHMENTS BASED ON PROGRAM
-    $attachments = collect();
-    $selectedModality = null;
-    $tevAttachments = collect();
-    $tevSelectedModality = null;
-    $tupadAttachments = collect();
-    $tupadSelectedModality = null;
-
-    switch ($dvRequest->program->prcode ?? '') {
-        case 'GIP':
-            $attachments = $dvRequest->gipAttachments ?? collect();
-            break;
-            
-        case 'TUPAD':
-            $tupadSelectedModality = $dvRequest->tupad_modality;
-            if ($tupadSelectedModality) {
-                $tupadAttachments = $dvRequest->tupadAttachments()
-                    ->where('modality', $tupadSelectedModality)
-                    ->orderBy('sort_order')
-                    ->get();
-            }
-            break;
-            
-        case 'TEV':
-            $tevSelectedModality = $dvRequest->tev_modality;
-            if ($tevSelectedModality) {
-                $tevAttachments = $dvRequest->tevAttachments()
-                    ->where('modality', $tevSelectedModality)
-                    ->orderBy('sort_order')
-                    ->get();
-            }
-            break;
-    }
-    
-    return view('BudgetOfficer.obligatedvors', [
-        'dvRequest'           => $dvRequest,
-        'orsRequest'          => $orsRequest,
-        'lastStep'            => $lastStep,
-        'selectableUacsCodes' => $selectableUacsCodes,
-        'adlCodes'            => AdlCode::orderBy('adlcode')->get(),
-        'allotment_classes'   => AllotmentClass::all(),
-        'mfopaps'             => MfoPap::all(),
-        'contcurrents'        => ContinuingOrCurrent::all(),
-        'uacsCodes'           => $uacsCodes,
-        'amount'              => $dvRequest->amount,
-        // ✅ PASS ALL ATTACHMENTS TO VIEW
-        'attachments'         => $attachments, // GIP
-        'selectedModality'    => $selectedModality, 
-        'tevAttachments'      => $tevAttachments, // TEV
-        'tevSelectedModality' => $tevSelectedModality,
-        'tupadAttachments'    => $tupadAttachments, // TUPAD
-        'tupadSelectedModality' => $tupadSelectedModality,
-    ]);
-}
 
     public function receive(Request $request, $id)
     {
@@ -401,8 +360,8 @@ protected function getOrsUrgencyLevel($daysInStatus)
             $statusBefore = $dvRequest->status;
             $receivedAt = now();
             $currentUserId = auth()->id();
+            $newStatus = 'ORS_received';
 
-            // FIXED: Check if it's already received by Budget Officer, not just if it's not verified
             if ($dvRequest->status === 'ORS_received') {
                 if ($request->expectsJson() || $request->ajax()) {
                     return response()->json([
@@ -413,7 +372,6 @@ protected function getOrsUrgencyLevel($daysInStatus)
                 return redirect()->back()->with('error', 'This request has already been received by Budget Officer.');
             }
 
-            // FIXED: Check if the request is in a state that can be received
             if (!in_array($dvRequest->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified','Incoming-TEV_verified'])) {
                 if ($request->expectsJson() || $request->ajax()) {
                     return response()->json([
@@ -424,49 +382,52 @@ protected function getOrsUrgencyLevel($daysInStatus)
                 return redirect()->back()->with('error', 'This request cannot be received. Current status: ' . $statusBefore);
             }
 
-            // Use database transaction to ensure data consistency
             DB::transaction(function () use (
                 $dvRequest, 
                 $statusBefore, 
                 $receivedAt, 
                 $request, 
-                $currentUserId
+                $currentUserId,
+                $newStatus
             ) {
-                // Update ORS Request first (if exists)
+                $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+                
                 if ($dvRequest->orsRequest) {
                     $dvRequest->orsRequest->update([
-                        'status'            => 'ORS_received',
+                        'status'            => $newStatus,
                         'gross'             => $request->input('amount', $dvRequest->amount),
                         'accountingunit_id' => $currentUserId,
                         'received_by'       => $currentUserId,
                         'received_at'       => $receivedAt,
+                        'budget_received_at' => $receivedAt,
+                        'budget_last_action_at' => $receivedAt,
                     ]);
                 }
 
-                // Update DV Request
                 $dvRequest->update([
-                    'status'            => 'ORS_received',
+                    'status'            => $newStatus,
                     'gross'             => $request->input('amount', $dvRequest->amount),
                     'accountingunit_id' => $currentUserId,
                     'received_by'       => $currentUserId,
                     'received_at'       => $receivedAt,
+                    'budget_received_at' => $receivedAt,
+                    'budget_last_action_at' => $receivedAt,
                     'locked_by'         => $currentUserId,
                     'locked_at'         => $receivedAt,
                 ]);
 
-                // ✅ SEND EMAIL NOTIFICATION USING SENDPULSE
-             
-
-                // ✅ SAVE VERIFICATION HISTORY (NO ACKNOWLEDGMENT)
                 $this->saveBudgetObligationHistory(
                     $dvRequest,
                     'receive',
                     'ORS request received by Budget Officer for processing',
                     [
                         'status_before' => $statusBefore,
-                        'status_after'  => 'ORS_received',
+                        'status_after'  => $newStatus,
                         'received_by' => $currentUserId,
                         'received_at' => $receivedAt->toISOString(),
+                        'budget_received_at' => $receivedAt->toISOString(),
+                        'budget_last_action_at' => $receivedAt->toISOString(),
+                        'last_action_at' => $receivedAt->toISOString(),
                         'amount' => $dvRequest->amount,
                         'ors_request_id' => $dvRequest->orsRequest->id ?? null
                     ]
@@ -475,8 +436,9 @@ protected function getOrsUrgencyLevel($daysInStatus)
                 $this->logAction(
                     $dvRequest->id,
                     'Budget_Officer',
-                    $dvRequest->status,
-                    'ORS request received by Budget Officer for processing'
+                    $newStatus,
+                    'ORS request received by Budget Officer for processing. Budget Timestamp: ' . 
+                    $receivedAt->format('M d, Y H:i:s')
                 );
 
                 $focalId = $dvRequest->focalperson_id;
@@ -490,7 +452,6 @@ protected function getOrsUrgencyLevel($daysInStatus)
                     'remarks'        => $remarks,
                 ]);
 
-                // Trigger Pusher events
                 $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
                     'status'        => $dvRequest->status,
@@ -507,11 +468,11 @@ protected function getOrsUrgencyLevel($daysInStatus)
                     'received_by' => auth()->user()->name ?? 'Budget Officer',
                     'timestamp' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                     'action_performer_id' => $currentUserId,
-                    'received_by_user_id' => $currentUserId, 
+                    'budget_received_at' => $receivedAt->toISOString(),
                 ]);
             });
 
-            $this->triggerDashboardUpdate(); // TRIGGER DASHBOARD UPDATE
+            $this->triggerDashboardUpdate();
 
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
@@ -520,7 +481,10 @@ protected function getOrsUrgencyLevel($daysInStatus)
                     'data' => [
                         'id'          => $dvRequest->id,
                         'status'      => $dvRequest->status,
-                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A')
+                        'received_at' => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'budget_received_at' => $receivedAt->format('M d, Y h:i A'),
+                        'budget_last_action_at' => $receivedAt->format('M d, Y H:i:s'),
+                        'last_action_at' => $receivedAt->format('M d, Y H:i:s'),
                     ]
                 ]);
             }
@@ -565,177 +529,197 @@ protected function getOrsUrgencyLevel($daysInStatus)
         return response()->json($recentDvRequest);
     }
 
-       public function updateAmount(Request $request, $id)
-{
-    try {
-        \Log::info('=== UPDATE AMOUNT REQUEST ===', [
-            'dv_request_id' => $id,
-            'request_data' => $request->all(),
-            'user_id' => auth()->id()
-        ]);
-
-        // Validate input
-        $validated = $request->validate([
-            'amount'  => 'required|numeric|min:0.01',
-            'remarks' => 'required|string|max:1000|min:10',
-        ], [
-            'amount.required' => 'Amount is required',
-            'amount.numeric' => 'Amount must be a number',
-            'amount.min' => 'Amount must be greater than 0',
-            'remarks.required' => 'Please provide a reason for changing the amount',
-            'remarks.min' => 'Reason must be at least 10 characters',
-        ]);
-
-        $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
-
-        // Check if request can be edited
-        if (!in_array($dvRequest->status, ['ORS_received', 'ORS_onhold'])) {
-            \Log::warning('Amount edit rejected - invalid status', [
-                'dv_request_id' => $id,
-                'current_status' => $dvRequest->status
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Amount can only be edited while request is received or on hold.'
-            ], 422);
-        }
-
-        $currentUserId = auth()->id();
-        $lockDuration = now()->subMinutes(10);
-        
-        // Check lock status
-        if ($dvRequest->locked_by && 
-            $dvRequest->locked_by !== $currentUserId && 
-            $dvRequest->locked_at >= $lockDuration) {
-            \Log::warning('Amount edit rejected - locked by another user', [
-                'dv_request_id' => $id,
-                'locked_by' => $dvRequest->locked_by,
-                'current_user' => $currentUserId
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'This request is currently locked by another user.'
-            ], 422);
-        }
-
-        $oldAmount = $dvRequest->amount;
-        $newAmount = $validated['amount'];
-
-        // Start transaction
-        DB::beginTransaction();
-
+    public function updateAmount(Request $request, $id)
+    {
         try {
-            // Update DV Request
-            $dvRequest->update([
-                'amount'    => $newAmount,
-                'locked_by' => $currentUserId,
-                'locked_at' => now(),
-            ]);
-
-            // Update ORS Request if exists
-            if ($dvRequest->orsRequest) {
-                $dvRequest->orsRequest->update([
-                    'gross' => $newAmount,
-                ]);
-            }
-            // Log action
-            $this->logAction(
-                $dvRequest->id,
-                'Budget_Officer',
-                'Amount_Edited',
-                "DV/ORS Gross updated from ₱" . number_format($oldAmount, 2) . 
-                " to ₱" . number_format($newAmount, 2) . 
-                " - Reason: " . $validated['remarks']
-            );
-
-            // Create notification
-            if ($dvRequest->focalperson_id) {
-                Notification::create([
-                    'focalperson_id' => $dvRequest->focalperson_id,
-                    'dv_request_id'  => $dvRequest->id,
-                    'status'         => $dvRequest->status,
-                    'action'         => 'Amount Updated',
-                    'remarks'        => "Budget Officer updated the DV/ORS gross amount from ₱" . 
-                                      number_format($oldAmount, 2) . " to ₱" . 
-                                      number_format($newAmount, 2) . " - Reason: " . $validated['remarks'],
-                ]);
-
-                // Trigger Pusher events
-                $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'amount-updated', [
-                    'dv_request_id' => $dvRequest->id,
-                    'old_amount'    => number_format($oldAmount, 2),
-                    'new_amount'    => number_format($newAmount, 2),
-                    'remarks'       => $validated['remarks'],
-                    'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                ]);
-
-                $this->pusher->trigger('dv-requests-budget-officer', 'amount-updated', [
-                    'dv_request_id' => $dvRequest->id,
-                    'old_amount'    => number_format($oldAmount, 2),
-                    'new_amount'    => number_format($newAmount, 2),
-                    'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                    'action_performer_id' => $currentUserId,
-                ]);
-            }
-
-            DB::commit();
-
-            \Log::info('Amount updated successfully', [
+            \Log::info('=== UPDATE AMOUNT REQUEST ===', [
                 'dv_request_id' => $id,
-                'old_amount' => $oldAmount,
-                'new_amount' => $newAmount
+                'request_data' => $request->all(),
+                'user_id' => auth()->id()
             ]);
 
+            $validated = $request->validate([
+                'amount'  => 'required|numeric|min:0.01',
+                'remarks' => 'required|string|max:1000|min:10',
+            ], [
+                'amount.required' => 'Amount is required',
+                'amount.numeric' => 'Amount must be a number',
+                'amount.min' => 'Amount must be greater than 0',
+                'remarks.required' => 'Please provide a reason for changing the amount',
+                'remarks.min' => 'Reason must be at least 10 characters',
+            ]);
+
+            $dvRequest = DvRequest::with('orsRequest')->findOrFail($id);
+
+            if (!in_array($dvRequest->status, ['ORS_received', 'ORS_onhold'])) {
+                \Log::warning('Amount edit rejected - invalid status', [
+                    'dv_request_id' => $id,
+                    'current_status' => $dvRequest->status
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Amount can only be edited while request is received or on hold.'
+                ], 422);
+            }
+
+            $currentUserId = auth()->id();
+            $lockDuration = now()->subMinutes(10);
+            
+            if ($dvRequest->locked_by && 
+                $dvRequest->locked_by !== $currentUserId && 
+                $dvRequest->locked_at >= $lockDuration) {
+                \Log::warning('Amount edit rejected - locked by another user', [
+                    'dv_request_id' => $id,
+                    'locked_by' => $dvRequest->locked_by,
+                    'current_user' => $currentUserId
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This request is currently locked by another user.'
+                ], 422);
+            }
+
+            $oldAmount = $dvRequest->amount;
+            $newAmount = $validated['amount'];
+            $newStatus = 'ORS_in_process';
+            $updatedAt = now();
+
+            DB::beginTransaction();
+
+            try {
+                $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+                
+                $dvRequest->update([
+                    'amount'    => $newAmount,
+                    'budget_last_action_at' => $updatedAt,
+                    'locked_by' => $currentUserId,
+                    'locked_at' => $updatedAt,
+                ]);
+
+                if ($dvRequest->orsRequest) {
+                    $dvRequest->orsRequest->update([
+                        'gross' => $newAmount,
+                        'budget_last_action_at' => $updatedAt,
+                    ]);
+                }
+                
+                $this->logAction(
+                    $dvRequest->id,
+                    'Budget_Officer',
+                    'Amount_Edited',
+                    "DV/ORS Gross updated from ₱" . number_format($oldAmount, 2) . 
+                    " to ₱" . number_format($newAmount, 2) . 
+                    " - Reason: " . $validated['remarks'] .
+                    " | Budget Last action: " . $updatedAt->format('M d, Y H:i:s')
+                );
+
+                $this->saveBudgetObligationHistory(
+                    $dvRequest,
+                    'amount_updated',
+                    "Amount updated: ₱" . number_format($oldAmount, 2) . " to ₱" . number_format($newAmount, 2),
+                    [
+                        'status_before' => $dvRequest->getOriginal('status'),
+                        'status_after'  => $newStatus,
+                        'old_amount'    => $oldAmount,
+                        'new_amount'    => $newAmount,
+                        'reason'        => $validated['remarks'],
+                        'updated_by'    => $currentUserId,
+                        'updated_at'    => $updatedAt->toISOString(),
+                        'budget_last_action_at' => $updatedAt->toISOString(),
+                        'last_action_at' => $dvRequest->last_action_at ? $dvRequest->last_action_at->toISOString() : null,
+                    ]
+                );
+
+                if ($dvRequest->focalperson_id) {
+                    Notification::create([
+                        'focalperson_id' => $dvRequest->focalperson_id,
+                        'dv_request_id'  => $dvRequest->id,
+                        'status'         => $dvRequest->status,
+                        'action'         => 'Amount Updated',
+                        'remarks'        => "Budget Officer updated the DV/ORS gross amount from ₱" . 
+                                          number_format($oldAmount, 2) . " to ₱" . 
+                                          number_format($newAmount, 2) . " - Reason: " . $validated['remarks'],
+                    ]);
+
+                    $this->pusher->trigger('dv-requests-' . $dvRequest->focalperson_id, 'amount-updated', [
+                        'dv_request_id' => $dvRequest->id,
+                        'old_amount'    => number_format($oldAmount, 2),
+                        'new_amount'    => number_format($newAmount, 2),
+                        'remarks'       => $validated['remarks'],
+                        'timestamp'     => $updatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    ]);
+
+                    $this->pusher->trigger('dv-requests-budget-officer', 'amount-updated', [
+                        'dv_request_id' => $dvRequest->id,
+                        'old_amount'    => number_format($oldAmount, 2),
+                        'new_amount'    => number_format($newAmount, 2),
+                        'timestamp'     => $updatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'action_performer_id' => $currentUserId,
+                        'budget_last_action_at' => $updatedAt->toISOString(),
+                    ]);
+                }
+
+                DB::commit();
+
+                \Log::info('Amount updated successfully', [
+                    'dv_request_id' => $id,
+                    'old_amount' => $oldAmount,
+                    'new_amount' => $newAmount,
+                    'budget_last_action_at' => $updatedAt,
+                    'last_action_at' => $updatedAt,
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Amount successfully updated.',
+                    'data' => [
+                        'old_amount' => number_format($oldAmount, 2),
+                        'new_amount' => number_format($newAmount, 2),
+                        'dv_amount'  => number_format($dvRequest->amount, 2),
+                        'ors_gross'  => number_format($dvRequest->orsRequest->gross ?? 0, 2),
+                        'updated_at' => $updatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'budget_last_action_at' => $updatedAt->format('M d, Y H:i:s'),
+                        'last_action_at' => $updatedAt->format('M d, Y H:i:s'),
+                    ]
+                ]);
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation error in updateAmount', [
+                'errors' => $e->errors(),
+                'dv_request_id' => $id
+            ]);
+            
             return response()->json([
-                'success' => true,
-                'message' => 'Amount successfully updated.',
-                'data' => [
-                    'old_amount' => number_format($oldAmount, 2),
-                    'new_amount' => number_format($newAmount, 2),
-                    'dv_amount'  => number_format($dvRequest->amount, 2),
-                    'ors_gross'  => number_format($dvRequest->orsRequest->gross ?? 0, 2),
-                    'updated_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A')
-                ]
-            ]);
-
+                'success' => false,
+                'message' => $e->validator->errors()->first()
+            ], 422);
+            
         } catch (\Exception $e) {
             DB::rollBack();
-            throw $e;
+            \Log::error('Error updating amount: ' . $e->getMessage(), [
+                'dv_request_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating the amount: ' . $e->getMessage()
+            ], 500);
         }
-
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        \Log::error('Validation error in updateAmount', [
-            'errors' => $e->errors(),
-            'dv_request_id' => $id
-        ]);
-        
-        return response()->json([
-            'success' => false,
-            'message' => $e->validator->errors()->first()
-        ], 422);
-        
-    } catch (\Exception $e) {
-        DB::rollBack();
-        \Log::error('Error updating amount: ' . $e->getMessage(), [
-            'dv_request_id' => $id,
-            'trace' => $e->getTraceAsString()
-        ]);
-
-        return response()->json([
-            'success' => false,
-            'message' => 'An error occurred while updating the amount: ' . $e->getMessage()
-        ], 500);
     }
-}
     
     public function storeADLCode(Request $request)
     {
         try {
             \Log::info('storeADLCode called with data:', $request->all());
 
-            // Fix: Change 'adl_codes' to 'adlcodes'
             $validated = $request->validate([
                 'adlcode' => 'required|string|max:50|unique:adlcodes,adlcode',
                 'description' => 'required|string|max:255'
@@ -768,12 +752,8 @@ protected function getOrsUrgencyLevel($daysInStatus)
         }
     }
 
-    /**
-     * Check if ADL Code already exists
-     */
     public function checkADLCode(Request $request)
     {
-        // Fix: Change 'adl_codes' to 'adlcodes'
         $exists = AdlCode::where('adlcode', $request->adlcode)->exists();
         
         return response()->json([
@@ -781,14 +761,14 @@ protected function getOrsUrgencyLevel($daysInStatus)
             'message' => $exists ? 'ADL Code already exists' : 'ADL Code is available'
         ]);
     }
-  public function checkBudgetAvailability(Request $request, $dvRequestId)
+
+    public function checkBudgetAvailability(Request $request, $dvRequestId)
     {
         try {
             $dvRequest = DvRequest::with('program')->findOrFail($dvRequestId);
             $programCode = $dvRequest->program->prcode;
             $requestAmount = $dvRequest->amount;
 
-            // Check if program can accept new requests
             $budgetCheck = $this->canAccommodateAmount($programCode, $requestAmount);
 
             return response()->json([
@@ -817,7 +797,8 @@ protected function getOrsUrgencyLevel($daysInStatus)
             ], 500);
         }
     }
-public function store(Request $request, $dvRequestId)
+
+   public function store(Request $request, $dvRequestId)
 {
     $request->validate([
         'uacscode_ids'       => 'required|array|min:1',
@@ -833,12 +814,15 @@ public function store(Request $request, $dvRequestId)
         'remarks'            => 'nullable|string|max:1000',
     ]);
 
-    // Validate that UACS amounts sum equals gross amount
+    $dvRequest = DvRequest::with('program')->findOrFail($dvRequestId)->fresh();
+    $programCode = $dvRequest->program->prcode ?? null;
+    $requestAmount = $dvRequest->amount;
+
     $totalUacsAmount = array_sum($request->uacs_amounts);
-    $dvRequest = DvRequest::findOrFail($dvRequestId)->fresh();
     $grossAmount = $dvRequest->amount;
 
-      $budgetCheck = $this->canAccommodateAmount($programCode, $requestAmount);
+    if ($programCode) {
+        $budgetCheck = $this->canAccommodateAmount($programCode, $requestAmount);
 
         if (!$budgetCheck['allowed']) {
             \Log::warning('ORS obligation blocked due to budget threshold', [
@@ -857,8 +841,9 @@ public function store(Request $request, $dvRequestId)
                            "<br><br>⚠️ Please contact the Budget Officer to request budget augmentation."
             ])->withInput();
         }
+    }
 
-    if (abs($totalUacsAmount - $grossAmount) > 0.01) { // Allow 1 cent tolerance for rounding
+    if (abs($totalUacsAmount - $grossAmount) > 0.01) {
         return back()->withErrors([
             'uacs_amounts' => "Total UACS amounts (₱" . number_format($totalUacsAmount, 2) . 
                             ") must equal the gross amount (₱" . number_format($grossAmount, 2) . ")"
@@ -868,32 +853,47 @@ public function store(Request $request, $dvRequestId)
     \Log::info('=== START ORS STORE METHOD WITH UACS AMOUNTS ===');
     \Log::info('Total UACS Amount: ' . $totalUacsAmount);
     \Log::info('Gross Amount: ' . $grossAmount);
+    \Log::info('Program: ' . $programCode);
+    \Log::info('Request Amount: ' . $requestAmount);
 
     $statusBefore = $dvRequest->status;
     $currentUserId = auth()->id();
-
-    // Update DV Request status
-    $dvRequest->status = 'ORS_obligated';
-    $dvRequest->locked_by = null;
-    $dvRequest->locked_at = null;
-    $saveResult = $dvRequest->save();
-
-    \Log::info('DV Request save result:', [
-        'success' => $saveResult,
-        'new_status' => $dvRequest->status,
-    ]);
-
+    $newStatus = 'ORS_obligated';
+    $obligatedAt = now();
+    
+    // Declare variables that need to be accessed outside the transaction
     $orsNumber = null;
-    $orsRequest = null;
+    $uacsCount = 0;
+    $adlCount = 0;
 
-    DB::transaction(function () use ($request, $dvRequest, &$orsNumber, &$orsRequest, $currentUserId) {
+    DB::transaction(function () use (
+        $dvRequest, 
+        $statusBefore, 
+        $request, 
+        $currentUserId, 
+        $newStatus, 
+        $totalUacsAmount,
+        $obligatedAt,
+        &$orsNumber, // Pass by reference
+        &$uacsCount, // Pass by reference
+        &$adlCount   // Pass by reference
+    ) {
         \Log::info('Starting transaction for ORS creation');
         
+        $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+        
+        $dvRequest->update([
+            'status' => $newStatus,
+            'budget_verified_at' => $obligatedAt,
+            'budget_last_action_at' => $obligatedAt,
+            'locked_by' => null,
+            'locked_at' => null,
+        ]);
+
         $orsNumber = $this->generateOrsNumber($request->allotment_class_id, $request->contcurrent_id, $dvRequest);
         
         $primaryAdlCodeId = $request->adlcode_ids[0];
         
-        // Create ORS Request
         $orsRequest = OrsRequest::create([
             'ors_number'         => $orsNumber,
             'dv_request_id'      => $dvRequest->id,
@@ -905,14 +905,17 @@ public function store(Request $request, $dvRequestId)
             'contcurrent_id' => $request->contcurrent_id,
             'gross'              => $dvRequest->amount,
             'remarks'            => $request->remarks,
-            'status'             => 'ORS_obligated',
+            'status'             => $newStatus,
             'obligated_by'       => $currentUserId,
-            'obligated_at'       => now(),
+            'obligated_at'       => $obligatedAt,
+            'budget_received_at' => $dvRequest->budget_received_at,
+            'budget_verified_at' => $obligatedAt,
+            'budget_last_action_at' => $obligatedAt,
+            'last_action_at'     => $obligatedAt,
         ]);
 
         \Log::info('ORS Request created with ID: ' . $orsRequest->id);
         
-        // ✅ NEW: Attach multiple UACS codes WITH AMOUNTS
         $uacsAttachData = [];
         foreach ($request->uacscode_ids as $index => $uacsId) {
             $amount = $request->uacs_amounts[$index] ?? 0;
@@ -924,7 +927,6 @@ public function store(Request $request, $dvRequestId)
         }
         $orsRequest->uacsCodes()->attach($uacsAttachData);
         
-        // Attach multiple ADL codes
         $adlAttachData = [];
         foreach ($request->adlcode_ids as $index => $adlId) {
             $adlAttachData[$adlId] = ['order' => $index + 1];
@@ -932,112 +934,113 @@ public function store(Request $request, $dvRequestId)
         $orsRequest->adlCodes()->attach($adlAttachData);
 
         \Log::info('UACS codes with amounts and ADL codes attached successfully');
-    });
+        
+        $uacsCodes = UacsCode::whereIn('id', $request->uacscode_ids)->get();
+        $uacsData = $uacsCodes->map(function($uacs, $index) use ($request) {
+            $amount = $request->uacs_amounts[$index] ?? 0;
+            return [
+                'id' => $uacs->id,
+                'code' => $uacs->uacscode,
+                'description' => $uacs->description,
+                'full_path' => $uacs->full_path,
+                'amount' => $amount
+            ];
+        })->toArray();
 
-    $dvRequest->refresh();
+        $adlCodes = AdlCode::whereIn('id', $request->adlcode_ids)->get();
+        $adlData = $adlCodes->map(function($adl) {
+            return [
+                'id' => $adl->id,
+                'code' => $adl->adlcode,
+                'description' => $adl->description
+            ];
+        })->toArray();
 
-    // Get UACS codes data with amounts for verification history
-    $uacsCodes = UacsCode::whereIn('id', $request->uacscode_ids)->get();
-    $uacsData = $uacsCodes->map(function($uacs, $index) use ($request) {
-        $amount = $request->uacs_amounts[$index] ?? 0;
-        return [
-            'id' => $uacs->id,
-            'code' => $uacs->uacscode,
-            'description' => $uacs->description,
-            'full_path' => $uacs->full_path,
-            'amount' => $amount
-        ];
-    })->toArray();
+        $allotmentClass = AllotmentClass::find($request->allotment_class_id);
+        $mfopap = Mfopap::find($request->mfopap_id);
+        $contcurrent = ContinuingOrCurrent::find($request->contcurrent_id);
 
-    $adlCodes = AdlCode::whereIn('id', $request->adlcode_ids)->get();
-    $adlData = $adlCodes->map(function($adl) {
-        return [
-            'id' => $adl->id,
-            'code' => $adl->adlcode,
-            'description' => $adl->description
-        ];
-    })->toArray();
+        $this->saveBudgetObligationHistory(
+            $dvRequest,
+            'obligate',
+            $request->remarks ?? "ORS Number $orsNumber assigned with " . count($request->uacscode_ids) . " UACS codes and " . count($request->adlcode_ids) . " ADL codes.",
+            [
+                'status_before' => $statusBefore,
+                'status_after' => $newStatus,
+                'ors_number' => $orsNumber,
+                'ors_request_id' => $orsRequest->id,
+                'adl_codes' => $adlData,
+                'adl_count' => count($request->adlcode_ids),
+                'allotment_class_id' => $request->allotment_class_id,
+                'allotment_class' => $allotmentClass ? $allotmentClass->allotcode . ' - ' . $allotmentClass->description : null,
+                'mfopap_id' => $request->mfopap_id,
+                'mfopap' => $mfopap ? $mfopap->mfocode . ' - ' . $mfopap->mfodescription : null,
+                'contcurrent_id' => $request->contcurrent_id,
+                'contcurrent' => $contcurrent ? $contcurrent->ccode . ' - ' . $contcurrent->description : null,
+                'uacs_codes' => $uacsData,
+                'uacs_count' => count($request->uacscode_ids),
+                'total_uacs_amount' => $totalUacsAmount,
+                'amount' => $dvRequest->amount,
+                'obligated_by' => $currentUserId,
+                'obligated_at' => $obligatedAt->toISOString(),
+                'budget_received_at' => $dvRequest->budget_received_at ? $dvRequest->budget_received_at->toISOString() : null,
+                'budget_verified_at' => $obligatedAt->toISOString(),
+                'budget_last_action_at' => $obligatedAt->toISOString(),
+                'last_action_at' => $obligatedAt->toISOString(),
+            ]
+        );
 
-    $allotmentClass = AllotmentClass::find($request->allotment_class_id);
-    $mfopap = Mfopap::find($request->mfopap_id);
-    $contcurrent = ContinuingOrCurrent::find($request->contcurrent_id);
+        $focalId = $dvRequest->focalperson_id;
+        $status  = $newStatus;
+        $action  = 'Obligated';
+        $uacsCount = count($request->uacscode_ids);
+        $adlCount = count($request->adlcode_ids);
+        $remarks = $request->remarks ?? "ORS Request Created with ORS Number: $orsNumber ({$uacsCount} UACS codes with amounts, {$adlCount} ADL codes)";
 
-    // Save verification history
-    $this->saveBudgetObligationHistory(
-        $dvRequest,
-        'obligate',
-        $request->remarks ?? "ORS Number $orsNumber assigned with " . count($request->uacscode_ids) . " UACS codes and " . count($request->adlcode_ids) . " ADL codes.",
-        [
-            'status_before' => $statusBefore,
-            'status_after' => 'ORS_obligated',
-            'ors_number' => $orsNumber,
-            'ors_request_id' => $orsRequest->id,
-            'adl_codes' => $adlData,
-            'adl_count' => count($request->adlcode_ids),
-            'allotment_class_id' => $request->allotment_class_id,
-            'allotment_class' => $allotmentClass ? $allotmentClass->allotcode . ' - ' . $allotmentClass->description : null,
-            'mfopap_id' => $request->mfopap_id,
-            'mfopap' => $mfopap ? $mfopap->mfocode . ' - ' . $mfopap->mfodescription : null,
-            'contcurrent_id' => $request->contcurrent_id,
-            'contcurrent' => $contcurrent ? $contcurrent->ccode . ' - ' . $contcurrent->description : null,
-            'uacs_codes' => $uacsData,
-            'uacs_count' => count($request->uacscode_ids),
-            'total_uacs_amount' => array_sum($request->uacs_amounts),
+        Notification::create([
+            'focalperson_id' => $focalId,
+            'dv_request_id'  => $dvRequest->id,
+            'status'         => $status,
+            'action'         => $action,
+            'remarks'        => $remarks,
+        ]);
+
+        $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
+            'dv_request_id' => $dvRequest->id,
+            'status'        => $status,
+            'remarks'       => $remarks,
+            'timestamp'     => $obligatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+
+        $this->pusher->trigger('dv-requests-budget-officer', 'ors-obligated', [
+            'dv_request_id' => $dvRequest->id,
+            'ors_number'    => $orsNumber,
+            'status'        => $status,
+            'timestamp'     => $obligatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'action_performer_id' => $currentUserId,
+            'budget_received_at' => $dvRequest->budget_received_at ? $dvRequest->budget_received_at->toISOString() : null,
+            'budget_verified_at' => $obligatedAt->toISOString(),
+        ]);
+        
+        $this->pusher->trigger('dv-requests-outgoing', 'dv-request-submitted', [
+            'dv_request_id' => $dvRequest->id,
+            'control_number' => $dvRequest->accounting_control_number,
+            'ors_number' => $orsRequest->ors_number,
+            'status' => $newStatus,
+            'submitted_by' => $dvRequest->focalPerson->fname . ' ' . $dvRequest->focalPerson->lname,
+            'program' => $dvRequest->program->prcode,
             'amount' => $dvRequest->amount,
-            'obligated_by' => $currentUserId,
-            'obligated_at' => now()->toISOString()
-        ]
-    );
-
-    // Create notifications and trigger events (existing code)...
-    $focalId = $dvRequest->focalperson_id;
-    $status  = 'ORS_obligated';
-    $action  = 'Obligated';
-    $uacsCount = count($request->uacscode_ids);
-    $adlCount = count($request->adlcode_ids);
-    $remarks = $request->remarks ?? "ORS Request Created with ORS Number: $orsNumber ({$uacsCount} UACS codes with amounts, {$adlCount} ADL codes)";
-
-    Notification::create([
-        'focalperson_id' => $focalId,
-        'dv_request_id'  => $dvRequest->id,
-        'status'         => $status,
-        'action'         => $action,
-        'remarks'        => $remarks,
-    ]);
-
-    // Trigger Pusher events (existing code)...
-    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-        'dv_request_id' => $dvRequest->id,
-        'status'        => $status,
-        'remarks'       => $remarks,
-        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-    ]);
-
-    $this->pusher->trigger('dv-requests-budget-officer', 'ors-obligated', [
-        'dv_request_id' => $dvRequest->id,
-        'ors_number'    => $orsNumber,
-        'status'        => $status,
-        'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-        'action_performer_id' => $currentUserId,
-    ]);
-    
-    $this->pusher->trigger('dv-requests-outgoing', 'dv-request-submitted', [
-        'dv_request_id' => $dvRequest->id,
-        'control_number' => $dvRequest->accounting_control_number,
-        'ors_number' => $orsRequest->ors_number,
-        'status' => 'ORS_obligated',
-        'submitted_by' => $dvRequest->focalPerson->fname . ' ' . $dvRequest->focalPerson->lname,
-        'program' => $dvRequest->program->prcode,
-        'amount' => $dvRequest->amount,
-        'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-    ]);
-    
-    $this->logAction(
-        $dvRequest->id,
-        'Budget_Officer',
-        $dvRequest->status,
-        "ORS Number $orsNumber assigned with $uacsCount UACS codes (total: ₱" . number_format(array_sum($request->uacs_amounts), 2) . ") and $adlCount ADL codes."
-    );
+            'timestamp' => $obligatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+        ]);
+        
+        $this->logAction(
+            $dvRequest->id,
+            'Budget_Officer',
+            $dvRequest->status,
+            "ORS Number $orsNumber assigned with $uacsCount UACS codes (total: ₱" . number_format($totalUacsAmount, 2) . ") and $adlCount ADL codes." .
+            " | Budget Verified: " . $obligatedAt->format('M d, Y H:i:s')
+        );
+    });
 
     $this->triggerDashboardUpdate();
 
@@ -1047,284 +1050,266 @@ public function store(Request $request, $dvRequestId)
         ->with('success', "ORS Request Created with ORS Number: $orsNumber ($uacsCount UACS codes with amounts, $adlCount ADL codes)")
         ->with('print_modal', true);
 }
-public function previewOrs($id)
-{
-    try {
-        \Log::info('Accessing previewOrs for ID: ' . $id);
-        
-        $dvRequest = DvRequest::with([
-            'program',
-            'focalPerson',
-            'respocenter',
-            'orsRequest.uacsCodes', // ✅ LOAD UACS CODES WITH PIVOT
-            'orsRequest.adlCodes',
-            'orsRequest.Mfopap',
-            'orsRequest.allotmentClass',
-            'orsRequest.continuingOrCurrent',
-            'verificationHistories'
-        ])->findOrFail($id);
-        
-        \Log::info('DV Request found:', [
-            'id' => $dvRequest->id,
-            'status' => $dvRequest->status,
-            'ors_number' => $dvRequest->orsRequest->ors_number ?? null
-        ]);
 
-        // ... existing verification checks ...
+    public function previewOrs($id)
+    {
+        try {
+            \Log::info('Accessing previewOrs for ID: ' . $id);
+            
+            $dvRequest = DvRequest::with([
+                'program',
+                'focalPerson',
+                'respocenter',
+                'orsRequest.uacsCodes',
+                'orsRequest.adlCodes',
+                'orsRequest.Mfopap',
+                'orsRequest.allotmentClass',
+                'orsRequest.continuingOrCurrent',
+                'verificationHistories'
+            ])->findOrFail($id);
+            
+            \Log::info('DV Request found:', [
+                'id' => $dvRequest->id,
+                'status' => $dvRequest->status,
+                'ors_number' => $dvRequest->orsRequest->ors_number ?? null,
+                'budget_received_at' => $dvRequest->budget_received_at,
+                'budget_verified_at' => $dvRequest->budget_verified_at,
+                'budget_last_action_at' => $dvRequest->budget_last_action_at,
+                'last_action_at' => $dvRequest->last_action_at,
+            ]);
 
-        $orsRequest = $dvRequest->orsRequest;
+            $orsRequest = $dvRequest->orsRequest;
 
-        // ✅ PREPARE UACS DATA WITH ALIGNED CODES AND AMOUNTS
-        $uacsCodes = $orsRequest->uacsCodes;
-        
-        // Create aligned arrays for UACS codes and amounts
-        $uacsLines = [];
-        $amountLines = [];
-        
-        foreach ($uacsCodes as $uacs) {
-            $amount = $uacs->pivot->amount ?? 0;
-            $uacsLines[] = $uacs->uacscode . ' - ' . $uacs->description;
-            $amountLines[] = '₱' . number_format($amount, 2);
-        }
+            $uacsCodes = $orsRequest->uacsCodes;
+            
+            $uacsLines = [];
+            $amountLines = [];
+            
+            foreach ($uacsCodes as $uacs) {
+                $amount = $uacs->pivot->amount ?? 0;
+                $uacsLines[] = $uacs->uacscode . ' - ' . $uacs->description;
+                $amountLines[] = '₱' . number_format($amount, 2);
+            }
 
-        // If no UACS codes, use defaults
-        if (empty($uacsLines)) {
-            $uacsLines[] = '—';
-            $amountLines[] = '—';
-        }
+            if (empty($uacsLines)) {
+                $uacsLines[] = '—';
+                $amountLines[] = '—';
+            }
 
-        $uacsDisplay = implode("\n", $uacsLines);
-        $uacsAmountsDisplay = implode("\n", $amountLines);
+            $uacsDisplay = implode("\n", $uacsLines);
+            $uacsAmountsDisplay = implode("\n", $amountLines);
 
-        // Prepare MFO/PAP display
-        $mfoDisplay = $orsRequest->Mfopap 
-            ? $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription 
-            : '—';
+            $mfoDisplay = $orsRequest->Mfopap 
+                ? $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription 
+                : '—';
 
-         $adlCodes = $orsRequest->adlCodes;
-        $adlDisplay = $adlCodes->isNotEmpty() 
-            ? $adlCodes->map(function($adl) {
-                return $adl->adlcode . ' - ' . $adl->description;
-            })->implode("\n") 
-            : '—';
+            $adlCodes = $orsRequest->adlCodes;
+            $adlDisplay = $adlCodes->isNotEmpty() 
+                ? $adlCodes->map(function($adl) {
+                    return $adl->adlcode . ' - ' . $adl->description;
+                })->implode("\n") 
+                : '—';
 
-
-        // Prepare data for the view
-        $data = [
-            'responsibility_center' => trim(($dvRequest->respocenter->rccode ?? '') . ' - ' . ($dvRequest->respocenter->description ?? '')),
-            'ors_no' => $orsRequest->ors_number,
-            'payee' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-            'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
-            'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('F d, Y') : now()->format('F d, Y'),
-            'address' => 'Davao City',      
-            'particular_desc' => $dvRequest->program->prcode ?? 'Program',
-            'mfo' => $mfoDisplay,
-            'adl_codes' => $adlDisplay,
-            'uacs' => $uacsDisplay,
-            'uacs_amounts' => $uacsAmountsDisplay, // ✅ ALIGNED UACS AMOUNTS
-            'amount' => $dvRequest->amount,
-        ];
-
-        // Status rows
-        $status = [
-            [
-                'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('m/d/Y') : now()->format('m/d/Y'),
+            $data = [
+                'responsibility_center' => trim(($dvRequest->respocenter->rccode ?? '') . ' - ' . ($dvRequest->respocenter->description ?? '')),
+                'ors_no' => $orsRequest->ors_number,
+                'payee' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
                 'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
-                'ref_no' => $orsRequest->ors_number,
-                'obligation' => '₱' . number_format($dvRequest->amount, 2),
-                'payment' => '',
-                'due_status' => 'Not yet Due',
-            ]
-        ];
-
-        // Get signatories
-        $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
-        $budget_officer = \App\Models\Setting::get('budget_officer', auth()->user()->name ?? 'Budget Officer');
-
-        return view('BudgetOfficer.previewors', [
-            'data' => $data,
-            'status' => $status,
-            'imsd_head' => $imsd_head,
-            'budget_officer' => $budget_officer,
-            'dvRequest' => $dvRequest,
-            'orsRequest' => $orsRequest,
-        ]);
-
-    } catch (\Exception $e) {
-        \Log::error('Error in previewOrs: ' . $e->getMessage());
-        return redirect()->route('BudgetOfficer.dvrequests.index')
-            ->with('error', 'Error accessing ORS preview: ' . $e->getMessage());
-    }
-}
-
-public function generateORSPDF($id)
-{
-    try {
-        \Log::info('=== ORS PDF Generation Started ===', ['id' => $id]);
-        
-        $dvRequest = DvRequest::with([
-            'program',
-            'focalPerson', 
-            'respocenter',
-            'orsRequest.uacsCodes',
-            'orsRequest.adlCodes',
-            'orsRequest.Mfopap',
-            'orsRequest.allotmentClass',
-            'orsRequest.continuingOrCurrent',
-            'verificationHistories'
-        ])->findOrFail($id);
-
-        // Check if ORS has been obligated
-        $obligatedHistory = $dvRequest->verificationHistories()
-            ->where('status_after', 'ORS_obligated')
-            ->latest()
-            ->first();
-
-        if (!$obligatedHistory || !$dvRequest->orsRequest) {
-            \Log::error('ORS not obligated for PDF generation', ['id' => $dvRequest->id]);
-            return redirect()->back()->with('error', 'ORS must be obligated before generating PDF.');
-        }
-
-        $orsRequest = $dvRequest->orsRequest;
-
-        // ✅ ADD LOGO HANDLING
-        $logo_url = null;
-        $logoPath = '/home/u203167746/domains/accudocs.accudocs.site/AccudocsProject/storage/app/public/logo/DOLE.png';
-        
-        if (file_exists($logoPath)) {
-            $imageData = file_get_contents($logoPath);
-            $base64 = base64_encode($imageData);
-            $logo_url = 'data:image/png;base64,' . $base64;
-            \Log::info('Logo loaded for ORS PDF');
-        } else {
-            // Fallback SVG logo
-            $svg = '<svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
-                <rect width="200" height="100" fill="#f8f9fa" stroke="#dee2e6"/>
-                <text x="100" y="50" text-anchor="middle" dy=".3em" font-family="Arial" font-size="12" fill="#6c757d">DOLE LOGO</text>
-            </svg>';
-            $logo_url = 'data:image/svg+xml;base64,' . base64_encode($svg);
-            \Log::info('Using SVG fallback logo for ORS PDF');
-        }
-
-        // ✅ PREPARE UACS DATA AS STRUCTURED ARRAY
-        $uacsItems = [];
-        foreach ($orsRequest->uacsCodes as $uacs) {
-            $amount = $uacs->pivot->amount ?? 0;
-            $uacsItems[] = [
-                'code' => $uacs->uacscode,
-                'description' => $uacs->description,
-                'amount' => $amount
+                'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('F d, Y') : now()->format('F d, Y'),
+                'address' => 'Davao City',      
+                'particular_desc' => $dvRequest->program->prcode ?? 'Program',
+                'mfo' => $mfoDisplay,
+                'adl_codes' => $adlDisplay,
+                'uacs' => $uacsDisplay,
+                'uacs_amounts' => $uacsAmountsDisplay,
+                'amount' => $dvRequest->amount,
             ];
+
+            $status = [
+                [
+                    'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('m/d/Y') : now()->format('m/d/Y'),
+                    'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
+                    'ref_no' => $orsRequest->ors_number,
+                    'obligation' => '₱' . number_format($dvRequest->amount, 2),
+                    'payment' => '',
+                    'due_status' => 'Not yet Due',
+                ]
+            ];
+
+            $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
+            $budget_officer = \App\Models\Setting::get('budget_officer', auth()->user()->name ?? 'Budget Officer');
+
+            return view('BudgetOfficer.previewors', [
+                'data' => $data,
+                'status' => $status,
+                'imsd_head' => $imsd_head,
+                'budget_officer' => $budget_officer,
+                'dvRequest' => $dvRequest,
+                'orsRequest' => $orsRequest,
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in previewOrs: ' . $e->getMessage());
+            return redirect()->route('BudgetOfficer.dvrequests.index')
+                ->with('error', 'Error accessing ORS preview: ' . $e->getMessage());
         }
-
-        // Prepare MFO/PAP display
-        $mfoDisplay = $orsRequest->Mfopap 
-            ? $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription 
-            : '—';
-
-        // Prepare ADL codes
-        $adlCodes = $orsRequest->adlCodes;
-        $adlDisplay = $adlCodes->isNotEmpty() 
-            ? $adlCodes->map(function($adl) {
-                return $adl->adlcode . ' - ' . $adl->description;
-            })->implode("\n") 
-            : '—';
-
-        // ✅ FOR COMPATIBILITY: Also prepare the old format
-        $uacsLines = [];
-        $amountLines = [];
-        foreach ($uacsItems as $item) {
-            $uacsLines[] = $item['code'] . ' - ' . $item['description'];
-            $amountLines[] = '₱' . number_format($item['amount'], 2);
-        }
-
-        $uacsDisplay = implode("\n", $uacsLines);
-        $uacsAmountsDisplay = implode("\n", $amountLines);
-
-        // Prepare data for PDF
-        $data = [
-            'responsibility_center' => trim(($dvRequest->respocenter->rccode ?? '') . ' - ' . ($dvRequest->respocenter->description ?? '')),
-            'ors_no' => $orsRequest->ors_number,
-            'payee' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-            'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
-            'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('F d, Y') : now()->format('F d, Y'),
-            'address' => $dvRequest->focalPerson->Address ?? 'Davao City',      
-            'particular_desc' => $dvRequest->program->prcode ?? 'Program',
-            'mfo' => $mfoDisplay,
-            'adl_codes' => $adlDisplay,
-            'uacs_items' => $uacsItems, // ✅ NEW STRUCTURED FORMAT
-            'uacs' => $uacsDisplay, // ✅ OLD FORMAT FOR COMPATIBILITY
-            'uacs_amounts' => $uacsAmountsDisplay, // ✅ OLD FORMAT FOR COMPATIBILITY
-            'amount' => $dvRequest->amount,
-        ];
-
-        // Status rows
-        $status = [
-            [
-                'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('m/d/Y') : now()->format('m/d/Y'),
-                'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
-                'ref_no' => $orsRequest->ors_number,
-                'obligation' => number_format($dvRequest->amount, 2),
-                'payment' => '',
-                'due_status' => 'Not yet Due',
-            ]
-        ];
-
-        $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
-        $budget_officer = \App\Models\Setting::get('budget_officer', auth()->user()->name ?? 'Budget Officer');
-
-        // ✅ MANUAL DOMPDF INSTANCE - BYPASS LARAVEL WRAPPER
-        $dompdf = new \Dompdf\Dompdf();
-        
-        // Set options directly
-        $options = new \Dompdf\Options();
-        $options->set('defaultFont', 'Times New Roman');
-        $options->set('isHtml5ParserEnabled', true);
-        $options->set('isRemoteEnabled', false); // ← CRITICAL: Set to false
-        $options->set('isFontSubsettingEnabled', true);
-        $options->set('chroot', base_path());
-        $options->set('tempDir', sys_get_temp_dir());
-        $options->set('fontDir', storage_path('fonts'));
-        $options->set('fontCache', storage_path('fonts'));
-        
-        $dompdf->setOptions($options);
-        $dompdf->setPaper('Legal', 'portrait');
-
-        // Load HTML content - ADD LOGO_URL TO COMPACT
-        $html = view('pdf.finalors', compact(
-            'data', 
-            'status',
-            'imsd_head',
-            'budget_officer',
-            'logo_url' // ← ADD THIS
-        ))->render();
-
-        $dompdf->loadHtml($html);
-        $dompdf->render();
-
-        $filename = 'ORS_' . $orsRequest->ors_number . '_' . now()->format('Ymd_His') . '.pdf';
-
-        return $dompdf->stream($filename);
-
-    } catch (\Exception $e) {
-        \Log::error('ORS PDF Generation Failed', [
-            'id' => $id, 
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        
-        return redirect()->back()->with('error', 'Failed to generate ORS PDF: ' . $e->getMessage());
     }
-}
+
+    public function generateORSPDF($id)
+    {
+        try {
+            \Log::info('=== ORS PDF Generation Started ===', ['id' => $id]);
+            
+            $dvRequest = DvRequest::with([
+                'program',
+                'focalPerson', 
+                'respocenter',
+                'orsRequest.uacsCodes',
+                'orsRequest.adlCodes',
+                'orsRequest.Mfopap',
+                'orsRequest.allotmentClass',
+                'orsRequest.continuingOrCurrent',
+                'verificationHistories'
+            ])->findOrFail($id);
+
+            $obligatedHistory = $dvRequest->verificationHistories()
+                ->where('status_after', 'ORS_obligated')
+                ->latest()
+                ->first();
+
+            if (!$obligatedHistory || !$dvRequest->orsRequest) {
+                \Log::error('ORS not obligated for PDF generation', ['id' => $dvRequest->id]);
+                return redirect()->back()->with('error', 'ORS must be obligated before generating PDF.');
+            }
+
+            $orsRequest = $dvRequest->orsRequest;
+
+            $logo_url = null;
+            $logoPath = '/home/u203167746/domains/accudocs.accudocs.site/AccudocsProject/storage/app/public/logo/DOLE.png';
+            
+            if (file_exists($logoPath)) {
+                $imageData = file_get_contents($logoPath);
+                $base64 = base64_encode($imageData);
+                $logo_url = 'data:image/png;base64,' . $base64;
+                \Log::info('Logo loaded for ORS PDF');
+            } else {
+                $svg = '<svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="200" height="100" fill="#f8f9fa" stroke="#dee2e6"/>
+                    <text x="100" y="50" text-anchor="middle" dy=".3em" font-family="Arial" font-size="12" fill="#6c757d">DOLE LOGO</text>
+                </svg>';
+                $logo_url = 'data:image/svg+xml;base64,' . base64_encode($svg);
+                \Log::info('Using SVG fallback logo for ORS PDF');
+            }
+
+            $uacsItems = [];
+            foreach ($orsRequest->uacsCodes as $uacs) {
+                $amount = $uacs->pivot->amount ?? 0;
+                $uacsItems[] = [
+                    'code' => $uacs->uacscode,
+                    'description' => $uacs->description,
+                    'amount' => $amount
+                ];
+            }
+
+            $mfoDisplay = $orsRequest->Mfopap 
+                ? $orsRequest->Mfopap->mfocode . ' - ' . $orsRequest->Mfopap->mfodescription 
+                : '—';
+
+            $adlCodes = $orsRequest->adlCodes;
+            $adlDisplay = $adlCodes->isNotEmpty() 
+                ? $adlCodes->map(function($adl) {
+                    return $adl->adlcode . ' - ' . $adl->description;
+                })->implode("\n") 
+                : '—';
+
+            $uacsLines = [];
+            $amountLines = [];
+            foreach ($uacsItems as $item) {
+                $uacsLines[] = $item['code'] . ' - ' . $item['description'];
+                $amountLines[] = '₱' . number_format($item['amount'], 2);
+            }
+
+            $uacsDisplay = implode("\n", $uacsLines);
+            $uacsAmountsDisplay = implode("\n", $amountLines);
+
+            $data = [
+                'responsibility_center' => trim(($dvRequest->respocenter->rccode ?? '') . ' - ' . ($dvRequest->respocenter->description ?? '')),
+                'ors_no' => $orsRequest->ors_number,
+                'payee' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
+                'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('F d, Y') : now()->format('F d, Y'),
+                'address' => $dvRequest->focalPerson->Address ?? 'Davao City',      
+                'particular_desc' => $dvRequest->program->prcode ?? 'Program',
+                'mfo' => $mfoDisplay,
+                'adl_codes' => $adlDisplay,
+                'uacs_items' => $uacsItems,
+                'uacs' => $uacsDisplay,
+                'uacs_amounts' => $uacsAmountsDisplay,
+                'amount' => $dvRequest->amount,
+            ];
+
+            $status = [
+                [
+                    'date' => $orsRequest->obligated_at ? $orsRequest->obligated_at->format('m/d/Y') : now()->format('m/d/Y'),
+                    'particulars' => $dvRequest->particulars ?? $dvRequest->purpose ?? 'N/A',
+                    'ref_no' => $orsRequest->ors_number,
+                    'obligation' => number_format($dvRequest->amount, 2),
+                    'payment' => '',
+                    'due_status' => 'Not yet Due',
+                ]
+            ];
+
+            $imsd_head = \App\Models\Setting::get('imsd_head', 'NAME OF IMSD HEAD');
+            $budget_officer = \App\Models\Setting::get('budget_officer', auth()->user()->name ?? 'Budget Officer');
+
+            $dompdf = new \Dompdf\Dompdf();
+            
+            $options = new \Dompdf\Options();
+            $options->set('defaultFont', 'Times New Roman');
+            $options->set('isHtml5ParserEnabled', true);
+            $options->set('isRemoteEnabled', false);
+            $options->set('isFontSubsettingEnabled', true);
+            $options->set('chroot', base_path());
+            $options->set('tempDir', sys_get_temp_dir());
+            $options->set('fontDir', storage_path('fonts'));
+            $options->set('fontCache', storage_path('fonts'));
+            
+            $dompdf->setOptions($options);
+            $dompdf->setPaper('Legal', 'portrait');
+
+            $html = view('pdf.finalors', compact(
+                'data', 
+                'status',
+                'imsd_head',
+                'budget_officer',
+                'logo_url'
+            ))->render();
+
+            $dompdf->loadHtml($html);
+            $dompdf->render();
+
+            $filename = 'ORS_' . $orsRequest->ors_number . '_' . now()->format('Ymd_His') . '.pdf';
+
+            return $dompdf->stream($filename);
+
+        } catch (\Exception $e) {
+            \Log::error('ORS PDF Generation Failed', [
+                'id' => $id, 
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->back()->with('error', 'Failed to generate ORS PDF: ' . $e->getMessage());
+        }
+    }
+
     private function formatFullName($fname, $mi, $lname)
     {
         $name = trim($fname . ' ' . ($mi ? $mi . ' ' : '') . $lname);
         return $name ?: 'NAME OF PAYEE';
     }
-    /**
-     * Reject an ORS request
-     */
-   public function reject(Request $request, $id)
+
+    public function reject(Request $request, $id)
     {
         try {
             $request->validate([
@@ -1338,8 +1323,8 @@ public function generateORSPDF($id)
             $statusBefore = $dvRequest->status;
             $currentUserId = auth()->id();
             $rejectedAt = now();
+            $newStatus = 'ORS_rejected';
 
-            // Check if request can be rejected
             if (!in_array($dvRequest->status, [
                 'Incoming-TUPAD_verified', 
                 'Incoming-GIP_verified',
@@ -1347,24 +1332,28 @@ public function generateORSPDF($id)
                 'ORS_received',
                 'ORS_onhold'
             ])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This request cannot be rejected at its current status: ' . $statusBefore
-                ], 422);
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This request cannot be rejected at its current status: ' . $statusBefore
+                    ], 422);
+                }
+                return redirect()->back()->with('error', 'This request cannot be rejected at its current status: ' . $statusBefore);
             }
 
-            // Check if locked by another user
             $lockDuration = now()->subMinutes(10);
             if ($dvRequest->locked_by && 
                 $dvRequest->locked_by !== $currentUserId && 
                 $dvRequest->locked_at >= $lockDuration) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This request is currently locked by another user.'
-                ], 422);
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This request is currently locked by another user.'
+                    ], 422);
+                }
+                return redirect()->back()->with('error', 'This request is currently locked by another user.');
             }
 
-            // ✅ FIX: Initialize variables before transaction
             $emailSent = false;
             $smsSent = false;
 
@@ -1374,94 +1363,101 @@ public function generateORSPDF($id)
                 $rejectedAt, 
                 $request, 
                 $currentUserId,
+                $newStatus,
                 &$emailSent,
                 &$smsSent
             ) {
-                // Update DV Request
+                $this->archiveToHistory($dvRequest, $newStatus, $request->remarks);
+                
+                $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+                
                 $dvRequest->update([
-                    'status'       => 'ORS_rejected',
-                    'rejected_by'  => $currentUserId,
-                    'rejected_at'  => $rejectedAt,
-                    'locked_by'    => null,
-                    'locked_at'    => null,
+                    'status'                 => $newStatus,
+                    'rejected_by'            => $currentUserId,
+                    'rejected_at'            => $rejectedAt,
+                    'budget_last_action_at'  => $rejectedAt,
+                    'locked_by'              => null,
+                    'locked_at'              => null,
+                    'last_action_at'         => $rejectedAt,
                 ]);
 
-                // Update ORS Request if exists
                 if ($dvRequest->orsRequest) {
                     $dvRequest->orsRequest->update([
-                        'status'      => 'ORS_rejected',
-                        'rejected_by' => $currentUserId,
-                        'rejected_at' => $rejectedAt,
+                        'status'                 => $newStatus,
+                        'rejected_by'            => $currentUserId,
+                        'rejected_at'            => $rejectedAt,
+                        'budget_last_action_at'  => $rejectedAt,
+                        'last_action_at'         => $rejectedAt,
                     ]);
                 }
 
-                // ✅ SEND REJECTION EMAIL USING SENDPULSE
                 $emailSent = $this->sendRejectionEmail($dvRequest, $request->remarks);
 
-                // ✅ NEW: SEND REJECTION SMS
                 $smsSent = $this->sendRejectionSMS($dvRequest, $request->remarks);
 
-                // Save verification history
                 $this->saveBudgetObligationHistory(
                     $dvRequest,
                     'reject',
                     $request->remarks,
                     [
-                        'status_before'   => $statusBefore,
-                        'status_after'    => 'ORS_rejected',
-                        'rejected_by'     => $currentUserId,
-                        'rejected_at'     => $rejectedAt->toISOString(),
-                        'rejection_reason' => $request->remarks,
-                        'amount'          => $dvRequest->amount,
-                        'ors_request_id'  => $dvRequest->orsRequest->id ?? null
+                        'status_before'       => $statusBefore,
+                        'status_after'        => $newStatus,
+                        'rejected_by'         => $currentUserId,
+                        'rejected_at'         => $rejectedAt->toISOString(),
+                        'budget_last_action_at' => $rejectedAt->toISOString(),
+                        'rejection_reason'    => $request->remarks,
+                        'amount'              => $dvRequest->amount,
+                        'ors_request_id'      => $dvRequest->orsRequest->id ?? null,
+                        'budget_received_at'  => $dvRequest->budget_received_at ? $dvRequest->budget_received_at->toISOString() : null,
+                        'last_action_at'      => $rejectedAt->toISOString(),
                     ]
                 );
 
-                // Log action
                 $this->logAction(
                     $dvRequest->id,
                     'Budget_Officer',
-                    'ORS_rejected',
-                    $request->remarks
+                    $newStatus,
+                    "Rejected by Budget Officer: {$request->remarks}. " . 
+                    "Budget Last Action: {$rejectedAt->format('M d, Y H:i:s')}"
                 );
 
-                // Create notification for focal person
                 $focalId = $dvRequest->focalperson_id;
                 if ($focalId) {
                     Notification::create([
                         'focalperson_id' => $focalId,
                         'dv_request_id'  => $dvRequest->id,
-                        'status'         => 'ORS_rejected',
+                        'status'         => $newStatus,
                         'action'         => 'Rejected',
                         'remarks'        => $request->remarks,
                     ]);
 
-                    // Trigger Pusher event to focal person
                     $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                         'dv_request_id' => $dvRequest->id,
-                        'status'        => 'ORS_rejected',
+                        'status'        => $newStatus,
                         'action'        => 'Rejected',
                         'remarks'       => $request->remarks,
                         'timestamp'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'budget_last_action_at' => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                     ]);
                 }
 
-                // Trigger Pusher event to Budget Officer channel
                 $this->pusher->trigger('dv-requests-budget-officer', 'ors-rejected', [
                     'dv_request_id'      => $dvRequest->id,
                     'control_number'     => $dvRequest->accounting_control_number ? 
                         'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
                         'Unknown',
-                    'status'             => 'ORS_rejected',
+                    'status'             => $newStatus,
                     'rejected_by'        => auth()->user()->name ?? 'Budget Officer',
                     'timestamp'          => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                     'action_performer_id' => $currentUserId,
+                    'budget_received_at' => $dvRequest->budget_received_at ? $dvRequest->budget_received_at->timezone('Asia/Manila')->format('M d, Y h:i A') : null,
+                    'budget_last_action_at' => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'last_action_at'     => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                 ]);
             });
 
-            $this->triggerDashboardUpdate(); // TRIGGER DASHBOARD UPDATE
+            $this->triggerDashboardUpdate();
 
-            // ✅ FIX: Update response message to include both email and SMS status
             $responseMessage = 'ORS request has been rejected';
             
             if ($emailSent && $smsSent) {
@@ -1479,11 +1475,20 @@ public function generateORSPDF($id)
                     'success' => true,
                     'message' => $responseMessage,
                     'data' => [
-                        'id'          => $dvRequest->id,
-                        'status'      => 'ORS_rejected',
-                        'rejected_at' => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                        'email_sent'  => $emailSent,
-                        'sms_sent'    => $smsSent
+                        'id'                   => $dvRequest->id,
+                        'status'               => $newStatus,
+                        'rejected_at'          => $rejectedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                        'budget_last_action_at' => $rejectedAt->timezone('Asia/Manila')->format('M d, Y H:i:s'),
+                        'email_sent'           => $emailSent,
+                        'sms_sent'             => $smsSent,
+                        'budget_received_at'   => $dvRequest->budget_received_at ? $dvRequest->budget_received_at->timezone('Asia/Manila')->format('M d, Y h:i A') : null,
+                        'last_action_at'       => $rejectedAt->timezone('Asia/Manila')->format('M d, Y H:i:s'),
+                        'timestamps' => [
+                            'rejected' => $rejectedAt->toISOString(),
+                            'budget_last_action' => $rejectedAt->toISOString(),
+                            'budget_received' => $dvRequest->budget_received_at ? $dvRequest->budget_received_at->toISOString() : null,
+                            'last_action' => $rejectedAt->toISOString(),
+                        ]
                     ]
                 ]);
             }
@@ -1492,6 +1497,11 @@ public function generateORSPDF($id)
                 ->with('success', 'ORS request has been rejected successfully.');
 
         } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation error in reject method', [
+                'errors' => $e->errors(),
+                'dv_request_id' => $id
+            ]);
+            
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => false,
@@ -1501,6 +1511,7 @@ public function generateORSPDF($id)
             return redirect()->back()->withErrors($e->validator)->withInput();
             
         } catch (\Exception $e) {
+            DB::rollBack();
             \Log::error('Error rejecting ORS request: ' . $e->getMessage(), [
                 'dv_request_id' => $id,
                 'user_id' => auth()->id(),
@@ -1514,19 +1525,39 @@ public function generateORSPDF($id)
                 ], 500);
             }
 
-            return redirect()->back()->with('error', 'An error occurred while rejecting the request.');
+            return redirect()->back()->with('error', 'An error occurred while rejecting the request: ' . $e->getMessage());
         }
     }
 
-    /**
-     * ✅ SEND REJECTION SMS - For Budget Officer rejections
-     */
+    protected function archiveToHistory(DvRequest $dvRequest, $status, $reason)
+    {
+        return DvRequestHistory::create([
+            'dv_request_id' => $dvRequest->id,
+            'reference_number' => $dvRequest->reference_number,
+            'dv_number' => $dvRequest->dv_number,
+            'ors_number' => $dvRequest->ors_number,
+            'user_sequence' => $dvRequest->user_sequence,
+            'accounting_control_number' => $dvRequest->accounting_control_number,
+            'accountingunit_id' => $dvRequest->accountingunit_id,
+            'focalperson_id' => $dvRequest->focalperson_id,
+            'program_id' => $dvRequest->program_id,
+            'respocenter_id' => $dvRequest->respocenter_id,
+            'particulars' => $dvRequest->particulars,
+            'amount' => $dvRequest->amount,
+            'status' => $status,
+            'tupad_modality' => $dvRequest->tupad_modality,
+            'tev_modality' => $dvRequest->tev_modality,
+            'history_reason' => $reason,
+            'moved_to_history_at' => now(),
+            'moved_by' => auth()->id(),
+        ]);
+    }
+
     protected function sendRejectionSMS($dvRequest, $rejectionRemarks)
     {
         try {
             $focalPerson = $dvRequest->focalPerson;
             
-            // Use 'contactnumber' instead of 'phone'
             if (!$focalPerson || empty($focalPerson->contactnumber)) {
                 \Log::warning('Cannot send rejection SMS: focal person or contact number missing', [
                     'dv_request_id' => $dvRequest->id,
@@ -1538,12 +1569,10 @@ public function generateORSPDF($id)
 
             $phoneNumber = $focalPerson->contactnumber;
             
-            // Truncate remarks for SMS (SMS has character limits)
             $truncatedRemarks = strlen($rejectionRemarks) > 100 
                 ? substr($rejectionRemarks, 0, 97) . '...'
                 : $rejectionRemarks;
 
-            // ✅ FIX: Use user_sequence instead of id
             $userSequence = $dvRequest->user_sequence ?? 'N/A';
             $message = "Hi {$focalPerson->fname}, your DVORS #{$userSequence}. {$truncatedRemarks}.";
 
@@ -1591,7 +1620,7 @@ public function generateORSPDF($id)
             'dvRequest.focalPerson', 
             'dvRequest.respocenter',
             'orsRequest.uacsCodes',
-            'orsRequest.adlCodes',           // Use adlCodes (many-to-many) instead of adlCode
+            'orsRequest.adlCodes',
             'orsRequest.Mfopap',
             'orsRequest.AllotmentClass',
             'orsRequest.ContinuingOrCurrent',
@@ -1601,21 +1630,17 @@ public function generateORSPDF($id)
             $query->whereHas('dvRequest', function($q) use ($request) {
                 $searchTerm = $request->search;
                 
-                // Check if search includes the full CN format
                 if (preg_match('/CN\s*#-(\d{4})-(\d+)/', $searchTerm, $matches)) {
                     $year = $matches[1];
                     $controlNumber = $matches[2];
                     
                     $q->where('accounting_control_number', 'like', '%' . $controlNumber . '%');
                 } 
-                // Check if search includes year-controlnumber format
                 elseif (preg_match('/(\d{4})-(\d+)/', $searchTerm, $matches)) {
                     $controlNumber = $matches[2];
                     $q->where('accounting_control_number', 'like', '%' . $controlNumber . '%');
                 }
-                // Regular search (just numbers)
                 else {
-                    // Extract only numbers from search term
                     $numbersOnly = preg_replace('/[^0-9]/', '', $searchTerm);
                     if (!empty($numbersOnly)) {
                         $q->where('accounting_control_number', 'like', '%' . $numbersOnly . '%');
@@ -1624,19 +1649,16 @@ public function generateORSPDF($id)
             });
         }
 
-        // Filter by Program
         if ($request->has('program') && $request->program) {
             $query->whereHas('dvRequest.program', function($q) use ($request) {
                 $q->where('prcode', $request->program);
             });
         }
 
-        // Filter by Verification Step
         if ($request->has('step') && $request->step) {
             $query->where('verification_step', $request->step);
         }
 
-        // Date range filter
         if ($request->has('date_from') && $request->date_from) {
             $query->whereDate('verified_at', '>=', $request->date_from);
         }
@@ -1649,30 +1671,20 @@ public function generateORSPDF($id)
                                     ->paginate(20)
                                     ->appends($request->all());
 
-        // Get programs for filter dropdown
         $programs = Program::all();
 
         return view('BudgetOfficer.loghistory', compact('verificationHistory', 'programs'));
     }
 
-    /**
-     * VERIFICATION HISTORY HELPER METHOD
-     * Saves verification history with preserved obligation amount
-     */
-    protected function saveBudgetObligationHistory($dvRequest, $step, $remarks = null, $data = [])
+    protected function saveBudgetObligationHistory($dvRequest, $step, $remarks = null, array $data = [])
     {
-        // ✅ Capture the amount at the time of obligation
-        // Only store obligated_amount when the step is 'obligate' or 'receive'
         $obligatedAmount = null;
         
         if ($step === 'obligate') {
-            // For obligation, use the current DV request amount
             $obligatedAmount = $dvRequest->amount;
         } elseif ($step === 'receive') {
-            // For receive, also capture the amount at reception
             $obligatedAmount = $dvRequest->amount;
         }
-        // For other steps (reject, amount_updated, etc.), leave it null
         
         BudgetObligationHistory::create([
             'dv_request_id' => $dvRequest->id,
@@ -1682,11 +1694,12 @@ public function generateORSPDF($id)
             'status_before' => $data['status_before'] ?? $dvRequest->getOriginal('status'),
             'status_after' => $dvRequest->status,
             'verification_data' => $data,
-            'obligated_amount' => $obligatedAmount, // ✅ NEW: Store the immutable amount
+            'obligated_amount' => $obligatedAmount,
             'remarks' => $remarks,
             'verified_at' => now(),
         ]);
     }
+    
     private function generateOrsNumber($allotmentClassId, $contcurrentId, $dvRequest)
     {
         $year  = now()->format('Y');
@@ -1695,16 +1708,13 @@ public function generateORSPDF($id)
         $allotment = AllotmentClass::findOrFail($allotmentClassId)->allotcode;
         $ccode     = ContinuingOrCurrent::findOrFail($contcurrentId)->ccode;
 
-        // ✅ Use the accounting_control_number as the series
-        $series = $dvRequest->accounting_control_number; // fallback if null
+        $series = $dvRequest->accounting_control_number;
         $seriesFormatted = str_pad($series, 4, '0', STR_PAD_LEFT);
 
         $orsNumber = "{$allotment}-{$ccode}-{$year}-{$month}-{$seriesFormatted}";
 
-        // ✅ Ensure uniqueness (just to be safe)
         $exists = OrsRequest::where('ors_number', $orsNumber)->exists();
         if ($exists) {
-            // Append a suffix if duplicate found (shouldn't normally happen)
             $orsNumber .= '-DUP';
         }
         if (empty($dvRequest->accounting_control_number)) {
@@ -1716,22 +1726,22 @@ public function generateORSPDF($id)
     public function onhold(Request $request, $id)
     {
         $dvRequest = DvRequest::findOrFail($id);
+        $newStatus = 'ORS_onhold';
 
+        $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+        
         $dvRequest->update([
-            'status' => 'ORS_onhold',
+            'status' => $newStatus,
         ]);
         
         if ($dvRequest->orsRequest) {
             $dvRequest->orsRequest->update([
-                'status' => 'ORS_onhold',
+                'status' => $newStatus,
             ]);
         }
 
-        // ✅ SEND EMAIL NOTIFICATION USING SENDPULSE
-        
-
         $focalId = $dvRequest->focalperson_id;
-        $status  = 'ORS_onhold';
+        $status  = $newStatus;
         $action  = 'On hold';
         $remarks = $request->remarks ?? "ORS request placed on hold";
 
@@ -1743,7 +1753,6 @@ public function generateORSPDF($id)
             'remarks'        => $remarks,
         ]);
 
-        // ✅ Trigger Pusher events
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
@@ -1751,7 +1760,6 @@ public function generateORSPDF($id)
             'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
-        // ✅ To Budget Officer channel
         $this->pusher->trigger('dv-requests-budget-officer', 'ors-onhold', [
             'dv_request_id' => $dvRequest->id,
             'status'        => $status,
@@ -1761,11 +1769,12 @@ public function generateORSPDF($id)
         $this->logAction(
             $dvRequest->id,
             'Budget Officer',
-            'ORS_onhold',
-            $request->remarks ?? 'ORS request placed on hold'
+            $newStatus,
+            ($request->remarks ?? 'ORS request placed on hold') . 
+            ' | Budget Last action: ' . now()->format('M d, Y H:i:s')
         );
 
-        $this->triggerDashboardUpdate(); // TRIGGER DASHBOARD UPDATE
+        $this->triggerDashboardUpdate();
 
         return redirect()
             ->back()
@@ -1775,54 +1784,52 @@ public function generateORSPDF($id)
     public function revise(Request $request, $id)
     {
         $dvRequest = DvRequest::findOrFail($id);
+        $newStatus = 'ORS_for_revision';
 
+        $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+        
         $dvRequest->update([
-            'status' => 'ORS_for_revision',
+            'status' => $newStatus,
         ]);
 
         if ($dvRequest->orsRequest) {
             $dvRequest->orsRequest->update([
-                'status' => 'ORS_for_revision',
+                'status' => $newStatus,
             ]);
         }
-
-        // ✅ SEND EMAIL NOTIFICATION USING SENDPULSE
 
         $focalId = $dvRequest->focalperson_id;
         $remarks = $request->remarks ?? 'ORS request sent back for revision';
 
-        // ✅ Notify focal person
         Notification::create([
             'focalperson_id' => $focalId,
             'dv_request_id'  => $dvRequest->id,
-            'status'         => 'ORS_for_revision',
+            'status'         => $newStatus,
             'action'         => 'For Revision',
             'remarks'        => $remarks,
         ]);
 
-        // ✅ Trigger Pusher events
         $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
             'dv_request_id' => $dvRequest->id,
-            'status'        => 'ORS_for_revision',
+            'status'        => $newStatus,
             'remarks'       => $remarks,
             'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
-        // ✅ To Budget Officer channel
         $this->pusher->trigger('dv-requests-budget-officer', 'ors-revised', [
             'dv_request_id' => $dvRequest->id,
-            'status'        => 'ORS_for_revision',
+            'status'        => $newStatus,
             'timestamp'     => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
         ]);
 
         $this->logAction(
             $dvRequest->id,
             'Budget_Officer',
-            'ORS_for_revision',
-            $remarks
+            $newStatus,
+            $remarks . ' | Budget Last action: ' . now()->format('M d, Y H:i:s')
         );
 
-        $this->triggerDashboardUpdate(); // TRIGGER DASHBOARD UPDATE
+        $this->triggerDashboardUpdate();
 
         return redirect()
             ->back()
@@ -1848,6 +1855,7 @@ public function generateORSPDF($id)
 
         DvRequestLog::create($logData);
     }
+    
     protected function sendRejectionEmail($dvRequest, $rejectionRemarks)
     {
         try {
@@ -1870,7 +1878,6 @@ public function generateORSPDF($id)
                 'dv_request_id' => $dvRequest->id
             ]);
 
-            // Check if class exists before instantiating
             if (!class_exists(SendPulseServices::class)) {
                 \Log::error('SendPulseServices class not found');
                 return $this->sendFallbackEmail($toEmail, $toName, $dvRequest, 'ORS_rejected', $rejectionRemarks);
@@ -1902,7 +1909,6 @@ public function generateORSPDF($id)
         }
     }
 
-    // Add fallback email method
     protected function sendFallbackEmail($toEmail, $toName, $dvRequest, $status, $remarks = null)
     {
         try {

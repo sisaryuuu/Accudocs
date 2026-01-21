@@ -941,139 +941,196 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function renderAgingAlerts(documents, count) {
-        if (!agingAlertsContainer) return;
+    if (!agingAlertsContainer || !documents || documents.length === 0) {
+        if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
+        return;
+    }
 
-        if (!documents || documents.length === 0) {
-            agingAlertsContainer.innerHTML = '';
-            return;
+    // Filter for aging RANCA documents (exclude validated/completed)
+    const agingDocs = documents.filter(doc => !['RANCA_validated', 'completed'].includes(doc.status));
+    
+    if (agingDocs.length === 0) {
+        agingAlertsContainer.innerHTML = '';
+        return;
+    }
+
+    // Ensure positive days_old values
+    agingDocs.forEach(doc => {
+        const days = Math.abs(Math.floor(Number(doc.days_old))) || 0;
+        doc.days_old = days;
+        // RANCA urgency: critical (10+ days), high (7-10), medium (3-7), low (<3)
+        doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
+    });
+
+    // Calculate statistics
+    const stats = {
+        critical: agingDocs.filter(doc => doc.days_old >= 10).length,
+        high: agingDocs.filter(doc => doc.days_old >= 7 && doc.days_old < 10).length,
+        medium: agingDocs.filter(doc => doc.days_old >= 3 && doc.days_old < 7).length,
+        total: agingDocs.length
+    };
+
+    // Find oldest document
+    const oldestDoc = agingDocs.reduce((oldest, doc) => 
+        doc.days_old > oldest.days_old ? doc : oldest
+    , agingDocs[0]);
+
+    // Calculate average age
+    const avgAge = Math.round(agingDocs.reduce((sum, doc) => sum + doc.days_old, 0) / agingDocs.length);
+
+    // Determine overall urgency level
+    const highestUrgency = stats.critical > 0 ? 'critical' : 
+                          stats.high > 0 ? 'high' : 
+                          stats.medium > 0 ? 'medium' : 'low';
+
+    const config = {
+        'critical': { 
+            icon: '🚨', 
+            bg: 'bg-red-50 border-red-500', 
+            text: 'text-red-900',
+            accentBg: 'bg-red-100',
+            accentText: 'text-red-700'
+        },
+        'high': { 
+            icon: '⚠️', 
+            bg: 'bg-orange-50 border-orange-500', 
+            text: 'text-orange-900',
+            accentBg: 'bg-orange-100',
+            accentText: 'text-orange-700'
+        },
+        'medium': { 
+            icon: '⏰', 
+            bg: 'bg-yellow-50 border-yellow-500', 
+            text: 'text-yellow-900',
+            accentBg: 'bg-yellow-100',
+            accentText: 'text-yellow-700'
+        },
+        'low': { 
+            icon: 'ℹ️', 
+            bg: 'bg-blue-50 border-blue-500', 
+            text: 'text-blue-900',
+            accentBg: 'bg-blue-100',
+            accentText: 'text-blue-700'
         }
+    };
 
-        const agingDocs = documents.filter(doc => !['RANCA_validated', 'completed'].includes(doc.status));
-        
-        if (agingDocs.length === 0) {
-            agingAlertsContainer.innerHTML = '';
-            return;
+    const c = config[highestUrgency];
+
+    // Check if minimized
+    const alertState = JSON.parse(localStorage.getItem('rancaAgingAlertMinimized') || 'false');
+    const isMinimized = alertState === true;
+
+    // Build summary text
+    let summaryText = `You currently have <strong>${stats.total} aging RANCA document${stats.total > 1 ? 's' : ''}</strong> that require validation. `;
+    
+    // Add breakdown by priority
+    const priorities = [];
+    if (stats.critical > 0) priorities.push(`<strong class="text-red-700">${stats.critical} critical</strong> (10+ days old)`);
+    if (stats.high > 0) priorities.push(`<strong class="text-orange-700">${stats.high} high priority</strong> (7-10 days)`);
+    if (stats.medium > 0) priorities.push(`<strong class="text-yellow-700">${stats.medium} medium priority</strong> (3-7 days)`);
+    
+    if (priorities.length > 0) {
+        if (priorities.length === 1) {
+            summaryText += `This includes ${priorities[0]}. `;
+        } else if (priorities.length === 2) {
+            summaryText += `This includes ${priorities[0]} and ${priorities[1]}. `;
+        } else {
+            summaryText += `This includes ${priorities[0]}, ${priorities[1]}, and ${priorities[2]}. `;
         }
-
-        agingDocs.forEach(doc => {
-            const days = Math.abs(Math.floor(Number(doc.days_old))) || 0;
-            doc.days_old = days;
-            doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
-        });
-
-        const highestUrgency = agingDocs.reduce((highest, doc) => {
-            const order = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
-            return order[doc.urgency] > order[highest] ? doc.urgency : highest;
-        }, 'low');
-
-        const config = {
-            'critical': { icon: '🚨', bg: 'bg-red-50 border-red-500', text: 'text-red-900' },
-            'high': { icon: '⚠️', bg: 'bg-orange-50 border-orange-500', text: 'text-orange-900' },
-            'medium': { icon: '⏰', bg: 'bg-yellow-50 border-yellow-500', text: 'text-yellow-900' },
-            'low': { icon: 'ℹ️', bg: 'bg-blue-50 border-blue-500', text: 'text-blue-900' }
-        };
-
-        const c = config[highestUrgency];
-
-        const alertState = JSON.parse(localStorage.getItem('agingAlertMinimized') || 'false');
-        const isMinimized = alertState === true;
-
-        agingAlertsContainer.innerHTML = `
-            <div class="rounded-lg border-l-4 p-5 ${c.bg} shadow-md aging-alert-container">
-                <div class="flex items-start justify-between mb-3">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">${c.icon}</span>
-                        <div>
-                            <h3 class="font-bold text-lg ${c.text}">RANCA Documents Need Processing</h3>
-                            <p class="text-sm opacity-80 ${c.text}">${agingDocs.length} document(s) older than 3 days</p>
-                        </div>
-                    </div>
-                    <button class="minimize-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50" 
-                            title="${isMinimized ? 'Expand' : 'Minimize'}">
-                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                             style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                  d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
-                        </svg>
-                    </button>
-                </div>
-                <div class="alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
-                    <div class="space-y-2 mt-4">
-                        ${agingDocs.slice(0, 5).map(doc => {
-                            const daysOld = Math.abs(Math.floor(doc.days_old)) || 0;
-                            const docBgColor = {
-                                'critical': 'bg-red-100 border-red-200',
-                                'high': 'bg-orange-100 border-orange-200', 
-                                'medium': 'bg-yellow-100 border-yellow-200',
-                                'low': 'bg-blue-100 border-blue-200'
-                            };
-                            
-                            const statusLabels = {
-                                'Outgoing_finalized': 'Pending - Not Received',
-                                'RANCA_received': 'Received - Needs Processing',
-                                'RANCA_in_process': 'In Process - Stalled',
-                            };
-                            
-                            return `
-                                <div class="flex items-center justify-between p-3 ${docBgColor[doc.urgency]} border rounded-lg hover:opacity-90 transition-all duration-200">
-                                    <div class="flex-1">
-                                        <p class="font-semibold text-sm ${c.text}">${doc.control_number || 'N/A'}</p>
-                                        <p class="text-xs opacity-70 ${c.text}">
-                                            ${doc.dv_number ? 'DV: ' + doc.dv_number + ' • ' : ''}
-                                            ${doc.ors_number ? 'ORS: ' + doc.ors_number + ' • ' : ''}
-                                            ${doc.submitted_by || 'Unknown'} • ${doc.program || 'N/A'}
-                                        </p>
-                                        <p class="text-xs font-medium mt-1 ${
-                                            doc.days_old >= 10 ? 'text-red-700' : 
-                                            doc.days_old >= 7 ? 'text-orange-700' : 
-                                            'text-yellow-700'
-                                        }">
-                                            ${daysOld} days old • ${statusLabels[doc.current_status] || doc.current_status}
-                                        </p>
-                                    </div>
-                                </div>
-                            `}).join('')}
-                    </div>
-                    ${agingDocs.length > 5 ? `
-                        <p class="text-xs mt-3 opacity-75 ${c.text}">
-                            +${agingDocs.length - 5} more RANCA documents
-                        </p>
-                    ` : ''}
+    }
+    
+    summaryText += `The average age of pending RANCA documents is <strong>${avgAge} days</strong>, with the oldest being <strong class="${c.accentText}">${oldestDoc.control_number || oldestDoc.dv_number || 'Unknown'}</strong> at <strong>${oldestDoc.days_old} days old</strong> from ${oldestDoc.submitted_by || 'Unknown'}.`;
+    
+    // Add urgent action message if critical
+    let urgentMessage = '';
+    if (stats.critical > 0) {
+        urgentMessage = `
+            <div class="mt-3 pt-3 border-t ${c.accentText === 'text-red-700' ? 'border-red-200' : 'border-gray-200'}">
+                <div class="flex items-start gap-2">
+                    <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <p class="text-sm text-red-800 leading-relaxed">
+                        <strong>Urgent:</strong> ${stats.critical} RANCA document${stats.critical > 1 ? 's have' : ' has'} exceeded the 10-day validation threshold and require${stats.critical === 1 ? 's' : ''} immediate attention.
+                    </p>
                 </div>
             </div>
         `;
-
-        const minimizeBtn = agingAlertsContainer.querySelector('.minimize-alert-btn');
-        const alertContent = agingAlertsContainer.querySelector('.alert-content');
-        
-        if (minimizeBtn && alertContent) {
-            minimizeBtn.addEventListener('click', function() {
-                const isCurrentlyMinimized = alertContent.classList.contains('hidden');
-                
-                if (isCurrentlyMinimized) {
-                    alertContent.classList.remove('hidden');
-                    alertContent.classList.add('block');
-                    this.innerHTML = `
-                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                    `;
-                    this.setAttribute('title', 'Minimize');
-                    localStorage.setItem('agingAlertMinimized', 'false');
-                } else {
-                    alertContent.classList.remove('block');
-                    alertContent.classList.add('hidden');
-                    this.innerHTML = `
-                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                        </svg>
-                    `;
-                    this.setAttribute('title', 'Expand');
-                    localStorage.setItem('agingAlertMinimized', 'true');
-                }
-            });
-        }
     }
+
+    agingAlertsContainer.innerHTML = `
+        <div class="rounded-lg border-l-4 p-4 ${c.bg} shadow-md ranca-aging-alert-container">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex items-start gap-3 flex-1">
+                    <span class="text-2xl flex-shrink-0">${c.icon}</span>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-base ${c.text} mb-2">RANCA Aging Documents Summary</h3>
+                        <div class="ranca-alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
+                            <p class="text-sm ${c.text} leading-relaxed opacity-90">
+                                ${summaryText}
+                            </p>
+                            ${urgentMessage}
+                        </div>
+                        <div class="ranca-alert-collapsed transition-all duration-300 ease-in-out ${isMinimized ? 'block' : 'hidden'}">
+                            <p class="text-sm ${c.text} opacity-90">
+                                <strong>${stats.total}</strong> aging RANCA document${stats.total > 1 ? 's' : ''} 
+                                ${stats.critical > 0 ? `(<strong class="text-red-700">${stats.critical} critical</strong>)` : ''} • 
+                                Oldest: <strong>${oldestDoc.days_old} days</strong>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <button class="minimize-ranca-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50 flex-shrink-0" 
+                        title="${isMinimized ? 'Expand' : 'Minimize'}">
+                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                         style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Add event listener for the minimize button
+    const minimizeBtn = agingAlertsContainer.querySelector('.minimize-ranca-alert-btn');
+    const alertContent = agingAlertsContainer.querySelector('.ranca-alert-content');
+    const alertCollapsed = agingAlertsContainer.querySelector('.ranca-alert-collapsed');
+    
+    if (minimizeBtn && alertContent && alertCollapsed) {
+        minimizeBtn.addEventListener('click', function() {
+            const isCurrentlyMinimized = alertContent.classList.contains('hidden');
+            
+            if (isCurrentlyMinimized) {
+                // Expand
+                alertContent.classList.remove('hidden');
+                alertContent.classList.add('block');
+                alertCollapsed.classList.remove('block');
+                alertCollapsed.classList.add('hidden');
+                this.innerHTML = `
+                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                `;
+                this.setAttribute('title', 'Minimize');
+                localStorage.setItem('rancaAgingAlertMinimized', 'false');
+            } else {
+                // Minimize
+                alertContent.classList.remove('block');
+                alertContent.classList.add('hidden');
+                alertCollapsed.classList.remove('hidden');
+                alertCollapsed.classList.add('block');
+                this.innerHTML = `
+                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                `;
+                this.setAttribute('title', 'Expand');
+                localStorage.setItem('rancaAgingAlertMinimized', 'true');
+            }
+        });
+    }
+}
 
     // ============ EVENT LISTENERS ============
     perPageSelect.addEventListener('change', function() {

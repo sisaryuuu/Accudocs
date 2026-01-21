@@ -193,12 +193,14 @@ Route::middleware(['auth', 'role:Admin'])->prefix('admin')->group(function () {
 
 
 
-// Public verification route (NO AUTH REQUIRED)
 Route::get('/accountingunit/email/verify/{id}/{hash}', function (AccountingUnitEmailVerificationRequest $request) {
+    \Log::info('📍 Verification route accessed');
+    
     $request->fulfill();
+    
     return redirect()->route('login')
         ->with('success', 'Email verified successfully! You can now log in.');
-})->middleware(['signed'])->name('accountingunit.verification.verify'); // ✅ Use 'signed' instead of 'auth'
+})->middleware(['signed', 'throttle:6,1'])->name('accountingunit.verification.verify');
 
 // Protected routes (require login)
 Route::middleware(['auth:web'])->group(function () {

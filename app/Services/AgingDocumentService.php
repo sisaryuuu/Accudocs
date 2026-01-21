@@ -28,13 +28,147 @@ class AgingDocumentService
     ];
 
     /**
-     * Update all dashboards for aging documents
-     * This sends Pusher alerts for documents aged 3+ days
+     * NOTIFY ACCOUNTING UNITS (not focal persons)
+     * Sends email notifications to accounting units for documents aged 10+ days
      * 
-     * @param int $daysThreshold Number of days to consider as aging (default: 3)
+     * @param int $daysThreshold Number of days to consider as aging (default: 10)
      * @return array Results of the operation
      */
-    public function updateAllDashboards(int $daysThreshold = 3): array
+    public function notifyAllAccountingUnits(int $daysThreshold = 10): array
+    {
+        $results = [];
+        $startTime = now();
+        
+        Log::info("📧 Starting accounting unit notifications for all roles", [
+            'threshold_days' => $daysThreshold,
+            'roles_count' => count($this->roleControllers),
+            'started_at' => $startTime->format('Y-m-d H:i:s')
+        ]);
+        
+        foreach ($this->roleControllers as $roleName => $controllerClass) {
+            $roleStartTime = microtime(true);
+            
+            try {
+                Log::info("📧 [{$roleName}] Starting accounting unit notifications...");
+                
+                // Instantiate controller
+                $controller = app($controllerClass);
+                
+                // ✅ FIXED: Different methods for different roles
+                if ($roleName === 'GIP') {
+                    // GIP already sends emails via sendAgingAlerts()
+                    // For 10+ days, use critical alerts
+                    $response = $controller->sendAgingAlerts(true); // true = critical only
+                    $responseData = $response->getData(true);
+                    
+                    $results[$roleName] = [
+                        'success' => $responseData['success'] ?? true,
+                        'notified_count' => $responseData['emails_sent'] ?? 0,
+                        'total_documents' => $responseData['total_documents'] ?? 0,
+                        'alerts_created' => $responseData['alerts_created'] ?? 0,
+                        'recipient_type' => 'accounting_units',
+                        'message' => 'GIP accounting units notified via critical alerts',
+                        'duration_ms' => round((microtime(true) - $roleStartTime) * 1000, 2),
+                    ];
+                    
+                } else {
+                    // For other roles, use their specific notification method
+                    // Check if method exists
+                    if (method_exists($controller, 'notifyAccountingUnits')) {
+                        $response = $controller->notifyAccountingUnits();
+                    } elseif (method_exists($controller, 'notifyFocalPersonsOfAgingDocuments')) {
+                        // Fallback to focal persons if accounting units method doesn't exist
+                        $response = $controller->notifyFocalPersonsOfAgingDocuments();
+                        Log::warning("⚠️ [{$roleName}] Using notifyFocalPersonsOfAgingDocuments as fallback");
+                    } else {
+                        Log::warning("⚠️ [{$roleName}] No notification method found");
+                        $results[$roleName] = [
+                            'success' => true,
+                            'notified_count' => 0,
+                            'recipient_type' => 'none',
+                            'message' => 'No notification method implemented',
+                            'duration_ms' => 0,
+                            'skipped' => true,
+                        ];
+                        continue;
+                    }
+                    
+                    $responseData = $response->getData(true);
+                    
+                    $results[$roleName] = [
+                        'success' => $responseData['success'] ?? true,
+                        'notified_count' => $responseData['notified_count'] ?? $responseData['emails_sent'] ?? 0,
+                        'total_documents' => $responseData['total_documents'] ?? 0,
+                        'recipient_type' => method_exists($controller, 'notifyAccountingUnits') ? 'accounting_units' : 'focal_persons',
+                        'message' => $responseData['message'] ?? 'Notifications sent successfully',
+                        'duration_ms' => round((microtime(true) - $roleStartTime) * 1000, 2),
+                    ];
+                }
+                
+                Log::info("✅ [{$roleName}] Accounting unit notifications completed", [
+                    'notified_count' => $results[$roleName]['notified_count'],
+                    'recipient_type' => $results[$roleName]['recipient_type'] ?? 'unknown',
+                    'duration_ms' => $results[$roleName]['duration_ms']
+                ]);
+                
+            } catch (\Exception $e) {
+                $duration = round((microtime(true) - $roleStartTime) * 1000, 2);
+                
+                $results[$roleName] = [
+                    'success' => false,
+                    'notified_count' => 0,
+                    'message' => $e->getMessage(),
+                    'duration_ms' => $duration,
+                    'error' => true,
+                ];
+                
+                Log::error("❌ [{$roleName}] Accounting unit notifications failed", [
+                    'error' => $e->getMessage(),
+                    'duration_ms' => $duration,
+                ]);
+            }
+        }
+        
+        // Summary statistics
+        $totalDuration = now()->diffInMilliseconds($startTime);
+        $successCount = collect($results)->where('success', true)->count();
+        $totalNotified = collect($results)->sum('notified_count');
+        $totalDocuments = collect($results)->sum('total_documents');
+        
+        $recipientBreakdown = collect($results)->groupBy('recipient_type')->map->count();
+        
+        Log::info("📧 Accounting unit notifications completed", [
+            'total_roles' => count($this->roleControllers),
+            'successful' => $successCount,
+            'failed' => count($this->roleControllers) - $successCount,
+            'total_notified' => $totalNotified,
+            'total_documents' => $totalDocuments,
+            'recipient_breakdown' => $recipientBreakdown->toArray(),
+            'total_duration_ms' => $totalDuration,
+        ]);
+        
+        return [
+            'results' => $results,
+            'summary' => [
+                'total_roles' => count($this->roleControllers),
+                'successful' => $successCount,
+                'failed' => count($this->roleControllers) - $successCount,
+                'total_notified' => $totalNotified,
+                'total_documents' => $totalDocuments,
+                'recipient_breakdown' => $recipientBreakdown->toArray(),
+                'total_duration_ms' => $totalDuration,
+            ]
+        ];
+    }
+
+    /**
+     * Update all dashboards for aging documents
+     * This sends Pusher alerts for documents aged 2+ days
+     * 
+     * @param int $daysThreshold Number of days to consider as aging (default: 2)
+     * @return array Results of the operation
+     */
+    public function updateAllDashboards(int $daysThreshold = 2): array
     {
         $results = [];
         $startTime = now();
@@ -59,15 +193,20 @@ class AgingDocumentService
                 $responseData = $response->getData(true);
                 $duration = round((microtime(true) - $roleStartTime) * 1000, 2);
                 
+                // Handle GIP-specific response format
                 $results[$roleName] = [
                     'success' => $responseData['success'] ?? true,
-                    'alerted_count' => $responseData['alerted_count'] ?? 0,
+                    'alerted_count' => $responseData['total_documents'] ?? $responseData['alerted_count'] ?? 0,
+                    'emails_sent' => $responseData['emails_sent'] ?? 0,
+                    'alerts_created' => $responseData['alerts_created'] ?? 0,
+                    'recipient_type' => 'accounting_units', // Always accounting units for dashboards
                     'message' => $responseData['message'] ?? 'Dashboard updated successfully',
                     'duration_ms' => $duration,
                 ];
                 
                 Log::info("✅ [{$roleName}] Dashboard updated successfully", [
                     'alerted_count' => $results[$roleName]['alerted_count'],
+                    'recipient_type' => $results[$roleName]['recipient_type'],
                     'duration_ms' => $duration
                 ]);
                 
@@ -85,7 +224,6 @@ class AgingDocumentService
                 Log::error("❌ [{$roleName}] Dashboard update failed", [
                     'error' => $e->getMessage(),
                     'duration_ms' => $duration,
-                    'trace' => $e->getTraceAsString()
                 ]);
             }
         }
@@ -94,12 +232,14 @@ class AgingDocumentService
         $totalDuration = now()->diffInMilliseconds($startTime);
         $successCount = collect($results)->where('success', true)->count();
         $totalAlerted = collect($results)->sum('alerted_count');
+        $totalEmails = collect($results)->sum('emails_sent');
         
         Log::info("📊 Dashboard updates completed", [
             'total_roles' => count($this->roleControllers),
             'successful' => $successCount,
             'failed' => count($this->roleControllers) - $successCount,
             'total_alerted' => $totalAlerted,
+            'total_emails' => $totalEmails,
             'total_duration_ms' => $totalDuration,
         ]);
         
@@ -110,101 +250,7 @@ class AgingDocumentService
                 'successful' => $successCount,
                 'failed' => count($this->roleControllers) - $successCount,
                 'total_alerted' => $totalAlerted,
-                'total_duration_ms' => $totalDuration,
-            ]
-        ];
-    }
-
-    /**
-     * Notify all focal persons of aging documents
-     * Sends email notifications for documents aged 10+ days
-     * 
-     * @param int $daysThreshold Number of days to consider as aging (default: 10)
-     * @return array Results of the operation
-     */
-    public function notifyAllFocalPersons(int $daysThreshold = 10): array
-    {
-        $results = [];
-        $startTime = now();
-        
-        Log::info("📧 Starting focal person notifications for all roles", [
-            'threshold_days' => $daysThreshold,
-            'roles_count' => count($this->roleControllers),
-            'started_at' => $startTime->format('Y-m-d H:i:s')
-        ]);
-        
-        foreach ($this->roleControllers as $roleName => $controllerClass) {
-            $roleStartTime = microtime(true);
-            
-            try {
-                Log::info("📧 [{$roleName}] Starting focal person notifications...");
-                
-                // Instantiate controller and call notifyFocalPersonsOfAgingDocuments()
-                $controller = app($controllerClass);
-                $response = $controller->notifyFocalPersonsOfAgingDocuments();
-                
-                // Extract response data
-                $responseData = $response->getData(true);
-                $duration = round((microtime(true) - $roleStartTime) * 1000, 2);
-                
-                $results[$roleName] = [
-                    'success' => $responseData['success'] ?? true,
-                    'notified_count' => $responseData['notified_count'] ?? 0,
-                    'already_notified_today' => $responseData['already_notified_today'] ?? 0,
-                    'skipped_count' => $responseData['skipped_count'] ?? 0,
-                    'message' => $responseData['message'] ?? 'Notifications sent successfully',
-                    'duration_ms' => $duration,
-                ];
-                
-                Log::info("✅ [{$roleName}] Focal person notifications completed", [
-                    'notified_count' => $results[$roleName]['notified_count'],
-                    'already_notified' => $results[$roleName]['already_notified_today'],
-                    'skipped' => $results[$roleName]['skipped_count'],
-                    'duration_ms' => $duration
-                ]);
-                
-            } catch (\Exception $e) {
-                $duration = round((microtime(true) - $roleStartTime) * 1000, 2);
-                
-                $results[$roleName] = [
-                    'success' => false,
-                    'notified_count' => 0,
-                    'message' => $e->getMessage(),
-                    'duration_ms' => $duration,
-                    'error' => true,
-                ];
-                
-                Log::error("❌ [{$roleName}] Focal person notifications failed", [
-                    'error' => $e->getMessage(),
-                    'duration_ms' => $duration,
-                    'trace' => $e->getTraceAsString()
-                ]);
-            }
-        }
-        
-        // Summary statistics
-        $totalDuration = now()->diffInMilliseconds($startTime);
-        $successCount = collect($results)->where('success', true)->count();
-        $totalNotified = collect($results)->sum('notified_count');
-        $totalSkipped = collect($results)->sum('skipped_count');
-        
-        Log::info("📧 Focal person notifications completed", [
-            'total_roles' => count($this->roleControllers),
-            'successful' => $successCount,
-            'failed' => count($this->roleControllers) - $successCount,
-            'total_notified' => $totalNotified,
-            'total_skipped' => $totalSkipped,
-            'total_duration_ms' => $totalDuration,
-        ]);
-        
-        return [
-            'results' => $results,
-            'summary' => [
-                'total_roles' => count($this->roleControllers),
-                'successful' => $successCount,
-                'failed' => count($this->roleControllers) - $successCount,
-                'total_notified' => $totalNotified,
-                'total_skipped' => $totalSkipped,
+                'total_emails' => $totalEmails,
                 'total_duration_ms' => $totalDuration,
             ]
         ];
@@ -212,7 +258,7 @@ class AgingDocumentService
 
     /**
      * Send critical alerts for all aging documents
-     * Sends Pusher alerts for documents aged 10+ days
+     * Sends alerts to accounting units for documents aged 10+ days
      * 
      * @param int $daysThreshold Number of days to consider as critical (default: 10)
      * @return array Results of the operation
@@ -244,13 +290,17 @@ class AgingDocumentService
                 
                 $results[$roleName] = [
                     'success' => $responseData['success'] ?? true,
-                    'alerted_count' => $responseData['alerted_count'] ?? 0,
+                    'alerted_count' => $responseData['total_documents'] ?? $responseData['alerted_count'] ?? 0,
+                    'emails_sent' => $responseData['emails_sent'] ?? 0,
+                    'alerts_created' => $responseData['alerts_created'] ?? 0,
+                    'recipient_type' => 'accounting_units', // Always accounting units
                     'message' => $responseData['message'] ?? 'Critical alerts sent successfully',
                     'duration_ms' => $duration,
                 ];
                 
                 Log::info("✅ [{$roleName}] Critical alerts sent successfully", [
                     'alerted_count' => $results[$roleName]['alerted_count'],
+                    'recipient_type' => $results[$roleName]['recipient_type'],
                     'duration_ms' => $duration
                 ]);
                 
@@ -268,7 +318,6 @@ class AgingDocumentService
                 Log::error("❌ [{$roleName}] Critical alerts failed", [
                     'error' => $e->getMessage(),
                     'duration_ms' => $duration,
-                    'trace' => $e->getTraceAsString()
                 ]);
             }
         }
@@ -277,12 +326,14 @@ class AgingDocumentService
         $totalDuration = now()->diffInMilliseconds($startTime);
         $successCount = collect($results)->where('success', true)->count();
         $totalAlerted = collect($results)->sum('alerted_count');
+        $totalEmails = collect($results)->sum('emails_sent');
         
         Log::info("🚨 Critical alerts completed", [
             'total_roles' => count($this->roleControllers),
             'successful' => $successCount,
             'failed' => count($this->roleControllers) - $successCount,
             'total_alerted' => $totalAlerted,
+            'total_emails' => $totalEmails,
             'total_duration_ms' => $totalDuration,
         ]);
         
@@ -293,12 +344,15 @@ class AgingDocumentService
                 'successful' => $successCount,
                 'failed' => count($this->roleControllers) - $successCount,
                 'total_alerted' => $totalAlerted,
+                'total_emails' => $totalEmails,
                 'total_duration_ms' => $totalDuration,
             ]
         ];
     }
 
-    
+    /**
+     * Process a single role
+     */
     public function processRole(string $roleName, string $action): array
     {
         $roleName = strtoupper($roleName);
@@ -327,10 +381,25 @@ class AgingDocumentService
                     break;
                     
                 case 'notify':
-                    $response = $controller->notifyFocalPersonsOfAgingDocuments();
+                    // For GIP, this is the same as critical alerts
+                    if ($roleName === 'GIP') {
+                        $response = $controller->sendAgingAlerts(true);
+                    } else {
+                        // Try accounting units first, then fallback
+                        if (method_exists($controller, 'notifyAccountingUnits')) {
+                            $response = $controller->notifyAccountingUnits();
+                        } elseif (method_exists($controller, 'notifyFocalPersonsOfAgingDocuments')) {
+                            $response = $controller->notifyFocalPersonsOfAgingDocuments();
+                        } else {
+                            return [
+                                'success' => false,
+                                'message' => "No notification method found for {$roleName}",
+                            ];
+                        }
+                    }
                     break;
                     
-                case 'alert':
+                case 'critical':
                     $response = $controller->sendAgingAlerts(true);
                     break;
                     
@@ -338,7 +407,7 @@ class AgingDocumentService
                     return [
                         'success' => false,
                         'message' => "Invalid action: {$action}",
-                        'available_actions' => ['dashboard', 'notify', 'alert'],
+                        'available_actions' => ['dashboard', 'notify', 'critical'],
                     ];
             }
             
@@ -352,7 +421,8 @@ class AgingDocumentService
             ]);
             
             return array_merge($responseData, [
-                'duration_ms' => $duration
+                'duration_ms' => $duration,
+                'recipient_type' => 'accounting_units',
             ]);
             
         } catch (\Exception $e) {
@@ -372,8 +442,6 @@ class AgingDocumentService
 
     /**
      * Get configured roles
-     * 
-     * @return array List of configured roles
      */
     public function getConfiguredRoles(): array
     {
@@ -382,15 +450,14 @@ class AgingDocumentService
 
     /**
      * Get summary of service configuration
-     * 
-     * @return array Summary statistics
      */
     public function getServiceInfo(): array
     {
         return [
             'total_roles' => count($this->roleControllers),
             'roles' => $this->getConfiguredRoles(),
-            'actions_available' => ['dashboard', 'notify', 'alert'],
+            'actions_available' => ['dashboard', 'notify', 'critical'],
+            'recipient_type' => 'accounting_units', // Primary recipient type
             'service_version' => '1.0.0',
             'timestamp' => now()->timezone('Asia/Manila')->toDateTimeString(),
         ];

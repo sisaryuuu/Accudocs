@@ -227,66 +227,7 @@ class SendPulseServices
         }
     }
 
-    /**
-     * Send aging notification email
-     */
-    public function sendAgingEmail($toEmail, $toName, $dvRequest, $daysOld, $urgencyLevel, $subject, $htmlContent)
-    {
-        try {
-            Log::info('Preparing to send aging notification email', [
-                'to_email' => $toEmail,
-                'to_name' => $toName,
-                'dv_request_id' => $dvRequest->id ?? 'unknown',
-                'days_old' => $daysOld,
-                'urgency_level' => $urgencyLevel,
-                'emails_this_hour' => $this->emailsSentInCurrentHour
-            ]);
-
-            // Prepare email data
-            $emailData = [
-                'html' => base64_encode($htmlContent),
-                'text' => strip_tags($htmlContent),
-                'subject' => $subject,
-                'from' => [
-                    'name' => config('mail.from.name', 'ACCUDOCS DOLE XI'),
-                    'email' => config('mail.from.address', 'c.mulato.517213@umindanao.edu.ph')
-                ],
-                'to' => [
-                    [
-                        'name' => $toName,
-                        'email' => $toEmail
-                    ]
-                ]
-            ];
-
-            // Try SendPulse first
-            $sendpulseSuccess = $this->sendViaSendPulse($emailData, 'aging');
-            
-            if ($sendpulseSuccess) {
-                return true;
-            }
-
-            // Fallback to SMTP
-            Log::info('Falling back to SMTP for aging email', [
-                'to_email' => $toEmail,
-                'reason' => $this->isQuotaExceeded() ? 'quota_exceeded' : 
-                            ($this->isHourlyLimitReached() ? 'hourly_limit_reached' : 'sendpulse_failed'),
-                'emails_this_hour' => $this->emailsSentInCurrentHour
-            ]);
-            
-            return $this->sendAgingViaSMTP($toEmail, $toName, $subject, $htmlContent);
-
-        } catch (\Exception $e) {
-            Log::error('Error in sendAgingEmail: ' . $e->getMessage(), [
-                'to_email' => $toEmail,
-                'dv_request_id' => $dvRequest->id ?? 'unknown'
-            ]);
-            
-            // Last resort: try SMTP directly
-            return $this->sendAgingViaSMTP($toEmail, $toName, $subject, $htmlContent);
-        }
-    }
-
+ 
     /**
      * Send rejection email
      */
@@ -568,4 +509,244 @@ class SendPulseServices
         $this->emailsSentInCurrentHour = 0;
         Log::info('SendPulse hourly counter reset');
     }
+    /**
+ * Send universal aging notification email (works for all departments)
+ * Add this method to your existing SendPulseServices class
+ */
+/**
+ * Send universal aging notification email (works for all departments)
+ */
+public function sendAgingNotification($toEmail, $toName, $emailData)
+{
+    try {
+        $department = $emailData['department_name'] ?? 'Document Processing';
+        $controlNumber = $emailData['control_number'] ?? 'Unknown';
+        $daysOld = $emailData['days_old'] ?? 0;
+        $urgencyLevel = $emailData['urgency_level'] ?? 'medium';
+        
+        Log::info('Preparing to send aging notification email', [
+            'to_email' => $toEmail,
+            'to_name' => $toName,
+            'department' => $department,
+            'control_number' => $controlNumber,
+            'days_old' => $daysOld,
+            'urgency_level' => $urgencyLevel,
+            'emails_this_hour' => $this->emailsSentInCurrentHour
+        ]);
+
+        // ⭐ FIX: Use correct subject based on check_type
+        $subject = isset($emailData['check_type']) && $emailData['check_type'] === 'transition'
+            ? "⏰ TRANSITION PENDING: {$department} - {$controlNumber} ({$daysOld} days)"
+            : "⚠️ {$department} - Document Aging Alert - {$controlNumber} ({$daysOld} days)";
+        
+        // Render the Blade template to HTML
+        $htmlContent = view('emails.document_aging_notification', $emailData)->render();
+        
+        Log::debug('Email template rendered successfully', [
+            'template' => 'emails.document_aging_notification',
+            'html_length' => strlen($htmlContent)
+        ]);
+
+        // Prepare email data for SendPulse
+        $sendPulseEmailData = [
+            'html' => base64_encode($htmlContent),
+            'text' => strip_tags($htmlContent),
+            'subject' => $subject,
+            'from' => [
+                'name' => config('mail.from.name', 'ACCUDOCS DOLE XI'),
+                'email' => config('mail.from.address', 'c.mulato.517213@umindanao.edu.ph')
+            ],
+            'to' => [
+                [
+                    'name' => $toName,
+                    'email' => $toEmail
+                ]
+            ]
+        ];
+
+        // Try SendPulse first
+        $sendpulseSuccess = $this->sendViaSendPulse($sendPulseEmailData, 'aging');
+        
+        if ($sendpulseSuccess) {
+            Log::info('SendPulse aging notification sent successfully', [
+                'to_email' => $toEmail,
+                'department' => $department,
+                'control_number' => $controlNumber,
+                'days_old' => $daysOld
+            ]);
+            return true;
+        }
+
+        // Fallback to SMTP
+        Log::info('Falling back to SMTP for aging notification', [
+            'to_email' => $toEmail,
+            'reason' => $this->isQuotaExceeded() ? 'quota_exceeded' : 
+                        ($this->isHourlyLimitReached() ? 'hourly_limit_reached' : 'sendpulse_failed'),
+            'emails_this_hour' => $this->emailsSentInCurrentHour
+        ]);
+        
+        return $this->sendAgingViaSMTP($toEmail, $toName, $subject, $htmlContent);
+
+    } catch (\Exception $e) {
+        Log::error('Error in sendAgingNotification: ' . $e->getMessage(), [
+            'to_email' => $toEmail,
+            'department' => $emailData['department_name'] ?? 'unknown',
+            'error_trace' => $e->getTraceAsString()
+        ]);
+        
+        // Last resort: try SMTP directly
+        try {
+            $subject = "⚠️ Document Aging Alert - " . ($emailData['control_number'] ?? 'Unknown');
+            $htmlContent = view('emails.document_aging_notification', $emailData)->render();
+            return $this->sendAgingViaSMTP($toEmail, $toName, $subject, $htmlContent);
+        } catch (\Exception $smtpException) {
+            Log::error('SMTP fallback also failed: ' . $smtpException->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Send transition notification email
+ */
+public function sendTransitionNotification($toEmail, $toName, $emailData)
+{
+    try {
+        $department = $emailData['department_name'] ?? 'Document Processing';
+        $controlNumber = $emailData['control_number'] ?? 'Unknown';
+        $daysOld = $emailData['days_old'] ?? 0;
+        $transitionFrom = $emailData['transition_from'] ?? 'previous';
+        $transitionTo = $emailData['transition_to'] ?? 'next';
+        
+        Log::info('Preparing to send transition notification email', [
+            'to_email' => $toEmail,
+            'to_name' => $toName,
+            'department' => $department,
+            'control_number' => $controlNumber,
+            'days_old' => $daysOld,
+            'transition' => "{$transitionFrom} → {$transitionTo}",
+        ]);
+
+        $subject = "⏰ DV REQUEST PENDING: {$department} - {$controlNumber} ({$daysOld} days)";
+        
+        // Render the Blade template to HTML
+        $htmlContent = view('emails.document_aging_notification', $emailData)->render();
+        
+        Log::debug('Email template rendered successfully', [
+            'template' => 'emails.document_aging_notification',
+            'html_length' => strlen($htmlContent)
+        ]);
+
+        // Prepare email data for SendPulse
+        $sendPulseEmailData = [
+            'html' => base64_encode($htmlContent),
+            'text' => strip_tags($htmlContent),
+            'subject' => $subject,
+            'from' => [
+                'name' => config('mail.from.name', 'ACCUDOCS DOLE XI'),
+                'email' => config('mail.from.address', 'c.mulato.517213@umindanao.edu.ph')
+            ],
+            'to' => [
+                [
+                    'name' => $toName,
+                    'email' => $toEmail
+                ]
+            ]
+        ];
+
+        // Try SendPulse first
+        $sendpulseSuccess = $this->sendViaSendPulse($sendPulseEmailData, 'transition');
+        
+        if ($sendpulseSuccess) {
+            Log::info('SendPulse transition notification sent successfully', [
+                'to_email' => $toEmail,
+                'department' => $department,
+                'control_number' => $controlNumber,
+            ]);
+            return true;
+        }
+
+        // Fallback to SMTP
+        return $this->sendAgingViaSMTP($toEmail, $toName, $subject, $htmlContent);
+
+    } catch (\Exception $e) {
+        Log::error('Error in sendTransitionNotification: ' . $e->getMessage());
+        
+        // Last resort: try SMTP directly
+        try {
+            $subject = "⏰ DV REQUEST PENDING: " . ($emailData['department_name'] ?? 'Department') . 
+                      " - " . ($emailData['control_number'] ?? 'Unknown');
+            $htmlContent = view('emails.document_aging_notification', $emailData)->render();
+            return $this->sendAgingViaSMTP($toEmail, $toName, $subject, $htmlContent);
+        } catch (\Exception $smtpException) {
+            Log::error('SMTP fallback also failed: ' . $smtpException->getMessage());
+            return false;
+        }
+    }
+}
+/**
+ * Batch send aging notifications for multiple recipients
+ * Useful when sending to multiple users in the same department
+ */
+public function sendAgingNotificationBatch(array $recipients, $emailData)
+{
+    $results = [
+        'total' => count($recipients),
+        'sent' => 0,
+        'failed' => 0,
+        'skipped' => 0,
+        'details' => []
+    ];
+
+    Log::info('Starting batch aging notification send', [
+        'total_recipients' => count($recipients),
+        'department' => $emailData['department_name'] ?? 'unknown',
+        'control_number' => $emailData['control_number'] ?? 'unknown'
+    ]);
+
+    $emailJobs = [];
+    foreach ($recipients as $recipient) {
+        $emailJobs[] = [
+            'email' => $recipient['email'],
+            'name' => $recipient['name'],
+            'data' => $emailData
+        ];
+    }
+
+    $batchResults = $this->processEmailBatch($emailJobs, function($job) {
+        return $this->sendAgingNotification(
+            $job['email'],
+            $job['name'],
+            $job['data']
+        );
+    });
+
+    // Process resultsse
+    foreach ($batchResults as $index => $success) {
+        $recipient = $recipients[$index];
+        if ($success) {
+            $results['sent']++;
+            $results['details'][] = [
+                'email' => $recipient['email'],
+                'status' => 'sent'
+            ];
+        } else {
+            $results['failed']++;
+            $results['details'][] = [
+                'email' => $recipient['email'],
+                'status' => 'failed'
+            ];
+        }
+    }
+
+    Log::info('Batch aging notification send completed', [
+        'total' => $results['total'],
+        'sent' => $results['sent'],
+        'failed' => $results['failed'],
+        'department' => $emailData['department_name'] ?? 'unknown'
+    ]);
+
+    return $results;
+}     
+
 }

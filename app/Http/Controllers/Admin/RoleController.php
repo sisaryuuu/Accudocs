@@ -14,12 +14,16 @@ class RoleController extends Controller
     // -------------------
     public function index()
     {
-        $roles = Role::with('permissions')->get();
+        // Exclude Focal_Person role from the list
+        $roles = Role::with('permissions')
+                    ->where('name', '!=', 'Focal_Person')
+                    ->get();
         return view('Admin.Roles.index', compact('roles'));
     }
 
     public function create()
     {
+        // Get all permissions (you might want to filter these too if needed)
         $permissions = Permission::all();
         return view('Admin.Roles.create', compact('permissions'));
     }
@@ -31,6 +35,13 @@ class RoleController extends Controller
             'permissions' => 'nullable|array'
         ]);
 
+        // Prevent creating a role named Focal_Person
+        if (strtolower($request->name) === 'focal_person' || strtolower($request->name) === 'focal person') {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['name' => 'Cannot create a role with this name.']);
+        }
+
         $role = Role::create(['name' => $request->name]);
         if ($request->permissions) {
             $role->syncPermissions($request->permissions);
@@ -41,27 +52,49 @@ class RoleController extends Controller
 
     public function edit(Role $role)
     {
+        // Prevent editing Focal_Person role
+        if ($role->name === 'Focal_Person') {
+            abort(403, 'This role cannot be edited.');
+        }
+        
         $permissions = Permission::all();
-        return view('Admin.Roles.edit', compact('role', 'permissions')); // Fixed: consistent case
+        return view('Admin.Roles.edit', compact('role', 'permissions'));
     }
 
     public function update(Request $request, Role $role)
     {
+        // Prevent updating Focal_Person role
+        if ($role->name === 'Focal_Person') {
+            abort(403, 'This role cannot be modified.');
+        }
+        
         $request->validate([
             'name' => 'required|unique:roles,name,'.$role->id,
             'permissions' => 'nullable|array'
         ]);
 
+        // Prevent renaming to Focal_Person
+        if (strtolower($request->name) === 'focal_person' || strtolower($request->name) === 'focal person') {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['name' => 'Cannot rename to this role name.']);
+        }
+
         $role->update(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
 
-        return redirect()->route('admin.roles.index')->with('success', 'Role updated successfully.'); // Fixed: lowercase
+        return redirect()->route('admin.roles.index')->with('success', 'Role updated successfully.');
     }
 
     public function destroy(Role $role)
     {
+        // Prevent deleting Focal_Person role
+        if ($role->name === 'Focal_Person') {
+            abort(403, 'This role cannot be deleted.');
+        }
+        
         $role->delete();
-        return redirect()->route('admin.roles.index')->with('success', 'Role deleted successfully.'); // Fixed: lowercase
+        return redirect()->route('admin.roles.index')->with('success', 'Role deleted successfully.');
     }
 
     // -------------------
@@ -76,7 +109,8 @@ class RoleController extends Controller
 
     public function permissionsCreate()
     {
-        $roles = Role::all();
+        // Exclude Focal_Person role from dropdown
+        $roles = Role::where('name', '!=', 'Focal_Person')->get();
         return view('Admin.Permissions.create', compact('roles'));
     }
 
@@ -91,7 +125,7 @@ class RoleController extends Controller
         if ($request->roles) {
             foreach ($request->roles as $roleId) {
                 $role = Role::find($roleId);
-                if ($role) {
+                if ($role && $role->name !== 'Focal_Person') {
                     $role->givePermissionTo($permission);
                 }
             }
@@ -102,7 +136,8 @@ class RoleController extends Controller
 
     public function permissionsEdit(Permission $permission)
     {
-        $roles = Role::all(); // Add this line to get roles for the view
+        // Exclude Focal_Person role from dropdown
+        $roles = Role::where('name', '!=', 'Focal_Person')->get();
         return view('Admin.Permissions.edit', compact('permission', 'roles'));
     }
 

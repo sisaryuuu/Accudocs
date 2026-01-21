@@ -25,17 +25,20 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
-    {
-        // ✅ Always force HTTPS (most reliable solution)
-       if ($this->app->environment('local')) {
-        \URL::forceScheme('https');
+  public function boot(): void
+{
+    // Force HTTPS for ngrok and production
+    if (str_contains(config('app.url', ''), 'ngrok') || 
+        $this->app->environment('production')) {
+        URL::forceScheme('https');
     }
-        
-        // Alternative: Check environment
-        // if ($this->app->environment('production') || 
-        //     str_contains(env('APP_URL', ''), 'ngrok-free.dev')) {
-        //     URL::forceScheme('https');
-        // }
+    
+    // CRITICAL: Force root URL from config
+    URL::forceRootUrl(config('app.url'));
+    
+    // Additional ngrok-specific fix
+    if (str_contains(config('app.url', ''), 'ngrok')) {
+        $this->app['request']->server->set('HTTPS', 'on');
     }
+}
 }

@@ -16,6 +16,12 @@ class AccountingUnitVerifyEmail extends VerifyEmail implements ShouldQueue
     {
         $verificationUrl = $this->verificationUrl($notifiable);
 
+        \Log::info('📧 Sending verification email', [
+            'user_id' => $notifiable->id,
+            'email' => $notifiable->email,
+            'url' => $verificationUrl
+        ]);
+
         return (new MailMessage)
             ->subject('Verify Your Email Address - ACCUDOCS DOLE XI')
             ->greeting('Hello ' . $notifiable->full_name . '!')
@@ -29,8 +35,6 @@ class AccountingUnitVerifyEmail extends VerifyEmail implements ShouldQueue
 
     protected function verificationUrl($notifiable): string
     {
-        URL::forceScheme('https');
-        
         $url = URL::temporarySignedRoute(
             'accountingunit.verification.verify',
             now()->addMinutes(config('auth.verification.expire', 60)),
@@ -40,6 +44,12 @@ class AccountingUnitVerifyEmail extends VerifyEmail implements ShouldQueue
             ]
         );
         
-        return str_replace('http://', 'https://', $url);
+        \Log::info('🔗 Generated verification URL', [
+            'url' => $url,
+            'id' => $notifiable->getKey(),
+            'hash' => sha1($notifiable->getEmailForVerification())
+        ]);
+        
+        return $url;
     }
 }

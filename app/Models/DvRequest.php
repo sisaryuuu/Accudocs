@@ -36,6 +36,27 @@ class DvRequest extends Model
         'locked_at',
         'locked_by',
         
+        // NEW TIMESTAMP FIELDS
+        'last_action_at',
+        'last_action_type', 
+        'last_acted_by',
+        
+        // Department received timestamps
+        'gip_received_at',
+        'budget_received_at',
+        'accountant_received_at',
+        'outgoing_received_at',
+        'tupad_received_at',
+        'tev_received_at',
+        
+        // Department last action timestamps
+        'gip_last_action_at',
+        'budget_last_action_at',
+        'accountant_last_action_at',
+        'outgoing_last_action_at',
+        'tupad_last_action_at',
+        'tev_last_action_at',
+
         // ✅ ADD PAYEE FIELDS TO FILLABLE
         'payee_fname',
         'payee_mi',
@@ -53,9 +74,23 @@ class DvRequest extends Model
         'confirmed_by_focal_person' => 'boolean',
         'confirmed_at' => 'datetime',
         'multiple_payees' => 'boolean',
-        'payee_data' => 'array', // Cast JSON to array
+        'payee_data' => 'array',
+        'last_action_at' => 'datetime',
+        'gip_received_at' => 'datetime',
+        'budget_received_at' => 'datetime',
+        'accountant_received_at' => 'datetime',
+        'outgoing_received_at' => 'datetime',
+        'tupad_received_at' => 'datetime',
+        'tev_received_at' => 'datetime',
+        'gip_last_action_at' => 'datetime',
+        'budget_last_action_at' => 'datetime',
+        'accountant_last_action_at' => 'datetime',
+        'outgoing_last_action_at' => 'datetime',
+        'tupad_last_action_at' => 'datetime',
+        'tev_last_action_at' => 'datetime',
     ];
 
+    // Your existing relationships remain the same...
     public function logs()
     {
         return $this->hasMany(DvRequestLog::class, 'dv_request_id');
@@ -357,5 +392,10 @@ class DvRequest extends Model
     public function hasPayeeData()
     {
         return !empty($this->payee_fname) && !empty($this->payee_lname);
+    }
+
+    public function LastActor()
+    {
+        return $this->belongsTo(AccountingUnit::class, 'last_acted_by');
     }
 }
