@@ -37,137 +37,149 @@ class RANCAController extends Controller
         return view('Accounting.index');
     }
 
-    /** Fetch DV requests for Accounting/RANCA */
-    public function fetchDvRequests(Request $request)
-    {
-        try {
-            $currentUserId = auth()->id();
-            $lockDuration  = now()->subMinutes(10);
-            
-            $searchTerm = $request->input('search', '');
+   /** Fetch DV requests for Accounting/RANCA */
+public function fetchDvRequests(Request $request)
+{
+    try {
+        $currentUserId = auth()->id();
+        $lockDuration  = now()->subMinutes(10);
+        
+        $searchTerm = $request->input('search', '');
 
-            $query = DvRequest::with([
-                'program', 
-                'focalPerson', 
-                'respocenter',
-                'orsRequest',
-            ])
-            ->whereIn('status', ['Outgoing_finalized', 'RANCA_received'])
-            ->where(function ($q) use ($currentUserId, $lockDuration) {
-                $q->whereNull('locked_by')
-                  ->orWhere('locked_by', $currentUserId)
-                  ->orWhere('locked_at', '<=', $lockDuration);
-            })
-            ->when($searchTerm, function ($query) use ($searchTerm) {
-                $query->where(function ($q) use ($searchTerm) {
-                    $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
-                      ->orWhere('dv_number', 'LIKE', "%{$searchTerm}%")
-                      ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
-                          $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
-                                     ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
-                      })
-                      ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
-                          $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
-                      })
-                      ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
-                          $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
-                                     ->orWhere('description', 'LIKE', "%{$searchTerm}%");
-                      })
-                      ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
-                      ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
-                      ->orWhere('status', 'LIKE', "%{$searchTerm}%")
-                      ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
-                          $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
-                      });
-                });
+        $query = DvRequest::with([
+            'program', 
+            'focalPerson', 
+            'respocenter',
+            'orsRequest',
+        ])
+        ->whereIn('status', ['Outgoing_finalized', 'RANCA_received'])
+        ->where(function ($q) use ($currentUserId, $lockDuration) {
+            $q->whereNull('locked_by')
+              ->orWhere('locked_by', $currentUserId)
+              ->orWhere('locked_at', '<=', $lockDuration);
+        })
+        ->when($searchTerm, function ($query) use ($searchTerm) {
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('dv_number', 'LIKE', "%{$searchTerm}%")
+                  ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
+                      $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
+                                 ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
+                  })
+                  ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
+                      $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
+                  })
+                  ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
+                      $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
+                                 ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+                  })
+                  ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('status', 'LIKE', "%{$searchTerm}%")
+                  ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
+                      $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
+                  });
             });
+        });
 
-            $dvRequests = $query->get();
+        $dvRequests = $query->get();
+        
+        $dvRequests = $dvRequests->map(function ($request) {
+            // Use accountant_received_at if available, otherwise created_at
+            $baseDate = $request->accountant_received_at ?? $request->created_at;
+            $daysOld = $baseDate ? now()->diffInDays($baseDate) : 0;
             
-            $dvRequests = $dvRequests->map(function ($request) {
-                // Use accountant_received_at if available, otherwise created_at
-                $baseDate = $request->accountant_received_at ?? $request->created_at;
-                $daysOld = $baseDate ? now()->diffInDays($baseDate) : 0;
-                
-                $priorityScore = 0;
-                
-                if ($daysOld >= 10) {
-                    $priorityScore += 1000;
-                } elseif ($daysOld >= 7) {
-                    $priorityScore += 500;
-                } elseif ($daysOld >= 3) {
-                    $priorityScore += 200;
-                }
-                
-                if ($request->status === 'Outgoing_finalized') {
-                    $priorityScore += 100; // Extra priority for unreceived
-                }
-                
-                if ($request->status === 'RANCA_received') {
-                    $priorityScore += 50;
-                }
-                
-                $priorityScore += rand(0, 10);
-                
-                $request->days_old = $daysOld;
-                $request->priority_score = $priorityScore;
-                $request->urgency = $this->getAccountingUrgencyLevel($daysOld);
-                
-                return $request;
-            });
+            $priorityScore = 0;
             
-            $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+            // 🚨 URGENT FLAG - HIGHEST PRIORITY
+            if ($request->is_urgent) {
+                $priorityScore += 50000; // Highest priority for urgent documents
+            }
+            
+            if ($daysOld >= 10) {
+                $priorityScore += 1000;
+            } elseif ($daysOld >= 7) {
+                $priorityScore += 500;
+            } elseif ($daysOld >= 3) {
+                $priorityScore += 200;
+            }
+            
+            if ($request->status === 'Outgoing_finalized') {
+                $priorityScore += 100; // Extra priority for unreceived
+            }
+            
+            if ($request->status === 'RANCA_received') {
+                $priorityScore += 50;
+            }
+            
+            $priorityScore += rand(0, 10);
+            
+            $request->days_old = $daysOld;
+            $request->priority_score = $priorityScore;
+            $request->urgency = $this->getAccountingUrgencyLevel($daysOld);
+            
+            // Override urgency if marked urgent
+            if ($request->is_urgent) {
+                $request->urgency = 'urgent';
+            }
+            
+            return $request;
+        });
+        
+        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
-            return response()->json($dvRequests->map(function ($req) {
-                $baseDate = $req->accountant_received_at ?? $req->created_at;
-                
-                // Helper function to safely convert date to ISO string
-                $safeToISO = function ($date) {
-                    if (!$date) return null;
-                    if (is_string($date)) {
-                        try {
-                            $date = \Carbon\Carbon::parse($date);
-                        } catch (\Exception $e) {
-                            return null;
-                        }
+        return response()->json($dvRequests->map(function ($req) {
+            $baseDate = $req->accountant_received_at ?? $req->created_at;
+            
+            // Helper function to safely convert date to ISO string
+            $safeToISO = function ($date) {
+                if (!$date) return null;
+                if (is_string($date)) {
+                    try {
+                        $date = \Carbon\Carbon::parse($date);
+                    } catch (\Exception $e) {
+                        return null;
                     }
-                    return method_exists($date, 'toISOString') ? $date->toISOString() : null;
-                };
-                
-                return [
-                    'id'           => $req->id,
-                    'control_no'   => $req->accounting_control_number ? 
-                        'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
-                        '—',
-                    'dv_number'    => $req->dv_number ?? null,
-                    'ors_number'   => $req->orsRequest->ors_number ?? null,
-                    'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                    'program'      => $req->program->prcode ?? 'N/A',
-                    'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                    'particulars'  => $req->particulars,
-                    'amount'       => number_format($req->amount, 2),
-                    'status'       => $req->status,
-                    'date'         => $baseDate ? $baseDate->format('M d, Y') : '—',
-                    'created_at_timestamp' => $safeToISO($req->created_at),
-                    'accountant_received_at' => $safeToISO($req->accountant_received_at),
-                    'accountant_verified_at' => $safeToISO($req->accountant_verified_at),
-                    'accountant_last_action_at' => $safeToISO($req->accountant_last_action_at),
-                    'last_action_at' => $safeToISO($req->last_action_at),
-                    'days_old'     => $req->days_old,
-                    'urgency'      => $req->urgency,
-                    'priority_score' => $req->priority_score,
-                ];
-            }));
-
-        } catch (\Exception $e) {
-            Log::error('Error in Accounting fetchDvRequests: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+                }
+                return method_exists($date, 'toISOString') ? $date->toISOString() : null;
+            };
             
-            return response()->json([
-                'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
-            ], 500);
-        }
+            return [
+                'id'           => $req->id,
+                'control_no'   => $req->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
+                    '—',
+                'dv_number'    => $req->dv_number ?? null,
+                'ors_number'   => $req->orsRequest->ors_number ?? null,
+                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                'program'      => $req->program->prcode ?? 'N/A',
+                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                'particulars'  => $req->particulars,
+                'amount'       => number_format($req->amount, 2),
+                'status'       => $req->status,
+                'date'         => $baseDate ? $baseDate->format('M d, Y') : '—',
+                'created_at_timestamp' => $safeToISO($req->created_at),
+                'accountant_received_at' => $safeToISO($req->accountant_received_at),
+                'accountant_verified_at' => $safeToISO($req->accountant_verified_at),
+                'accountant_last_action_at' => $safeToISO($req->accountant_last_action_at),
+                'last_action_at' => $safeToISO($req->last_action_at),
+                'days_old'     => $req->days_old,
+                'urgency'      => $req->urgency,
+                'priority_score' => $req->priority_score,
+                // 🚨🚨🚨 ADD THIS LINE - CRITICAL FOR URGENT FLAG 🚨🚨🚨
+                'is_urgent'    => $req->is_urgent ?? false,
+            ];
+        }));
+
+    } catch (\Exception $e) {
+        Log::error('Error in Accounting fetchDvRequests: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     public function fetchDvRecent()
     {
@@ -544,177 +556,217 @@ class RANCAController extends Controller
     }
 
     /** Validate/Finalize DV */
-    public function validateDV(Request $request, $id)
-    {
-        $request->validate([
-            'remarks' => 'nullable|string|max:1000',
-        ]);
+public function validateDV(Request $request, $id)
+{
+    $request->validate([
+        'remarks' => 'nullable|string|max:1000',
+    ]);
 
-        try {
-            $dvRequest = DvRequest::with(['focalPerson', 'program', 'respocenter'])->findOrFail($id);
-            $statusBefore = $dvRequest->status;
-            $currentUserId = auth()->id();
-            $newStatus = 'RANCA_validated';
-            $validatedAt = now();
+    try {
+        $dvRequest = DvRequest::with(['focalPerson', 'program', 'respocenter'])->findOrFail($id);
+        $statusBefore = $dvRequest->status;
+        $currentUserId = auth()->id();
+        $newStatus = 'RANCA_validated';
+        $validatedAt = now();
 
-            if ($dvRequest->status !== 'RANCA_received') {
-                return redirect()->back()->with('error', 'This DV request cannot be validated.');
+        if ($dvRequest->status !== 'RANCA_received') {
+            return redirect()->back()->with('error', 'This DV request cannot be validated.');
+        }
+
+        DB::transaction(function () use (
+            $dvRequest, 
+            $statusBefore, 
+            $validatedAt, 
+            $request, 
+            $currentUserId,
+            $newStatus
+        ) {
+            // Update accountant specific timestamps using trait
+            $this->updateDepartmentTimestamp($dvRequest, $newStatus);
+            
+            $dvRequest->refresh();
+            
+            // 🚨🚨🚨 AUTO-REMOVE URGENT FLAG WHEN ACCOUNTANT VALIDATES 🚨🚨🚨
+            $dvRequest->update([
+                'last_action_at' => $validatedAt,
+                'last_action_type' => 'validated',
+                'last_acted_by' => $currentUserId,
+                'status' => $newStatus,
+                'qr_status'    => 'active', 
+                'finalized_by' => $currentUserId,
+                'finalized_at' => $validatedAt,
+                'locked_by'    => null,
+                'locked_at'    => null,
+                // 👇👇👇 ADD THIS LINE TO REMOVE URGENT FLAG 👇👇👇
+                'is_urgent' => false,
+            ]);
+
+            $dvRequest->refresh();
+
+            $remarks = $request->remarks ?? 'DV Request validated by Accountant';
+
+            // Log that urgent flag was removed
+            if ($dvRequest->getOriginal('is_urgent') == 1) {
+                Log::info('🚨 Urgent flag automatically removed by Accountant validation', [
+                    'dv_request_id' => $dvRequest->id,
+                    'dv_number' => $dvRequest->dv_number,
+                    'validated_by' => $currentUserId,
+                    'validated_at' => $validatedAt->toISOString()
+                ]);
             }
 
-            DB::transaction(function () use (
-                $dvRequest, 
-                $statusBefore, 
-                $validatedAt, 
-                $request, 
-                $currentUserId,
-                $newStatus
-            ) {
-                // Update accountant specific timestamps using trait
-                $this->updateDepartmentTimestamp($dvRequest, $newStatus);
-                
-                $dvRequest->refresh();
-                
-                $dvRequest->update([
-                    'last_action_at' => $validatedAt,
-                    'last_action_type' => 'validated',
-                    'last_acted_by' => $currentUserId,
-                    'status' => $newStatus,
-                    'qr_status'    => 'active', 
-                    'finalized_by' => $currentUserId,
-                    'finalized_at' => $validatedAt,
-                    'locked_by'    => null,
-                    'locked_at'    => null,
-                ]);
-
-                $dvRequest->refresh();
-
-                $remarks = $request->remarks ?? 'DV Request validated by Accountant';
-
-                // Save validation history
-                $this->saveRANCAValidationHistory(
-                    $dvRequest,
-                    'validate',
-                    $remarks,
-                    [
-                        'status_before' => $statusBefore,
-                        'status_after' => $newStatus,
-                        'dv_number' => $dvRequest->dv_number,
-                        'qr_status' => 'active',
-                        'validated_by' => $currentUserId,
-                        'validated_at' => $validatedAt->toISOString(),
-                        'accountant_verified_at' => $this->safeDateToISO($dvRequest->accountant_verified_at),
-                        'accountant_last_action_at' => $this->safeDateToISO($dvRequest->accountant_last_action_at),
-                        'last_action_at' => $this->safeDateToISO($dvRequest->last_action_at),
-                        'amount' => $dvRequest->amount,
-                        'program' => $dvRequest->program->prcode ?? null
-                    ]
-                );
-
-                $this->logAction(
-                    $dvRequest->id, 
-                    'Accountant_III', 
-                    $newStatus, 
-                    $remarks . ' | Accountant verified at: ' . $this->formatDateForLog($dvRequest->accountant_verified_at)
-                );
-
-                // Notify focal person
-                $focalId = $dvRequest->focalperson_id;
-
-                if ($focalId) {
-                    Notification::create([
-                        'focalperson_id' => $focalId,
-                        'dv_request_id'  => $dvRequest->id,
-                        'status'         => $newStatus,
-                        'action'         => 'Validated',
-                        'remarks'        => $remarks,
-                    ]);
-
-                    $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
-                        'dv_request_id' => $dvRequest->id,
-                        'status'        => $newStatus,
-                        'remarks'       => $remarks,
-                        'timestamp'     => $validatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                    ]);
-                }
-                
-                // Send to regional director dashboard
-                $this->pusher->trigger('regional-director-dashboard', 'new-dv-available', [
-                    'dv_id' => $dvRequest->id,
+            // Save validation history
+            $this->saveRANCAValidationHistory(
+                $dvRequest,
+                'validate',
+                $remarks,
+                [
+                    'status_before' => $statusBefore,
+                    'status_after' => $newStatus,
                     'dv_number' => $dvRequest->dv_number,
-                    'status' => $newStatus,
-                    'amount' => $dvRequest->amount,
-                    'payee' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-                    'program' => $dvRequest->program->prcode ?? null,
-                    'timestamp' => $validatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                    'validated_by' => auth()->user()->name,
+                    'qr_status' => 'active',
+                    'validated_by' => $currentUserId,
+                    'validated_at' => $validatedAt->toISOString(),
                     'accountant_verified_at' => $this->safeDateToISO($dvRequest->accountant_verified_at),
                     'accountant_last_action_at' => $this->safeDateToISO($dvRequest->accountant_last_action_at),
-                    'dv_data' => [
-                        'id' => $dvRequest->id,
-                        'dv_number' => $dvRequest->dv_number,
-                        'reference_number' => $dvRequest->reference_number,
-                        'amount' => $dvRequest->amount,
-                        'status' => $newStatus,
-                        'mode_of_payment' => $dvRequest->mode_of_payment,
-                        'particulars' => $dvRequest->particulars,
-                        'qr_code_token' => $dvRequest->qr_code_token,
-                        'qr_status' => $dvRequest->qr_status,
-                        'accountant_verified_at' => $this->safeDateToISO($dvRequest->accountant_verified_at),
-                        'accountant_last_action_at' => $this->safeDateToISO($dvRequest->accountant_last_action_at),
-                        'updated_at' => $dvRequest->updated_at->toISOString(),
-                        'focal_person' => [
-                            'fname' => $dvRequest->focalPerson->fname,
-                            'lname' => $dvRequest->focalPerson->lname,
-                            'position' => $dvRequest->focalPerson->position,
-                            'TIN_number' => $dvRequest->focalPerson->TIN_number,
-                            'contactnumber' => $dvRequest->focalPerson->contactnumber,
-                        ],
-                        'program' => [
-                            'prcode' => $dvRequest->program->prcode ?? null,
-                            'description' => $dvRequest->program->description ?? null,
-                        ]
-                    ]
+                    'last_action_at' => $this->safeDateToISO($dvRequest->last_action_at),
+                    'amount' => $dvRequest->amount,
+                    'program' => $dvRequest->program->prcode ?? null,
+                    // 👇 ADD THIS TO TRACK URGENT FLAG REMOVAL
+                    'urgent_flag_removed' => $dvRequest->getOriginal('is_urgent') == 1,
+                ]
+            );
+
+            $this->logAction(
+                $dvRequest->id, 
+                'Accountant_III', 
+                $newStatus, 
+                $remarks . ' | Accountant verified at: ' . $this->formatDateForLog($dvRequest->accountant_verified_at) .
+                ($dvRequest->getOriginal('is_urgent') == 1 ? ' | 🚨 Urgent flag automatically removed' : '')
+            );
+
+            // Notify focal person
+            $focalId = $dvRequest->focalperson_id;
+
+            if ($focalId) {
+                Notification::create([
+                    'focalperson_id' => $focalId,
+                    'dv_request_id'  => $dvRequest->id,
+                    'status'         => $newStatus,
+                    'action'         => 'Validated',
+                    'remarks'        => $remarks . ($dvRequest->getOriginal('is_urgent') == 1 ? ' (Urgent flag resolved)' : ''),
                 ]);
 
-                // Real-time notification to RANCA channel
-                $this->pusher->trigger('dv-requests-ranca', 'dv-request-validated', [
+                $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [
                     'dv_request_id' => $dvRequest->id,
                     'status'        => $newStatus,
-                    'action_performer_id' => $currentUserId,
+                    'remarks'       => $remarks,
+                    'timestamp'     => $validatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'is_urgent'     => false, // Send updated urgent status
+                ]);
+            }
+            
+            // Send to regional director dashboard
+            $this->pusher->trigger('regional-director-dashboard', 'new-dv-available', [
+                'dv_id' => $dvRequest->id,
+                'dv_number' => $dvRequest->dv_number,
+                'status' => $newStatus,
+                'amount' => $dvRequest->amount,
+                'payee' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                'program' => $dvRequest->program->prcode ?? null,
+                'timestamp' => $validatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'validated_by' => auth()->user()->name,
+                'accountant_verified_at' => $this->safeDateToISO($dvRequest->accountant_verified_at),
+                'accountant_last_action_at' => $this->safeDateToISO($dvRequest->accountant_last_action_at),
+                'is_urgent' => false, // Send updated urgent status
+                'dv_data' => [
+                    'id' => $dvRequest->id,
+                    'dv_number' => $dvRequest->dv_number,
+                    'reference_number' => $dvRequest->reference_number,
+                    'amount' => $dvRequest->amount,
+                    'status' => $newStatus,
+                    'mode_of_payment' => $dvRequest->mode_of_payment,
+                    'particulars' => $dvRequest->particulars,
+                    'qr_code_token' => $dvRequest->qr_code_token,
+                    'qr_status' => $dvRequest->qr_status,
+                    'is_urgent' => false, // Send updated urgent status
                     'accountant_verified_at' => $this->safeDateToISO($dvRequest->accountant_verified_at),
                     'accountant_last_action_at' => $this->safeDateToISO($dvRequest->accountant_last_action_at),
-                    'timestamp'     => $validatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                ]);
-            });
-
-            $this->triggerDashboardUpdate();
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'DV Request has been validated by Accountant.',
-                    'data' => [
-                        'id' => $dvRequest->id,
-                        'status' => $newStatus,
-                        'accountant_verified_at' => $this->formatDateForLog($dvRequest->accountant_verified_at),
-                        'accountant_last_action_at' => $this->formatDateForLog($dvRequest->accountant_last_action_at),
+                    'updated_at' => $dvRequest->updated_at->toISOString(),
+                    'focal_person' => [
+                        'fname' => $dvRequest->focalPerson->fname,
+                        'lname' => $dvRequest->focalPerson->lname,
+                        'position' => $dvRequest->focalPerson->position,
+                        'TIN_number' => $dvRequest->focalPerson->TIN_number,
+                        'contactnumber' => $dvRequest->focalPerson->contactnumber,
+                    ],
+                    'program' => [
+                        'prcode' => $dvRequest->program->prcode ?? null,
+                        'description' => $dvRequest->program->description ?? null,
                     ]
-                ]);
-            }
+                ]
+            ]);
 
-            return redirect()->route('Accounting.dvrequests.index')
-                ->with('success', 'DV Request has been validated by Accountant.');
+            // Real-time notification to RANCA channel
+            $this->pusher->trigger('dv-requests-ranca', 'dv-request-validated', [
+                'dv_request_id' => $dvRequest->id,
+                'status'        => $newStatus,
+                'action_performer_id' => $currentUserId,
+                'accountant_verified_at' => $this->safeDateToISO($dvRequest->accountant_verified_at),
+                'accountant_last_action_at' => $this->safeDateToISO($dvRequest->accountant_last_action_at),
+                'timestamp'     => $validatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'is_urgent'     => false, // Send updated urgent status
+            ]);
+        });
 
-        } catch (\Exception $e) {
-            Log::error('Error validating DV in RANCA: ' . $e->getMessage());
+        $this->triggerDashboardUpdate();
 
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
-            }
-
-            return back()->with('error', 'An error occurred while validating the request.');
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'DV Request has been validated by Accountant and urgent flag ' . 
+                            ($dvRequest->getOriginal('is_urgent') == 1 ? 'removed.' : 'was not set.'),
+                'data' => [
+                    'id' => $dvRequest->id,
+                    'status' => $newStatus,
+                    'is_urgent' => false,
+                    'urgent_removed' => $dvRequest->getOriginal('is_urgent') == 1,
+                    'accountant_verified_at' => $this->formatDateForLog($dvRequest->accountant_verified_at),
+                    'accountant_last_action_at' => $this->formatDateForLog($dvRequest->accountant_last_action_at),
+                ]
+            ]);
         }
+
+        $successMessage = 'DV Request has been validated by Accountant.';
+        if ($dvRequest->getOriginal('is_urgent') == 1) {
+            $successMessage .= ' Urgent flag has been automatically removed.';
+        }
+
+        return redirect()->route('Accounting.dvrequests.index')
+            ->with('success', $successMessage);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Document has been finalized and forwarded to RANCA.' . 
+                        ($dvRequest->is_urgent ? ' [🚨 URGENT]' : ''),
+            'data' => [
+                'id' => $dvRequest->id,
+                'status' => $newStatus,
+                'finalized_at' => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'outgoing_finalized_at' => $finalizedAt->format('M d, Y h:i A'),
+                'is_urgent' => $dvRequest->is_urgent ?? false,
+            ]
+        ]);
+    } catch (\Exception $e) {
+        Log::error('Error validating DV in RANCA: ' . $e->getMessage());
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['success' => false, 'message' => 'An error occurred.'], 500);
+        }
+
+        return back()->with('error', 'An error occurred while validating the request.');
     }
+}
 
     /** Reject DV Request */
     public function reject(Request $request, $id)

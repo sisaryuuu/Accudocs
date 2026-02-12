@@ -2,6 +2,159 @@
 
 @section('title', 'Budget Officer - ORS Requests')
 
+<style>
+    /* ============ URGENT BLINKING ANIMATIONS ============ */
+    @keyframes urgent-blink {
+        0% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+        25% {
+            background-color: #fecaca;
+            border-left-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+        }
+        50% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+        75% {
+            background-color: #fecaca;
+            border-left-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+        }
+        100% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+    }
+
+    .urgent-blink {
+        animation: urgent-blink 1.2s ease-in-out infinite;
+        transition: all 0.2s ease;
+    }
+
+    /* Badge pulsing effect */
+    @keyframes urgent-pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #dc2626;
+        }
+        50% {
+            transform: scale(1.08);
+            opacity: 0.95;
+            background-color: #b91c1c;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #dc2626;
+        }
+    }
+
+    .urgent-badge {
+        animation: urgent-pulse 1.2s ease-in-out infinite;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Glowing effect for buttons */
+    @keyframes urgent-glow {
+        0% {
+            box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+            border-color: #ef4444;
+        }
+        25% {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.8), 0 0 25px rgba(239, 68, 68, 0.5);
+            border-color: #dc2626;
+        }
+        50% {
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6), 0 0 30px rgba(220, 38, 38, 0.4);
+            border-color: #b91c1c;
+        }
+        75% {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.8), 0 0 25px rgba(239, 68, 68, 0.5);
+            border-color: #dc2626;
+        }
+        100% {
+            box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+            border-color: #ef4444;
+        }
+    }
+
+    .urgent-glow {
+        animation: urgent-glow 1.5s ease-in-out infinite;
+    }
+
+    /* Dot pulsing animation */
+    @keyframes urgent-dot-pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #fff;
+        }
+        50% {
+            transform: scale(1.3);
+            opacity: 0.9;
+            background-color: #fee2e2;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #fff;
+        }
+    }
+
+    .urgent-dot {
+        animation: urgent-dot-pulse 1s ease-in-out infinite;
+    }
+
+    /* Urgent button */
+    .btn-urgent-receive {
+        background: linear-gradient(45deg, #dc2626, #b91c1c, #991b1b, #b91c1c, #dc2626);
+        background-size: 300% 300%;
+        animation: gradient-shift 3s ease infinite, urgent-glow 1.5s ease-in-out infinite;
+        color: white;
+        font-weight: bold;
+        border: none;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    .btn-urgent-process {
+        background-color: #dc2626;
+        color: white;
+        font-weight: bold;
+        animation: urgent-glow 1.5s ease-in-out infinite;
+        border: none;
+    }
+
+    .btn-urgent-process:hover {
+        background-color: #b91c1c;
+        transform: scale(1.05);
+    }
+
+    /* Ensure table layout is fixed */
+    .table-fixed {
+        table-layout: fixed;
+    }
+
+    /* Column width adjustments for urgent column */
+    .w-urgent {
+        width: 8%;
+    }
+</style>
+
+
 @section('content')
 <div class="min-h-screen bg-gray-50 pt-24 pb-8">
     <div class="max-w-[95rem] mx-auto px-6">
@@ -37,7 +190,7 @@
                     <div>
                         <p class="text-red-700 text-sm font-semibold">Critical</p>
                         <p id="ors-stat-critical" class="text-2xl font-bold text-red-600">0</p>
-                        <p class="text-xs text-red-600">7+ days old</p>
+                        <p class="text-xs text-red-600">10+ days old</p>
                     </div>
                     <svg class="w-8 h-8 text-red-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"></path>
@@ -50,7 +203,7 @@
                     <div>
                         <p class="text-orange-700 text-sm font-semibold">High</p>
                         <p id="ors-stat-high" class="text-2xl font-bold text-orange-600">0</p>
-                        <p class="text-xs text-orange-600">5-7 days old</p>
+                        <p class="text-xs text-orange-600">7-10 days old</p>
                     </div>
                     <svg class="w-8 h-8 text-orange-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3m0 0v.01M2 15v3m0 0v.01"></path>
@@ -63,7 +216,7 @@
                     <div>
                         <p class="text-yellow-700 text-sm font-semibold">Medium</p>
                         <p id="ors-stat-medium" class="text-2xl font-bold text-yellow-600">0</p>
-                        <p class="text-xs text-yellow-600">3-5 days old</p>
+                        <p class="text-xs text-yellow-600">5-7 days old</p>
                     </div>
                     <svg class="w-8 h-8 text-yellow-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M13 16H5v-4m0-5V7a1 1 0 012-1h6a1 1 0 012 1v1m0 5v4m0 0h2a1 1 0 001-1v-4a1 1 0 00-1-1h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 00-.293.707V12m0 0H9a1 1 0 001-1V9a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm0 5V9m0 8a2 2 0 100-4 2 2 0 000 4z"></path>
@@ -76,7 +229,7 @@
                     <div>
                         <p class="text-blue-700 text-sm font-semibold">Total Aging</p>
                         <p id="ors-stat-total" class="text-2xl font-bold text-blue-600">0</p>
-                        <p class="text-xs text-blue-600">3+ days old</p>
+                        <p class="text-xs text-blue-600">5+ days old</p>
                     </div>
                     <svg class="w-8 h-8 text-blue-500 opacity-30" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path>
@@ -87,7 +240,7 @@
         </div>
 
         <!-- Sorting Controls -->
-        <div class="flex gap-2 mb-6">
+        <div class="flex flex-wrap gap-2 mb-6">
             <button id="sort-by-priority" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"></path>
@@ -104,7 +257,7 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.954-.833-2.724 0L4.348 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
                 </svg>
-                Show Critical Only (7+ days)
+                Show Critical Only (10+ days)
             </button>
             <button id="show-all" class="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition flex items-center gap-2" style="display: none;">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -264,18 +417,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const budgetChannel = pusher.subscribe('dv-requests-budget-officer');
 
     // ============ PUSHER EVENT LISTENERS ============
+    // ============ PUSHER EVENT LISTENERS ============
+budgetChannel.bind('dv-request-verified', function(data) {
+    console.log('DV request verified by incoming unit:', data);
     
-    // Listen for new DV request verifications from incoming units
-    budgetChannel.bind('dv-request-verified', function(data) {
-        console.log('DV request verified by incoming unit:', data);
-        fetchDvRequests();
-        setTimeout(() => {
-            fetchOrsAgingDocuments();
-            updateOrsStatistics();
-        }, 500);
-    });
+    // ✅ FIXED: Check if this is an urgent document
+    const isUrgent = data.is_urgent == 1 || data.is_urgent === true || data.is_urgent === '1';
+    
+    if (isUrgent) {
+        // Show a prominent toast for urgent documents
+        showToast(`🚨 URGENT DOCUMENT: ${data.submitted_by} - ${data.program}`, 'warning');
+    } else {
+        showToast(`New document verified from ${data.submitted_by}`, 'info');
+    }
+    
+    fetchDvRequests();
+    setTimeout(() => {
+        fetchOrsAgingDocuments();
+        updateOrsStatistics();
+    }, 500);
+});
 
-    // Listen for received events
     budgetChannel.bind('dv-request-received', function(data) {
         console.log('DV request received by Budget Officer:', data);
         
@@ -295,7 +457,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     });
 
-    // Listen for processing started events
     budgetChannel.bind('dv-request-processing', function(data) {
         console.log('DV request processing started:', data);
         
@@ -310,7 +471,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     });
 
-    // Listen for obligated events
     budgetChannel.bind('ors-obligated', function(data) {
         console.log('ORS obligated:', data);
         
@@ -325,7 +485,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
     });
 
-    // Listen for onhold events
     budgetChannel.bind('ors-onhold', function(data) {
         console.log('ORS put on hold:', data);
         
@@ -340,7 +499,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
     });
 
-    // Listen for revised events
     budgetChannel.bind('ors-revised', function(data) {
         console.log('ORS revised:', data);
         
@@ -355,7 +513,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
     });
 
-    // Listen for status updates
     budgetChannel.bind('status-updated', function(data) {
         console.log('DV request status updated:', data);
         
@@ -370,7 +527,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
     });
 
-    // Listen for amount updates
     budgetChannel.bind('amount-updated', function(data) {
         console.log('Amount updated:', data);
         
@@ -385,7 +541,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
     });
 
-    // Listen for ORS aging alerts
     budgetChannel.bind('ors-aging-alert', function(data) {
         console.log('ORS Aging alert received:', data);
         showToast(`Aging ORS document: ${data.ors_number || data.control_number} is ${data.days_in_status} days old`, 'warning');
@@ -613,112 +768,99 @@ document.addEventListener('DOMContentLoaded', function() {
             );
         });
     }
-function performSearch() {
-    // Start with all requests
-    filteredRequests = allRequests;
-    
-    // Apply search filter first
-    if (searchTerm) {
-        filteredRequests = filterRequests(filteredRequests, searchTerm);
-    }
-    
-    // FIX: Calculate days properly for all requests
-    filteredRequests = filteredRequests.map(req => {
-        let days = 0;
+
+    function performSearch() {
+        let tempFiltered = filterRequests(allRequests, searchTerm);
         
-        // Use the same calculation as in renderTable
-        if (req.days_old !== undefined && req.days_old !== null) {
-            days = Math.abs(Math.round(parseFloat(req.days_old))) || 0;
-        } else if (req.days_in_status !== undefined && req.days_in_status !== null) {
-            days = Math.abs(Math.round(parseFloat(req.days_in_status))) || 0;
-        } else {
-            // Calculate from date if not provided
-            const requestDate = req.created_at_timestamp ? new Date(req.created_at_timestamp) : new Date(req.date);
-            const now = new Date();
-            const diffTime = Math.abs(now - requestDate);
-            days = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        }
-        
-        // Ensure fresh requests show 0 days
-        if (days < 1) {
-            days = 0;
-        }
-        
-        return {
+        tempFiltered = tempFiltered.map(req => ({
             ...req,
-            days_in_status: days,
-            days_old: days
-        };
-    });
-    
-    // Apply critical filter if active
-    if (isCriticalOnlyView) {
-        filteredRequests = filteredRequests.filter(req => req.days_old >= 7);
+            days_old: Math.abs(req.days_old || req.days_in_status) || 0,
+            is_urgent: req.is_urgent || false
+        }));
+        
+        if (currentSort === 'priority') {
+            tempFiltered.sort((a, b) => {
+                // 1. HIGHEST PRIORITY: Urgent documents ALWAYS come FIRST
+                if (a.is_urgent && !b.is_urgent) return -1;
+                if (!a.is_urgent && b.is_urgent) return 1;
+                
+                // 2. SECOND PRIORITY: ORS_received status
+                const aIsReceived = a.status === 'ORS_received';
+                const bIsReceived = b.status === 'ORS_received';
+                
+                if (aIsReceived && !bIsReceived) return -1;
+                if (!aIsReceived && bIsReceived) return 1;
+                
+                // 3. THIRD PRIORITY: Age (oldest first)
+                return b.days_old - a.days_old;
+            });
+        } else if (currentSort === 'date') {
+            tempFiltered.sort((a, b) => {
+                const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
+                const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
+                return aDate - bDate;
+            });
+        }
+        
+        if (isCriticalOnlyView) {
+            tempFiltered = tempFiltered.filter(req => req.days_old >= 10);
+        }
+        
+        filteredRequests = tempFiltered;
+        
+        totalRecords = filteredRequests.length;
+        totalPages = Math.ceil(totalRecords / perPage);
+        
+        if (searchTerm || isCriticalOnlyView) {
+            currentPage = 1;
+        } else {
+            if (currentPage > totalPages && totalPages > 0) {
+                currentPage = totalPages;
+            }
+        }
+        
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
     }
-    
-    // Apply sorting
-    if (currentSort === 'priority') {
-        sortByPriority();
-    } else if (currentSort === 'date') {
-        sortByDate();
-    }
-    
-    totalRecords = filteredRequests.length;
-    totalPages = Math.ceil(totalRecords / perPage);
-    currentPage = 1;
-    
-    renderTable(getPaginatedData());
-    updatePaginationInfo();
-}
+
     function sortByPriority() {
-    filteredRequests.sort((a, b) => {
-        // 1. PRIMARY SORT: ORS_received status comes FIRST
-        const aIsOrsReceived = a.status === 'ORS_received';
-        const bIsOrsReceived = b.status === 'ORS_received';
+        const sorted = [...filteredRequests];
         
-        if (aIsOrsReceived && !bIsOrsReceived) return -1;
-        if (!aIsOrsReceived && bIsOrsReceived) return 1;
+        sorted.sort((a, b) => {
+            // 1. HIGHEST PRIORITY: Urgent documents ALWAYS come FIRST
+            if (a.is_urgent && !b.is_urgent) return -1;
+            if (!a.is_urgent && b.is_urgent) return 1;
+            
+            // 2. SECOND PRIORITY: ORS_received status
+            const aIsReceived = a.status === 'ORS_received';
+            const bIsReceived = b.status === 'ORS_received';
+            
+            if (aIsReceived && !bIsReceived) return -1;
+            if (!aIsReceived && bIsReceived) return 1;
+            
+            // 3. THIRD PRIORITY: Age (oldest first)
+            return b.days_old - a.days_old;
+        });
         
-        // 2. SECONDARY SORT: Incoming verified statuses come second
-        const aIsIncomingVerified = ['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified'].includes(a.status);
-        const bIsIncomingVerified = ['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified'].includes(b.status);
-        
-        if (aIsIncomingVerified && !bIsIncomingVerified) return -1;
-        if (!aIsIncomingVerified && bIsIncomingVerified) return 1;
-        
-        // 3. TERTIARY SORT: Age-based priority for the rest
-        const aDays = Math.abs(Math.floor(a.days_old || a.days_in_status)) || 0;
-        const bDays = Math.abs(Math.floor(b.days_old || b.days_in_status)) || 0;
-        
-        const aCritical = aDays >= 7;
-        const bCritical = bDays >= 7;
-        
-        if (aCritical && !bCritical) return -1;
-        if (!aCritical && bCritical) return 1;
-        
-        const aHigh = aDays >= 5;
-        const bHigh = bDays >= 5;
-        
-        if (aHigh && !bHigh) return -1;
-        if (!aHigh && bHigh) return 1;
-        
-        const aMedium = aDays >= 3;
-        const bMedium = bDays >= 3;
-        
-        if (aMedium && !bMedium) return -1;
-        if (!aMedium && bMedium) return 1;
-        
-        // Then by days old descending within same priority
-        return bDays - aDays;
-    });
-}
+        filteredRequests = sorted;
+        currentPage = 1;
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+    }
 
     function sortByDate() {
-        filteredRequests.sort((a, b) => {
+        const sorted = [...filteredRequests];
+        
+        sorted.sort((a, b) => {
             const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
             const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
             return aDate - bDate;
         });
+        
+        filteredRequests = sorted;
+        currentPage = 1;
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
     }
 
     function updateSortButtonStyles() {
@@ -750,7 +892,7 @@ function performSearch() {
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.954-.833-2.724 0L4.348 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
                     </svg>
-                    Showing Critical Only (7+ days)
+                    Showing Critical Only (10+ days)
                 `;
             } else {
                 criticalBtn.className = 'px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition flex items-center gap-2';
@@ -758,7 +900,7 @@ function performSearch() {
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.954-.833-2.724 0L4.348 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
                     </svg>
-                    Show Critical Only (7+ days)
+                    Show Critical Only (10+ days)
                 `;
             }
         }
@@ -772,204 +914,218 @@ function performSearch() {
         }
     }
 
+    // ============ TABLE RENDERING ============
     function renderTable(dvRequests) {
-    if (dvRequests.length === 0) {
-        tableContainer.innerHTML = `
-            <div class="text-center py-16">
-                <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
+        if (dvRequests.length === 0) {
+            let message = '';
+            if (isCriticalOnlyView) {
+                message = '<p class="text-sm text-red-600 mt-2">No critical documents (10+ days) found.</p>';
+            }
+            
+            tableContainer.innerHTML = `
+                <div class="text-center py-16">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
+                    <p class="text-gray-500">${searchTerm ? 'Try adjusting your search filter.' : 'No requests available.'}</p>
+                    ${message}
                 </div>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
-                <p class="text-gray-500">${searchTerm ? 'Try adjusting your search filter.' : 'No requests available.'}</p>
-                ${isCriticalOnlyView ? '<p class="text-sm text-red-600 mt-2">No critical documents (7+ days) found.</p>' : ''}
-            </div>
+            `;
+            return;
+        }
+
+        let html = `
+            <div class="overflow-x-auto">
+                <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
+                    <thead class="bg-gray-50 text-[13px]">
+                        <tr>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                            <th class="px-5 py-3 w-[10%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ORS No.</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                            <th class="px-5 py-3 w-urgent text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Urgent</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Particulars</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Received</th>
+                            <th class="px-5 py-3 w-[10%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
         `;
-        return;
+
+        dvRequests.forEach(request => {
+            const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
+            const daysOld = Math.abs(Math.round(request.days_old)) || 0;
+            const isUrgent = request.is_urgent == 1 || request.is_urgent === true || request.is_urgent === '1';
+            
+            // Row styling
+            let rowClasses = 'hover:bg-gray-50 transition-colors duration-150';
+            let rowBgClass = '';
+            
+            if (isUrgent) {
+                rowBgClass = 'urgent-blink';
+                rowClasses = 'border-l-4 border-red-600';
+            } else if (daysOld >= 10) {
+                rowBgClass = 'bg-red-50/50 hover:bg-red-100/50';
+                rowClasses = 'border-l-4 border-red-400';
+            } else if (daysOld >= 7) {
+                rowBgClass = 'bg-orange-50/50 hover:bg-orange-100/50';
+                rowClasses = 'border-l-4 border-orange-300';
+            } else if (daysOld >= 5) {
+                rowBgClass = 'bg-yellow-50/50 hover:bg-yellow-100/50';
+                rowClasses = 'border-l-4 border-yellow-300';
+            } else {
+                rowBgClass = 'bg-white hover:bg-gray-50';
+                rowClasses = '';
+            }
+            
+            // Urgent badge for column
+            let urgentColumnBadge = '';
+            if (isUrgent) {
+                urgentColumnBadge = `
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-bold text-white bg-red-600 rounded-full urgent-badge">
+                        <svg class="w-3 h-3 mr-1 urgent-dot" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                        URGENT
+                    </span>
+                `;
+            } else {
+                urgentColumnBadge = `<span class="text-gray-400">—</span>`;
+            }
+            
+            // Button styling
+            let buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700';
+            let buttonText = 'Receive';
+            
+            if (['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified'].includes(request.status)) {
+                if (isUrgent) {
+                    buttonClass = 'btn-urgent-receive';
+                    buttonText = '⚡ RECEIVE NOW';
+                } else if (daysOld >= 10) {
+                    buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700 border border-green-300 font-medium';
+                    buttonText = 'RECEIVE';
+                } else if (daysOld >= 7) {
+                    buttonClass = 'bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300';
+                } else if (daysOld >= 5) {
+                    buttonClass = 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border border-yellow-300';
+                }
+            } else {
+                if (isUrgent) {
+                    buttonClass = 'btn-urgent-process';
+                    buttonText = '⚡ PROCESS NOW';
+                } else if (daysOld >= 10) {
+                    buttonClass = 'bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 font-medium';
+                    buttonText = 'PROCESS';
+                } else if (daysOld >= 7) {
+                    buttonClass = 'bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300';
+                    buttonText = 'View / Process';
+                } else if (daysOld >= 5) {
+                    buttonClass = 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border border-yellow-300';
+                    buttonText = 'View / Process';
+                } else {
+                    buttonClass = 'bg-blue-100 hover:bg-blue-200 text-blue-700';
+                    buttonText = 'View / Process';
+                }
+            }
+            
+            // Status badge styling
+            let statusBadgeClass = bgClass;
+            let statusDotClass = dotClass;
+            let statusLabel = label;
+            
+            if (isUrgent) {
+                statusBadgeClass = 'status-urgent';
+                statusDotClass = 'bg-white urgent-dot';
+                statusLabel = 'URGENT - ' + label;
+            } else if (daysOld >= 10) {
+                statusBadgeClass = 'bg-red-100 text-red-800 border border-red-200';
+                statusDotClass = 'bg-red-500';
+            } else if (daysOld >= 7) {
+                statusBadgeClass = 'bg-orange-100 text-orange-800 border border-orange-200';
+                statusDotClass = 'bg-orange-400';
+            } else if (daysOld >= 5) {
+                statusBadgeClass = 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+                statusDotClass = 'bg-yellow-400';
+            }
+            
+            html += `
+                <tr class="${rowClasses} ${rowBgClass}" data-dv-id="${request.id}">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                        ${request.control_no ?? '—'}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${request.ors_number ?? '—'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">${request.submitted_by}</td>
+                    <td class="px-6 py-4 text-sm">
+                        ${urgentColumnBadge}
+                    </td>
+                    <td class="px-6 py-4 text-sm">
+                        <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            isUrgent ? 'bg-red-100 text-red-800 urgent-badge' :
+                            daysOld >= 10 ? 'bg-red-100 text-red-800' : 
+                            daysOld >= 7 ? 'bg-orange-100 text-orange-800' : 
+                            daysOld >= 5 ? 'bg-yellow-100 text-yellow-800' : 
+                            'bg-blue-100 text-blue-800'
+                        }">
+                            ${request.program}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">${request.particulars}</td>
+                    <td class="px-6 py-4 text-sm font-semibold text-gray-900">₱${request.amount}</td>
+                    <td class="px-6 py-4">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass}">
+                            <span class="w-2 h-2 mr-2 rounded-full ${statusDotClass}"></span>
+                            ${statusLabel}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm text-gray-900">${request.date}</div>
+                        <div class="text-xs ${
+                            isUrgent ? 'text-red-600 font-bold' :
+                            daysOld >= 10 ? 'text-red-600' : 
+                            daysOld >= 7 ? 'text-orange-600' : 
+                            daysOld >= 5 ? 'text-yellow-600' : 
+                            'text-gray-500'
+                        } font-medium mt-1">
+                            ${isUrgent ? '⚠️ URGENT - ' : ''}${daysOld} ${daysOld === 1 ? 'day' : 'days'} old
+                        </div>
+                    </td>
+                    <td class="px-5 py-4 text-center text-sm font-medium">
+                        ${['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified'].includes(request.status) 
+                            ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" 
+                               class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-[13px] font-medium rounded-md transition-all duration-200 min-w-[120px] ${isUrgent ? 'urgent-glow' : ''}">
+                               ${buttonText}
+                               </button>`    
+                            : `<a href="/BudgetOfficer/dvrequests/${request.id}" 
+                               class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-xs font-medium rounded-md transition-colors duration-200 min-w-[120px] ${isUrgent ? 'urgent-glow' : ''}">
+                               ${buttonText}
+                               </a>`
+                        }
+                    </td>
+                </tr>`;
+        });
+
+        html += `</tbody></table></div>`;
+        tableContainer.innerHTML = html;
     }
 
-    let html = `
-        <div class="overflow-x-auto">
-            <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
-                <thead class="bg-gray-50 text-[13px]">
-                    <tr>
-                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                        <th class="px-5 py-3 w-[10%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ORS No.</th>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Particulars</th>
-                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                        <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
-                        <th class="px-5 py-3 w-[10%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200 text-[13.5px]">
-    `;
-
-    dvRequests.forEach(request => {
-        const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
-        
-        // FIX: More accurate days calculation - use Math.round() instead of Math.floor()
-        let daysInStatus = 0;
-        
-        // Try to get days_old from the request data
-        if (request.days_old !== undefined && request.days_old !== null) {
-            // Handle both positive and negative values with Math.abs()
-            daysInStatus = Math.abs(Math.round(parseFloat(request.days_old))) || 0;
-        } else if (request.days_in_status !== undefined && request.days_in_status !== null) {
-            // Fallback to days_in_status
-            daysInStatus = Math.abs(Math.round(parseFloat(request.days_in_status))) || 0;
-        } else {
-            // Calculate from date if not provided
-            const requestDate = request.created_at_timestamp ? new Date(request.created_at_timestamp) : new Date(request.date);
-            const now = new Date();
-            const diffTime = Math.abs(now - requestDate);
-            daysInStatus = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        }
-        
-        // Ensure it's not showing 1 day for fresh requests - anything less than 24 hours should be 0
-        if (daysInStatus < 1) {
-            daysInStatus = 0;
-        }
-        
-        // Log for debugging
-        console.log('Request days calculation:', {
-            control_no: request.control_no,
-            days_old: request.days_old,
-            days_in_status: request.days_in_status,
-            calculated_days: daysInStatus
-        });
-        
-        // Determine row styling based on age
-        let rowClasses = 'hover:bg-gray-50 transition-colors duration-150';
-        let textColorClass = 'text-gray-900';
-        let rowBgClass = '';
-        
-        if (daysInStatus >= 7) {
-            rowBgClass = 'bg-red-50/50 hover:bg-red-100/50';
-            rowClasses = 'border-l-4 border-red-400';
-        } else if (daysInStatus >= 5) {
-            rowBgClass = 'bg-orange-50/50 hover:bg-orange-100/50';
-            rowClasses = 'border-l-4 border-orange-300';
-        } else if (daysInStatus >= 3) {
-            rowBgClass = 'bg-yellow-50/50 hover:bg-yellow-100/50';
-            rowClasses = 'border-l-4 border-yellow-300';
-        } else {
-            rowBgClass = 'bg-white hover:bg-gray-50';
-        }
-        
-        // Button styling based on age and status
-        let buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700';
-        let buttonText = 'Receive';
-        
-        if (['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified'].includes(request.status)) {
-            if (daysInStatus >= 7) {
-                buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700 border border-green-300 font-medium';
-                buttonText = 'RECEIVE';
-            } else if (daysInStatus >= 5) {
-                buttonClass = 'bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300';
-            } else if (daysInStatus >= 3) {
-                buttonClass = 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border border-yellow-300';
-            }
-        } else {
-            // For already received documents
-            if (daysInStatus >= 7) {
-                buttonClass = 'bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 font-medium';
-                buttonText = 'VIEW / PROCESS';
-            } else if (daysInStatus >= 5) {
-                buttonClass = 'bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300';
-                buttonText = 'View / Process';
-            } else if (daysInStatus >= 3) {
-                buttonClass = 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border border-yellow-300';
-                buttonText = 'View / Process';
-            } else {
-                buttonClass = 'bg-blue-100 hover:bg-blue-200 text-blue-700';
-                buttonText = 'View / Process';
-            }
-        }
-        
-        html += `
-            <tr class="${rowClasses} ${rowBgClass}">
-                <td class="px-6 py-4 text-sm font-medium ${textColorClass}">
-                    ${request.control_no ?? '—'}
-                </td>
-                <td class="px-6 py-4 text-sm ${textColorClass}">${request.ors_number ?? '—'}</td>
-                <td class="px-6 py-4 text-sm ${textColorClass}">${request.submitted_by}</td>
-                <td class="px-6 py-4 text-sm">
-                    <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        daysInStatus >= 7 ? 'bg-red-100 text-red-800' : 
-                        daysInStatus >= 5 ? 'bg-orange-100 text-orange-800' : 
-                        daysInStatus >= 3 ? 'bg-yellow-100 text-yellow-800' : 
-                        'bg-blue-100 text-blue-800'
-                    }">
-                        ${request.program}
-                    </span>
-                </td>
-                <td class="px-6 py-4 text-sm font-semibold ${textColorClass}">${request.particulars}</td>
-                <td class="px-6 py-4 text-sm font-semibold ${textColorClass}">₱${request.amount}</td>
-                <td class="px-6 py-4">
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                        daysInStatus >= 7 ? 'bg-red-100 text-red-800 border border-red-200' : 
-                        daysInStatus >= 5 ? 'bg-orange-100 text-orange-800 border border-orange-200' : 
-                        daysInStatus >= 3 ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
-                        bgClass
-                    }">
-                        <span class="w-2 h-2 mr-2 rounded-full ${
-                            daysInStatus >= 7 ? 'bg-red-500' : 
-                            daysInStatus >= 5 ? 'bg-orange-400' : 
-                            daysInStatus >= 3 ? 'bg-yellow-400' : 
-                            dotClass
-                        }"></span>
-                        ${label}
-                    </span>
-                </td>
-                <td class="px-6 py-4">
-                    <div class="text-sm ${textColorClass}">${request.date}</div>
-                    <div class="text-xs ${
-                        daysInStatus >= 7 ? 'text-red-600' : 
-                        daysInStatus >= 5 ? 'text-orange-600' : 
-                        daysInStatus >= 3 ? 'text-yellow-600' : 
-                        'text-gray-500'
-                    } font-medium mt-1">
-                        ${daysInStatus} ${daysInStatus === 1 ? 'day' : 'days'} old
-                    </div>
-                </td>
-                <td class="px-5 py-4 text-center text-sm font-medium">
-                    ${['Incoming-GIP_verified', 'Incoming-TUPAD_verified', 'Incoming-TEV_verified'].includes(request.status) 
-                        ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" 
-                           class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-[13px] font-medium rounded-md transition-all duration-200 min-w-[120px]">
-                           ${buttonText}
-                           </button>`    
-                        : `<a href="/BudgetOfficer/dvrequests/${request.id}" 
-                           class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-xs font-medium rounded-md transition-colors duration-200 min-w-[120px]">
-                           ${buttonText}
-                           </a>`
-                    }
-                </td>
-            </tr>`;
-    });
-
-    html += `</tbody></table></div>`;
-    tableContainer.innerHTML = html;
-}
     async function fetchDvRequests() {
         try {
             const res = await fetch("{{ route('BudgetOfficer.dvrequests.fetch') }}?search=" + encodeURIComponent(searchTerm));
             const data = await res.json();
             
-            // Log the data to see what's coming from backend
-            console.log('DV Requests from backend:', data.map(req => ({
-                id: req.id,
-                control_no: req.control_no,
-                days_old: req.days_old,
-                days_in_status: req.days_in_status,
-                status: req.status
-            })));
+            // Add is_urgent flag based on days old
+            allRequests = data.map(req => ({
+                ...req,
+                days_old: Math.abs(req.days_old || req.days_in_status) || 0,
+                is_urgent: req.is_urgent || (Math.abs(req.days_old || req.days_in_status) >= 10)
+            }));
             
-            allRequests = data;
             performSearch();
             
         } catch (err) {
@@ -1036,198 +1192,184 @@ function performSearch() {
         }
     }
 
-   function renderOrsAgingAlerts(documents, count) {
-    if (!orsAgingAlertsContainer || !documents || documents.length === 0) {
-        if (orsAgingAlertsContainer) orsAgingAlertsContainer.innerHTML = '';
-        return;
-    }
-
-    // Filter for aging ORS documents
-    const agingDocs = documents.filter(doc => !['ORS_obligated', 'completed'].includes(doc.status));
-    
-    if (agingDocs.length === 0) {
-        orsAgingAlertsContainer.innerHTML = '';
-        return;
-    }
-
-    // Ensure positive days_in_status values using Math.abs()
-    agingDocs.forEach(doc => {
-        const days = Math.abs(Math.floor(Number(doc.days_in_status))) || 0;
-        doc.days_in_status = days;
-        doc.urgency = days >= 7 ? 'critical' : days >= 5 ? 'high' : days >= 3 ? 'medium' : 'low';
-    });
-
-    // Calculate statistics
-    const stats = {
-        critical: agingDocs.filter(doc => doc.days_in_status >= 7).length,
-        high: agingDocs.filter(doc => doc.days_in_status >= 5 && doc.days_in_status < 7).length,
-        medium: agingDocs.filter(doc => doc.days_in_status >= 3 && doc.days_in_status < 5).length,
-        total: agingDocs.length
-    };
-
-    // Find oldest document
-    const oldestDoc = agingDocs.reduce((oldest, doc) => {
-        const docDays = Math.abs(Math.floor(doc.days_in_status)) || 0;
-        const oldestDays = Math.abs(Math.floor(oldest.days_in_status)) || 0;
-        return docDays > oldestDays ? doc : oldest;
-    }, agingDocs[0]);
-
-    // Calculate average age
-    const avgAge = Math.abs(Math.floor(agingDocs.reduce((sum, doc) => sum + (Math.abs(Math.floor(doc.days_in_status)) || 0), 0) / agingDocs.length));
-
-    // Determine overall urgency level
-    const highestUrgency = stats.critical > 0 ? 'critical' : 
-                          stats.high > 0 ? 'high' : 
-                          stats.medium > 0 ? 'medium' : 'low';
-
-    const config = {
-        'critical': { 
-            icon: '🚨', 
-            bg: 'bg-red-50 border-red-500', 
-            text: 'text-red-900',
-            accentBg: 'bg-red-100',
-            accentText: 'text-red-700'
-        },
-        'high': { 
-            icon: '⚠️', 
-            bg: 'bg-orange-50 border-orange-500', 
-            text: 'text-orange-900',
-            accentBg: 'bg-orange-100',
-            accentText: 'text-orange-700'
-        },
-        'medium': { 
-            icon: '⏰', 
-            bg: 'bg-yellow-50 border-yellow-500', 
-            text: 'text-yellow-900',
-            accentBg: 'bg-yellow-100',
-            accentText: 'text-yellow-700'
-        },
-        'low': { 
-            icon: 'ℹ️', 
-            bg: 'bg-blue-50 border-blue-500', 
-            text: 'text-blue-900',
-            accentBg: 'bg-blue-100',
-            accentText: 'text-blue-700'
+    function renderOrsAgingAlerts(documents, count) {
+        if (!orsAgingAlertsContainer || !documents || documents.length === 0) {
+            if (orsAgingAlertsContainer) orsAgingAlertsContainer.innerHTML = '';
+            return;
         }
-    };
 
-    const c = config[highestUrgency];
-
-    // Check if minimized
-    const alertState = JSON.parse(localStorage.getItem('orsAgingAlertMinimized') || 'false');
-    const isMinimized = alertState === true;
-
-    // Build summary text
-    let summaryText = `You currently have <strong>${stats.total} aging ORS document${stats.total > 1 ? 's' : ''}</strong> that require attention. `;
-    
-    // Add breakdown by priority
-    const priorities = [];
-    if (stats.critical > 0) priorities.push(`<strong class="text-red-700">${stats.critical} critical</strong> (7+ days old)`);
-    if (stats.high > 0) priorities.push(`<strong class="text-orange-700">${stats.high} high priority</strong> (5-7 days)`);
-    if (stats.medium > 0) priorities.push(`<strong class="text-yellow-700">${stats.medium} medium priority</strong> (3-5 days)`);
-    
-    if (priorities.length > 0) {
-        if (priorities.length === 1) {
-            summaryText += `This includes ${priorities[0]}. `;
-        } else if (priorities.length === 2) {
-            summaryText += `This includes ${priorities[0]} and ${priorities[1]}. `;
-        } else {
-            summaryText += `This includes ${priorities[0]}, ${priorities[1]}, and ${priorities[2]}. `;
+        const agingDocs = documents.filter(doc => !['ORS_obligated', 'completed'].includes(doc.status));
+        
+        if (agingDocs.length === 0) {
+            orsAgingAlertsContainer.innerHTML = '';
+            return;
         }
-    }
-    
-    summaryText += `The average age of pending ORS documents is <strong>${avgAge} days</strong>, with the oldest being <strong class="${c.accentText}">${oldestDoc.control_number || oldestDoc.ors_number || 'Unknown'}</strong> at <strong>${oldestDoc.days_in_status} days old</strong> from ${oldestDoc.submitted_by || 'Unknown'}.`;
-    
-    // Add urgent action message if critical
-    let urgentMessage = '';
-    if (stats.critical > 0) {
-        urgentMessage = `
-            <div class="mt-3 pt-3 border-t ${c.accentText === 'text-red-700' ? 'border-red-200' : 'border-gray-200'}">
-                <div class="flex items-start gap-2">
-                    <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-                    </svg>
-                    <p class="text-sm text-red-800 leading-relaxed">
-                        <strong>Urgent:</strong> ${stats.critical} ORS document${stats.critical > 1 ? 's have' : ' has'} exceeded the 7-day processing threshold and require${stats.critical === 1 ? 's' : ''} immediate attention.
-                    </p>
+
+        agingDocs.forEach(doc => {
+            const days = Math.abs(Math.floor(Number(doc.days_in_status))) || 0;
+            doc.days_in_status = days;
+            doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 5 ? 'medium' : 'low';
+        });
+
+        const stats = {
+            critical: agingDocs.filter(doc => doc.days_in_status >= 10).length,
+            high: agingDocs.filter(doc => doc.days_in_status >= 7 && doc.days_in_status < 10).length,
+            medium: agingDocs.filter(doc => doc.days_in_status >= 5 && doc.days_in_status < 7).length,
+            total: agingDocs.length
+        };
+
+        const oldestDoc = agingDocs.reduce((oldest, doc) => 
+            doc.days_in_status > oldest.days_in_status ? doc : oldest
+        , agingDocs[0]);
+
+        const avgAge = Math.round(agingDocs.reduce((sum, doc) => sum + doc.days_in_status, 0) / agingDocs.length);
+
+        const highestUrgency = stats.critical > 0 ? 'critical' : 
+                              stats.high > 0 ? 'high' : 
+                              stats.medium > 0 ? 'medium' : 'low';
+
+        const config = {
+            'critical': { 
+                icon: '🚨', 
+                bg: 'bg-red-50 border-red-500', 
+                text: 'text-red-900',
+                accentBg: 'bg-red-100',
+                accentText: 'text-red-700'
+            },
+            'high': { 
+                icon: '⚠️', 
+                bg: 'bg-orange-50 border-orange-500', 
+                text: 'text-orange-900',
+                accentBg: 'bg-orange-100',
+                accentText: 'text-orange-700'
+            },
+            'medium': { 
+                icon: '⏰', 
+                bg: 'bg-yellow-50 border-yellow-500', 
+                text: 'text-yellow-900',
+                accentBg: 'bg-yellow-100',
+                accentText: 'text-yellow-700'
+            },
+            'low': { 
+                icon: 'ℹ️', 
+                bg: 'bg-blue-50 border-blue-500', 
+                text: 'text-blue-900',
+                accentBg: 'bg-blue-100',
+                accentText: 'text-blue-700'
+            }
+        };
+
+        const c = config[highestUrgency];
+
+        const alertState = JSON.parse(localStorage.getItem('orsAgingAlertMinimized') || 'false');
+        const isMinimized = alertState === true;
+
+        let summaryText = `You currently have <strong>${stats.total} aging ORS document${stats.total > 1 ? 's' : ''}</strong> that require attention. `;
+        
+        const priorities = [];
+        if (stats.critical > 0) priorities.push(`<strong class="text-red-700">${stats.critical} critical</strong> (10+ days old)`);
+        if (stats.high > 0) priorities.push(`<strong class="text-orange-700">${stats.high} high priority</strong> (7-10 days)`);
+        if (stats.medium > 0) priorities.push(`<strong class="text-yellow-700">${stats.medium} medium priority</strong> (5-7 days)`);
+        
+        if (priorities.length > 0) {
+            if (priorities.length === 1) {
+                summaryText += `This includes ${priorities[0]}. `;
+            } else if (priorities.length === 2) {
+                summaryText += `This includes ${priorities[0]} and ${priorities[1]}. `;
+            } else {
+                summaryText += `This includes ${priorities[0]}, ${priorities[1]}, and ${priorities[2]}. `;
+            }
+        }
+        
+        summaryText += `The average age of pending ORS documents is <strong>${avgAge} days</strong>, with the oldest being <strong class="${c.accentText}">${oldestDoc.control_number || oldestDoc.ors_number || 'Unknown'}</strong> at <strong>${oldestDoc.days_in_status} days old</strong> from ${oldestDoc.submitted_by || 'Unknown'}.`;
+        
+        let urgentMessage = '';
+        if (stats.critical > 0) {
+            urgentMessage = `
+                <div class="mt-3 pt-3 border-t ${c.accentText === 'text-red-700' ? 'border-red-200' : 'border-gray-200'}">
+                    <div class="flex items-start gap-2">
+                        <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                        <p class="text-sm text-red-800 leading-relaxed">
+                            <strong>Urgent:</strong> ${stats.critical} ORS document${stats.critical > 1 ? 's have' : ' has'} exceeded the 10-day processing threshold and require${stats.critical === 1 ? 's' : ''} immediate attention.
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        orsAgingAlertsContainer.innerHTML = `
+            <div class="rounded-lg border-l-4 p-4 ${c.bg} shadow-md ors-aging-alert-container">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 flex-1">
+                        <span class="text-2xl flex-shrink-0">${c.icon}</span>
+                        <div class="flex-1">
+                            <h3 class="font-bold text-base ${c.text} mb-2">ORS Aging Documents Summary</h3>
+                            <div class="ors-alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
+                                <p class="text-sm ${c.text} leading-relaxed opacity-90">
+                                    ${summaryText}
+                                </p>
+                                ${urgentMessage}
+                            </div>
+                            <div class="ors-alert-collapsed transition-all duration-300 ease-in-out ${isMinimized ? 'block' : 'hidden'}">
+                                <p class="text-sm ${c.text} opacity-90">
+                                    <strong>${stats.total}</strong> aging ORS document${stats.total > 1 ? 's' : ''} 
+                                    ${stats.critical > 0 ? `(<strong class="text-red-700">${stats.critical} critical</strong>)` : ''} • 
+                                    Oldest: <strong>${oldestDoc.days_in_status} days</strong>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="minimize-ors-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50 flex-shrink-0" 
+                            title="${isMinimized ? 'Expand' : 'Minimize'}">
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                             style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         `;
+
+        const minimizeBtn = orsAgingAlertsContainer.querySelector('.minimize-ors-alert-btn');
+        const alertContent = orsAgingAlertsContainer.querySelector('.ors-alert-content');
+        const alertCollapsed = orsAgingAlertsContainer.querySelector('.ors-alert-collapsed');
+        
+        if (minimizeBtn && alertContent && alertCollapsed) {
+            minimizeBtn.addEventListener('click', function() {
+                const isCurrentlyMinimized = alertContent.classList.contains('hidden');
+                
+                if (isCurrentlyMinimized) {
+                    alertContent.classList.remove('hidden');
+                    alertContent.classList.add('block');
+                    alertCollapsed.classList.remove('block');
+                    alertCollapsed.classList.add('hidden');
+                    this.innerHTML = `
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    `;
+                    this.setAttribute('title', 'Minimize');
+                    localStorage.setItem('orsAgingAlertMinimized', 'false');
+                } else {
+                    alertContent.classList.remove('block');
+                    alertContent.classList.add('hidden');
+                    alertCollapsed.classList.remove('hidden');
+                    alertCollapsed.classList.add('block');
+                    this.innerHTML = `
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    `;
+                    this.setAttribute('title', 'Expand');
+                    localStorage.setItem('orsAgingAlertMinimized', 'true');
+                }
+            });
+        }
     }
 
-    orsAgingAlertsContainer.innerHTML = `
-        <div class="rounded-lg border-l-4 p-4 ${c.bg} shadow-md ors-aging-alert-container">
-            <div class="flex items-start justify-between gap-3">
-                <div class="flex items-start gap-3 flex-1">
-                    <span class="text-2xl flex-shrink-0">${c.icon}</span>
-                    <div class="flex-1">
-                        <h3 class="font-bold text-base ${c.text} mb-2">ORS Aging Documents Summary</h3>
-                        <div class="ors-alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
-                            <p class="text-sm ${c.text} leading-relaxed opacity-90">
-                                ${summaryText}
-                            </p>
-                            ${urgentMessage}
-                        </div>
-                        <div class="ors-alert-collapsed transition-all duration-300 ease-in-out ${isMinimized ? 'block' : 'hidden'}">
-                            <p class="text-sm ${c.text} opacity-90">
-                                <strong>${stats.total}</strong> aging ORS document${stats.total > 1 ? 's' : ''} 
-                                ${stats.critical > 0 ? `(<strong class="text-red-700">${stats.critical} critical</strong>)` : ''} • 
-                                Oldest: <strong>${oldestDoc.days_in_status} days</strong>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <button class="minimize-ors-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50 flex-shrink-0" 
-                        title="${isMinimized ? 'Expand' : 'Minimize'}">
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                         style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                              d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    `;
-
-    // Add event listener for the minimize button
-    const minimizeBtn = orsAgingAlertsContainer.querySelector('.minimize-ors-alert-btn');
-    const alertContent = orsAgingAlertsContainer.querySelector('.ors-alert-content');
-    const alertCollapsed = orsAgingAlertsContainer.querySelector('.ors-alert-collapsed');
-    
-    if (minimizeBtn && alertContent && alertCollapsed) {
-        minimizeBtn.addEventListener('click', function() {
-            const isCurrentlyMinimized = alertContent.classList.contains('hidden');
-            
-            if (isCurrentlyMinimized) {
-                // Expand
-                alertContent.classList.remove('hidden');
-                alertContent.classList.add('block');
-                alertCollapsed.classList.remove('block');
-                alertCollapsed.classList.add('hidden');
-                this.innerHTML = `
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                `;
-                this.setAttribute('title', 'Minimize');
-                localStorage.setItem('orsAgingAlertMinimized', 'false');
-            } else {
-                // Minimize
-                alertContent.classList.remove('block');
-                alertContent.classList.add('hidden');
-                alertCollapsed.classList.remove('hidden');
-                alertCollapsed.classList.add('block');
-                this.innerHTML = `
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                    </svg>
-                `;
-                this.setAttribute('title', 'Expand');
-                localStorage.setItem('orsAgingAlertMinimized', 'true');
-            }
-        });
-    }
-}
     // ============ EVENT LISTENERS ============
     perPageSelect.addEventListener('change', function() {
         perPage = parseInt(this.value);
@@ -1242,7 +1384,6 @@ function performSearch() {
     nextPageBtn.addEventListener('click', () => goToPage(currentPage + 1));
     lastPageBtn.addEventListener('click', () => goToPage(totalPages));
 
-    // Search with debounce
     let searchTimeout;
     searchInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
@@ -1252,42 +1393,36 @@ function performSearch() {
         }, 300);
     });
 
-    // Sorting buttons
     document.getElementById('sort-by-priority')?.addEventListener('click', function() {
         currentSort = 'priority';
         sortByPriority();
-        currentPage = 1;
-        renderTable(getPaginatedData());
-        updatePaginationInfo();
         updateSortButtonStyles();
-        showToast('Sorted by priority (most delayed first)', 'info');
+        
+        const urgentCount = filteredRequests.filter(req => req.is_urgent).length;
+        const urgentMessage = urgentCount > 0 ? ` (${urgentCount} urgent)` : '';
+        showToast(`Sorted by priority${urgentMessage} (urgent first)`, 'info');
     });
 
     document.getElementById('sort-by-date')?.addEventListener('click', function() {
         currentSort = 'date';
         sortByDate();
-        currentPage = 1;
-        renderTable(getPaginatedData());
-        updatePaginationInfo();
         updateSortButtonStyles();
         showToast('Sorted by submission date (oldest first)', 'info');
     });
 
-    // Show Critical Only button
     document.getElementById('show-critical-only')?.addEventListener('click', function() {
         if (!isCriticalOnlyView) {
             isCriticalOnlyView = true;
-            searchInput.value = ''; // Clear search when switching to critical view
+            searchInput.value = '';
             searchTerm = '';
             
-            // Count critical documents from all requests
             const criticalCount = allRequests.filter(req => {   
-                const days = Math.abs(Math.floor(req.days_old)) || 0;
-                return days >= 7;
+                const days = Math.abs(req.days_old) || 0;
+                return days >= 10;
             }).length;
             
             if (criticalCount === 0) {
-                showToast('No critical documents (7+ days) found', 'warning');
+                showToast('No critical documents (10+ days) found', 'warning');
                 isCriticalOnlyView = false;
             } else {
                 showToast(`Showing ${criticalCount} critical document(s) only`, 'info');
@@ -1301,10 +1436,9 @@ function performSearch() {
         updateSortButtonStyles();
     });
 
-    // Show All button
     document.getElementById('show-all')?.addEventListener('click', function() {
         isCriticalOnlyView = false;
-        searchInput.value = ''; // Clear search as well
+        searchInput.value = '';
         searchTerm = '';
         performSearch();
         updateSortButtonStyles();
@@ -1312,9 +1446,9 @@ function performSearch() {
     });
 
     // ============ AUTO-REFRESH ============
-    setInterval(fetchOrsAgingDocuments, 2 * 60 * 1000); // Every 2 minutes
+    setInterval(fetchOrsAgingDocuments, 2 * 60 * 1000);
     setInterval(updateOrsStatistics, 2 * 60 * 1000);
-    setInterval(fetchDvRequests, 5 * 60 * 1000); // Every 5 minutes
+    setInterval(fetchDvRequests, 5 * 60 * 1000);
 
     // ============ INITIALIZATION ============
     updatePaginationInfo();

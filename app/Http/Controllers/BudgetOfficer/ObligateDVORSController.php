@@ -45,165 +45,180 @@ class ObligateDVORSController extends Controller
         return view('BudgetOfficer.index');
     }
 
-    public function fetchDvRequests(Request $request)
-    {
-        try {
-            $currentUserId = auth()->id();
-            $lockDuration  = now()->subMinutes(10);
-            
-            $searchTerm = $request->input('search', '');
+   public function fetchDvRequests(Request $request)
+{
+    try {
+        $currentUserId = auth()->id();
+        $lockDuration  = now()->subMinutes(10);
+        
+        $searchTerm = $request->input('search', '');
 
-            $query = DvRequest::with([
-                    'program', 
-                    'focalPerson', 
-                    'respocenter',
-                    'orsRequest',
-                    'orsRequest.uacsCodes',
-                    'orsRequest.AdlCode',
-                    'orsRequest.Mfopap'
-                ])
-                ->whereIn('status', [
-                    'Incoming-TUPAD_verified', 
-                    'Incoming-GIP_verified',
-                    'Incoming-TEV_verified',
-                    'ORS_received',
-                    'ORS_in_process',
-                    'ORS_onhold',
-                    'ORS_for_revision',
-                ])
-                ->where(function ($q) use ($currentUserId, $lockDuration) {
-                    $q->whereNull('locked_by')
-                      ->orWhere('locked_by', $currentUserId)
-                      ->orWhere('locked_at', '<=', $lockDuration);
-                })
-                ->when($searchTerm, function ($query) use ($searchTerm) {
-                    $query->where(function ($q) use ($searchTerm) {
-                        $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
-                          ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
-                              $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
-                                         ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
-                          })
-                          ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
-                              $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
-                          })
-                          ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
-                              $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
-                                         ->orWhere('description', 'LIKE', "%{$searchTerm}%");
-                          })
-                          ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
-                          ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
-                          ->orWhere('status', 'LIKE', "%{$searchTerm}%")
-                          ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
-                              $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
-                          });
-                    });
+        $query = DvRequest::with([
+                'program', 
+                'focalPerson', 
+                'respocenter',
+                'orsRequest',
+                'orsRequest.uacsCodes',
+                'orsRequest.AdlCode',
+                'orsRequest.Mfopap'
+            ])
+            ->whereIn('status', [
+                'Incoming-TUPAD_verified', 
+                'Incoming-GIP_verified',
+                'Incoming-TEV_verified',
+                'ORS_received',
+                'ORS_in_process',
+                'ORS_onhold',
+                'ORS_for_revision',
+            ])
+            ->where(function ($q) use ($currentUserId, $lockDuration) {
+                $q->whereNull('locked_by')
+                  ->orWhere('locked_by', $currentUserId)
+                  ->orWhere('locked_at', '<=', $lockDuration);
+            })
+            ->when($searchTerm, function ($query) use ($searchTerm) {
+                $query->where(function ($q) use ($searchTerm) {
+                    $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
+                      ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
+                          $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
+                                     ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
+                      })
+                      ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
+                          $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
+                      })
+                      ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
+                          $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
+                                     ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+                      })
+                      ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
+                      ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
+                      ->orWhere('status', 'LIKE', "%{$searchTerm}%")
+                      ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
+                          $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
+                      });
                 });
-
-            $dvRequests = $query->get();
-            
-            $dvRequests = $dvRequests->map(function ($request) {
-                $baseDate = $request->budget_received_at ?? $request->created_at;
-                $daysOld = now()->diffInDays($baseDate);
-                
-                $priorityScore = 0;
-                
-                if ($daysOld >= 10) {
-                    $priorityScore += 1000;
-                } elseif ($daysOld >= 7) {
-                    $priorityScore += 500;
-                } elseif ($daysOld >= 3) {
-                    $priorityScore += 200;
-                }
-                
-                if (in_array($request->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'Incoming-TEV_verified'])) {
-                    $priorityScore += 50;
-                } elseif ($request->status === 'ORS_received') {
-                    $priorityScore += 25;
-                }
-                
-                if ($request->status === 'ORS_onhold' || $request->status === 'ORS_for_revision') {
-                    $priorityScore += 100;
-                }
-                
-                $priorityScore += rand(0, 10);
-                
-                $request->days_old = $daysOld;
-                $request->priority_score = $priorityScore;
-                $request->urgency = $this->getUrgencyLevel($daysOld);
-                
-                return $request;
-            });
-            
-            $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
-
-            $result = $dvRequests->map(function ($req) {
-                $dateUsed = $req->budget_received_at ? 'budget_received_at' : 'created_at';
-                $baseDate = $req->budget_received_at ?? $req->created_at;
-                
-                $orsRequest = $req->orsRequest;
-
-                $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
-                $uacsDisplay = $uacsCodes->isNotEmpty() 
-                    ? $uacsCodes->map(function($uacs) {
-                        return $uacs->uacscode . ' - ' . $uacs->description;
-                    })->implode('<br>') : '—';
-
-                $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
-                    $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
-                    '—';
-                
-                $mfopapCode = '—';
-                $mfocode = '—';
-                $mfodescription = '—';
-                
-                if ($orsRequest && $orsRequest->Mfopap) {
-                    $mfocode = $orsRequest->Mfopap->mfocode ?? '—';
-                    $mfodescription = $orsRequest->Mfopap->mfodescription ?? '—';
-                    $mfopapCode = $mfocode . ' - ' . $mfodescription;
-                }
-
-                $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
-
-                return [
-                    'id'           => $req->id,
-                    'control_no'   => $req->accounting_control_number ? 
-                        'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
-                        '—',
-                    'ors_number'   => $orsNumber,
-                    'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                    'program'      => $req->program->prcode ?? 'N/A',
-                    'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                    'particulars'  => $req->particulars,
-                    'amount'       => number_format($req->amount, 2),
-                    'status'       => $req->status,
-                    'date'         => $baseDate->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                    'created_at_timestamp' => $req->created_at->toISOString(),
-                    'budget_received_at' => $req->budget_received_at ? $req->budget_received_at->toISOString() : null,
-                    'budget_last_action_at' => $req->budget_last_action_at ? $req->budget_last_action_at->toISOString() : null,
-                    'last_action_at' => $req->last_action_at ? $req->last_action_at->toISOString() : null,
-                    'days_old'     => $req->days_old ?? 0,
-                    'urgency'      => $req->urgency ?? 'low',
-                    'priority_score' => $req->priority_score ?? 0,
-                    'date_used_for_age' => $dateUsed,
-                    'uacs_codes'   => $uacsDisplay,
-                    'adl_code'     => $adlCode,
-                    'mfopap_code'  => $mfopapCode,
-                    'mfocode'      => $mfocode,
-                    'mfodescription' => $mfodescription,
-                ];
             });
 
-            return response()->json($result);
-
-        } catch (\Exception $e) {
-            \Log::error('Error in Budget Officer fetchDvRequests: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
+        $dvRequests = $query->get();
+        
+        $dvRequests = $dvRequests->map(function ($request) {
+            $baseDate = $request->budget_received_at ?? $request->created_at;
+            $daysOld = now()->diffInDays($baseDate);
             
-            return response()->json([
-                'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
-            ], 500);
-        }
+            $priorityScore = 0;
+            
+            // ✅ URGENT flag - highest priority (50,000 points)
+            if ($request->is_urgent) {
+                $priorityScore += 50000;
+            }
+            
+            if ($daysOld >= 10) {
+                $priorityScore += 1000;
+            } elseif ($daysOld >= 7) {
+                $priorityScore += 500;
+            } elseif ($daysOld >= 5) {
+                $priorityScore += 200;
+            } elseif ($daysOld >= 3) {
+                $priorityScore += 100;
+            }
+            
+            if (in_array($request->status, ['Incoming-TUPAD_verified', 'Incoming-GIP_verified', 'Incoming-TEV_verified'])) {
+                $priorityScore += 50;
+            } elseif ($request->status === 'ORS_received') {
+                $priorityScore += 25;
+            }
+            
+            if ($request->status === 'ORS_onhold' || $request->status === 'ORS_for_revision') {
+                $priorityScore += 100;
+            }
+            
+            $priorityScore += rand(0, 10);
+            
+            $request->days_old = $daysOld;
+            $request->priority_score = $priorityScore;
+            $request->urgency = $this->getUrgencyLevel($daysOld);
+            
+            return $request;
+        });
+        
+        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+
+        $result = $dvRequests->map(function ($req) {
+            $dateUsed = $req->budget_received_at ? 'budget_received_at' : 'created_at';
+            $baseDate = $req->budget_received_at ?? $req->created_at;
+            
+            $orsRequest = $req->orsRequest;
+
+            $uacsCodes = $orsRequest ? ($orsRequest->uacsCodes ?? collect()) : collect();
+            $uacsDisplay = $uacsCodes->isNotEmpty() 
+                ? $uacsCodes->map(function($uacs) {
+                    return $uacs->uacscode . ' - ' . $uacs->description;
+                })->implode('<br>') : '—';
+
+            $adlCode = ($orsRequest && $orsRequest->AdlCode) ? 
+                $orsRequest->AdlCode->adlcode . ' - ' . $orsRequest->AdlCode->description : 
+                '—';
+            
+            $mfopapCode = '—';
+            $mfocode = '—';
+            $mfodescription = '—';
+            
+            if ($orsRequest && $orsRequest->Mfopap) {
+                $mfocode = $orsRequest->Mfopap->mfocode ?? '—';
+                $mfodescription = $orsRequest->Mfopap->mfodescription ?? '—';
+                $mfopapCode = $mfocode . ' - ' . $mfodescription;
+            }
+
+            $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
+
+            // ✅ Override urgency if marked urgent
+            $urgency = $this->getUrgencyLevel($req->days_old);
+            if ($req->is_urgent) {
+                $urgency = 'urgent';
+            }
+
+            return [
+                'id'           => $req->id,
+                'control_no'   => $req->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
+                    '—',
+                'ors_number'   => $orsNumber,
+                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                'program'      => $req->program->prcode ?? 'N/A',
+                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                'particulars'  => $req->particulars,
+                'amount'       => number_format($req->amount, 2),
+                'status'       => $req->status,
+                'date'         => $baseDate->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'created_at_timestamp' => $req->created_at->toISOString(),
+                'budget_received_at' => $req->budget_received_at ? $req->budget_received_at->toISOString() : null,
+                'budget_last_action_at' => $req->budget_last_action_at ? $req->budget_last_action_at->toISOString() : null,
+                'last_action_at' => $req->last_action_at ? $req->last_action_at->toISOString() : null,
+                'days_old'     => $req->days_old ?? 0,
+                'urgency'      => $urgency,
+                'priority_score' => $req->priority_score ?? 0,
+                'date_used_for_age' => $dateUsed,
+                'uacs_codes'   => $uacsDisplay,
+                'adl_code'     => $adlCode,
+                'mfopap_code'  => $mfopapCode,
+                'mfocode'      => $mfocode,
+                'mfodescription' => $mfodescription,
+                // ✅ CRITICAL: ADD THIS LINE - URGENT FLAG
+                'is_urgent'    => $req->is_urgent ?? false,
+            ];
+        });
+
+        return response()->json($result);
+
+    } catch (\Exception $e) {
+        \Log::error('Error in Budget Officer fetchDvRequests: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     protected function getUrgencyLevel($daysOld)
     {
@@ -1031,6 +1046,7 @@ class ObligateDVORSController extends Controller
             'program' => $dvRequest->program->prcode,
             'amount' => $dvRequest->amount,
             'timestamp' => $obligatedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+            'is_urgent' => $dvRequest->is_urgent ?? false,
         ]);
         
         $this->logAction(

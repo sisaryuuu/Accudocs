@@ -498,12 +498,17 @@ class TupadDvRequestProcessingController extends Controller
             $baseDate = $request->tupad_received_at ?? $request->created_at;
             $daysOld = now()->diffInDays($baseDate);
             
-            // PRIORITY SCORING: Incoming-TUPAD_received gets HIGHEST priority
+            // PRIORITY SCORING
             $priorityScore = 0;
             
-            // Status-based priority - Incoming-TUPAD_received gets HIGHEST priority (comes FIRST)
+            // ✅ URGENT flag - highest priority (50,000 points)
+            if ($request->is_urgent) {
+                $priorityScore += 50000; // URGENT - ALWAYS FIRST
+            }
+            
+            // Status-based priority - Incoming-TUPAD_received gets HIGH priority (10,000 points)
             if ($request->status === 'Incoming-TUPAD_received') {
-                $priorityScore += 10000; // EXTREMELY HIGH priority - ensures it's always first
+                $priorityScore += 10000;
             } elseif ($request->status === 'IMSD_verified') {
                 $priorityScore += 50;
             }
@@ -527,14 +532,21 @@ class TupadDvRequestProcessingController extends Controller
             return $request;
         });
         
-        // Sort by priority score (descending) - HIGHEST priority comes FIRST
-        // This ensures Incoming-TUPAD_received documents (10000+ score) appear at the top
+        // Sort by priority score (descending) - URGENT documents (50,000+) come FIRST
         $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
         $result = $dvRequests->map(function ($request) {
             // Show which date was used for age calculation
             $dateUsed = $request->tupad_received_at ? 'tupad_received_at' : 'created_at';
             $baseDate = $request->tupad_received_at ?? $request->created_at;
+            
+            // Get urgency level
+            $urgency = $this->getUrgencyLevel($request->days_old);
+            
+            // ✅ Override urgency if marked urgent
+            if ($request->is_urgent) {
+                $urgency = 'urgent';
+            }
             
             return [
                 'id'           => $request->id,
@@ -556,9 +568,11 @@ class TupadDvRequestProcessingController extends Controller
                 'tupad_last_action_at' => $request->tupad_last_action_at ? $request->tupad_last_action_at->toISOString() : null,
                 'last_action_at' => $request->last_action_at ? $request->last_action_at->toISOString() : null,
                 'days_old'     => $request->days_old ?? 0,
-                'urgency'      => $request->urgency ?? 'low',
+                'urgency'      => $urgency,
                 'priority_score' => $request->priority_score ?? 0,
                 'date_used_for_age' => $dateUsed,
+                // ✅ CRITICAL: ADD THIS LINE - URGENT FLAG
+                'is_urgent'    => $request->is_urgent ?? false,
             ];
         });
 
@@ -837,6 +851,7 @@ class TupadDvRequestProcessingController extends Controller
                     'action_performer_id' => $currentUserId,
                     'tupad_received_at' => $dvRequest->tupad_received_at ? $dvRequest->tupad_received_at->format('M d, Y H:i:s') : null,
                     'tupad_last_action_at' => $dvRequest->tupad_last_action_at ? $dvRequest->tupad_last_action_at->format('M d, Y H:i:s') : null,
+                    'is_urgent'    => $dvRequest->is_urgent ?? false,
                 ]);
 
                 $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [

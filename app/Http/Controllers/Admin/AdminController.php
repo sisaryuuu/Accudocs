@@ -155,4 +155,272 @@ class AdminController extends Controller
             ]
         ]);
     }
+   
+/**
+ * Get ALL exceeded documents from ALL departments 
+ * IMSD: submitted, IMSD_received, IMSD_in_process, IMSD_verified
+ * Incoming: Incoming-*_received, Incoming-*_in_process
+ * Budget Officer: Incoming-*_verified, ORS_received, ORS_in_process, ORS_onhold, ORS_for_revision
+ * Outgoing: ORS_obligated, Outgoing_received
+ */
+/**
+ * Get ALL exceeded documents from ALL departments 
+ * IMSD: submitted, IMSD_received, IMSD_in_process, IMSD_verified
+ * Incoming: Incoming-*_received, Incoming-*_in_process
+ * Budget Officer: Incoming-*_verified, ORS_received, ORS_in_process, ORS_onhold, ORS_for_revision
+ * Outgoing: ORS_obligated, Outgoing_received
+ * Accountant/Accountant_III: Outgoing_finalized, RANCA_received
+ */
+public function getAllExceededDocuments()
+{
+    $exceededDocs = DvRequest::with(['program', 'focalPerson', 'orsRequest'])
+        ->where(function($q) {
+            // IMSD statuses
+            $q->whereIn('status', [
+                'submitted', 
+                'IMSD_received', 
+                'IMSD_in_process',
+                'IMSD_verified'
+              ])
+              // Incoming statuses
+              ->orWhereIn('status', [
+                  'Incoming-TUPAD_received', 'Incoming-TUPAD_in_process',
+                  'Incoming-GIP_received', 'Incoming-GIP_in_process',
+                  'Incoming-TEV_received', 'Incoming-TEV_in_process'
+              ])
+              // Budget Officer statuses
+              ->orWhereIn('status', [
+                  'Incoming-TUPAD_verified',
+                  'Incoming-GIP_verified',
+                  'Incoming-TEV_verified',
+                  'ORS_received',
+                  'ORS_in_process',
+                  'ORS_onhold',
+                  'ORS_for_revision'
+              ])
+              // Outgoing statuses
+              ->orWhereIn('status', [
+                  'ORS_obligated',
+                  'Outgoing_received'
+              ])
+              // 🚨🚨🚨 ACCOUNTANT/ACCOUNTANT_III STATUSES - ADD THIS 🚨🚨🚨
+              ->orWhereIn('status', [
+                  'Outgoing_finalized',
+                  'RANCA_received'
+              ]);
+        })
+        ->where('created_at', '<=', now()->subDays(10))
+        ->orderBy('created_at', 'asc')
+        ->get()
+        ->map(function ($doc) {
+            // Determine department and friendly status
+            $department = 'IMSD';
+            $status_friendly = $doc->status;
+            $badge_color = 'bg-red-100 text-red-800';
+            $department_color = 'bg-red-600';
+            
+            if (str_contains($doc->status, 'Incoming-')) {
+                if (str_contains($doc->status, '_verified')) {
+                    $department = 'Budget Officer';
+                    $badge_color = 'bg-purple-100 text-purple-800';
+                    $department_color = 'bg-purple-600';
+                    $status_friendly = 'Pending ORS Creation';
+                } else {
+                    $department = 'Incoming';
+                    $badge_color = 'bg-blue-100 text-blue-800';
+                    $department_color = 'bg-blue-600';
+                    $status_friendly = match($doc->status) {
+                        'Incoming-TUPAD_received', 'Incoming-GIP_received', 'Incoming-TEV_received' 
+                            => 'Pending Verification',
+                        'Incoming-TUPAD_in_process', 'Incoming-GIP_in_process', 'Incoming-TEV_in_process' 
+                            => 'In Process',
+                        default => $doc->status
+                    };
+                }
+            } 
+            elseif (in_array($doc->status, [
+                'ORS_received', 
+                'ORS_in_process', 
+                'ORS_onhold', 
+                'ORS_for_revision'
+            ])) {
+                $department = 'Budget Officer';
+                $badge_color = 'bg-purple-100 text-purple-800';
+                $department_color = 'bg-purple-600';
+                $status_friendly = match($doc->status) {
+                    'ORS_received' => 'Pending Obligation',
+                    'ORS_in_process' => 'In Process',
+                    'ORS_onhold' => 'On Hold',
+                    'ORS_for_revision' => 'For Revision',
+                    default => $doc->status
+                };
+            }
+            // Outgoing department
+            elseif (in_array($doc->status, ['ORS_obligated', 'Outgoing_received'])) {
+                $department = 'Outgoing';
+                $badge_color = 'bg-green-100 text-green-800';
+                $department_color = 'bg-green-600';
+                $status_friendly = match($doc->status) {
+                    'ORS_obligated' => 'Pending Outgoing Receive',
+                    'Outgoing_received' => 'Pending Finalization',
+                    default => $doc->status
+                };
+            }
+            // 🚨🚨🚨 ACCOUNTANT/ACCOUNTANT_III DEPARTMENT - ADD THIS 🚨🚨🚨
+            elseif (in_array($doc->status, ['Outgoing_finalized', 'RANCA_received'])) {
+                $department = 'Accountant';
+                $badge_color = 'bg-indigo-100 text-indigo-800';
+                $department_color = 'bg-indigo-600';
+                $status_friendly = match($doc->status) {
+                    'Outgoing_finalized' => 'Pending RANCA Receive',
+                    'RANCA_received' => 'Pending Validation',
+                    default => $doc->status
+                };
+            }
+            else {
+                $badge_color = 'bg-red-100 text-red-800';
+                $department_color = 'bg-red-600';
+                $status_friendly = match($doc->status) {
+                    'submitted' => 'Pending IMSD Receiving',
+                    'IMSD_received' => 'Pending IMSD Verification',
+                    'IMSD_in_process' => 'IMSD In Process',
+                    'IMSD_verified' => 'Waiting for Incoming',
+                    default => $doc->status
+                };
+            }
+            
+            // Get ORS number if available
+            $ors_number = null;
+            if ($doc->orsRequest) {
+                $ors_number = $doc->orsRequest->ors_number;
+            }
+            
+            return [
+                'id' => $doc->id,
+                'control_number' => $doc->accounting_control_number 
+                    ? 'CN #-' . now()->year . '-' . str_pad($doc->accounting_control_number, 4, '0', STR_PAD_LEFT)
+                    : 'Pending-CN',
+                'ors_number' => $ors_number,
+                'program' => $doc->program->prcode ?? 'N/A',
+                'days_old' => now()->diffInDays($doc->created_at),
+                'status' => $status_friendly,
+                'original_status' => $doc->status,
+                'status_badge_color' => $badge_color,
+                'amount' => '₱' . number_format($doc->amount, 2),
+                'focal' => trim(($doc->focalPerson->fname ?? '') . ' ' . ($doc->focalPerson->lname ?? '')),
+                'department' => $department,
+                'department_badge' => $department_color,
+                'is_urgent' => $doc->is_urgent ?? false,
+                'program_code' => $doc->program->prcode ?? 'N/A',
+            ];
+        });
+
+    // Summary statistics - ADD ACCOUNTANT COUNTS
+    $summary = [
+        'total' => $exceededDocs->count(),
+        'imsd' => $exceededDocs->where('department', 'IMSD')->count(),
+        'incoming' => $exceededDocs->where('department', 'Incoming')->count(),
+        'budget_officer' => $exceededDocs->where('department', 'Budget Officer')->count(),
+        'outgoing' => $exceededDocs->where('department', 'Outgoing')->count(),
+        'accountant' => $exceededDocs->where('department', 'Accountant')->count(), // 🚨 ADDED
+        'incoming_tupad' => $exceededDocs->where('program', 'TUPAD')->where('department', 'Incoming')->count(),
+        'incoming_gip' => $exceededDocs->where('program', 'GIP')->where('department', 'Incoming')->count(),
+        'incoming_tev' => $exceededDocs->where('program', 'TEV')->where('department', 'Incoming')->count(),
+        'budget_pending_ors' => $exceededDocs->whereIn('original_status', [
+            'Incoming-TUPAD_verified',
+            'Incoming-GIP_verified', 
+            'Incoming-TEV_verified'
+        ])->count(),
+        'budget_pending_obligation' => $exceededDocs->where('original_status', 'ORS_received')->count(),
+        'outgoing_pending_receive' => $exceededDocs->where('original_status', 'ORS_obligated')->count(),
+        'outgoing_pending_finalize' => $exceededDocs->where('original_status', 'Outgoing_received')->count(),
+        'accountant_pending_receive' => $exceededDocs->where('original_status', 'Outgoing_finalized')->count(), // 🚨 ADDED
+        'accountant_pending_validate' => $exceededDocs->where('original_status', 'RANCA_received')->count(), // 🚨 ADDED
+        'urgent' => $exceededDocs->where('is_urgent', true)->count(),
+        'not_urgent' => $exceededDocs->where('is_urgent', false)->count(),
+    ];
+
+    return response()->json([
+        'success' => true,
+        'count' => $exceededDocs->count(),
+        'summary' => $summary,
+        'documents' => $exceededDocs,
+        'message' => 'Documents exceeding 10-day SLA'
+    ]);
+}
+public function markAsUrgent(Request $request)
+    {
+        try {
+            $request->validate([
+                'dv_request_ids' => 'required|array',
+                'dv_request_ids.*' => 'exists:dv_requests,id',
+                'remarks' => 'nullable|string|max:255'
+            ]);
+
+            $updated = DvRequest::whereIn('id', $request->dv_request_ids)
+                ->update([
+                    'is_urgent' => true,
+                    'marked_urgent_at' => now(),
+                    'marked_urgent_by' => auth()->id(),
+                    'urgent_remarks' => $request->remarks ?? 'Marked urgent from dashboard'
+                ]);
+
+            // 🔥 NEW: Broadcast to IMSD channel for each document
+            $pusher = app(\App\Services\PusherService::class);
+            
+            foreach ($request->dv_request_ids as $id) {
+                // Log the action
+                DvRequestLog::create([
+                    'dv_request_id' => $id,
+                    'accountingunit_id' => auth()->id(),
+                    'action' => 'marked_urgent',
+                    'remarks' => $request->remarks ?? 'Marked urgent from admin dashboard'
+                ]);
+                
+                // Get the DV request details for broadcasting
+                $dvRequest = DvRequest::with(['program', 'focalPerson'])->find($id);
+                if ($dvRequest) {
+                    $controlNumber = $dvRequest->accounting_control_number 
+                        ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                        : 'Pending-CN';
+                    
+                    // 🔥 Broadcast to IMSD channel
+                    try {
+                        $pusher->trigger('dv-requests-imsd', 'dv-request-marked-urgent', [
+                            'dv_request_id' => $dvRequest->id,
+                            'control_number' => $controlNumber,
+                            'is_urgent' => true,
+                            'marked_by' => auth()->user()->name ?? 'Admin',
+                            'marked_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                            'remarks' => $request->remarks ?? 'Marked urgent from admin dashboard',
+                            'program' => $dvRequest->program->prcode ?? 'N/A',
+                            'submitted_by' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                            'status' => $dvRequest->status,
+                            'amount' => number_format($dvRequest->amount, 2),
+                            'days_old' => now()->diffInDays($dvRequest->created_at),
+                        ]);
+                    } catch (\Exception $pusherError) {
+                        \Log::warning('Pusher broadcast failed for urgent marking DV #' . $dvRequest->id);
+                    }
+                    
+                    // 🔥 Also notify the focal person
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$updated} document(s) marked as urgent",
+                'count' => $updated
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error marking documents as urgent: ' . $e->getMessage());
+            \Log::error($e->getTraceAsString());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

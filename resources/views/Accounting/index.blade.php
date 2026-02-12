@@ -2,6 +2,208 @@
 
 @section('title', 'RANCA - DV Requests')
 
+
+<style>
+    /* ============ URGENT BLINKING ANIMATIONS ============ */
+
+    /* Main row blinking effect */
+    @keyframes urgent-blink {
+        0% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+        25% {
+            background-color: #fecaca;
+            border-left-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+        }
+        50% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+        75% {
+            background-color: #fecaca;
+            border-left-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+        }
+        100% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+    }
+
+    .urgent-blink {
+        animation: urgent-blink 1.2s ease-in-out infinite;
+        transition: all 0.2s ease;
+    }
+
+    /* Badge pulsing effect */
+    @keyframes urgent-pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #dc2626;
+        }
+        50% {
+            transform: scale(1.08);
+            opacity: 0.95;
+            background-color: #b91c1c;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #dc2626;
+        }
+    }
+
+    .urgent-badge {
+        animation: urgent-pulse 1.2s ease-in-out infinite;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Glowing effect for buttons */
+    @keyframes urgent-glow {
+        0% {
+            box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+            border-color: #ef4444;
+        }
+        25% {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.8), 0 0 25px rgba(239, 68, 68, 0.5);
+            border-color: #dc2626;
+        }
+        50% {
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6), 0 0 30px rgba(220, 38, 38, 0.4);
+            border-color: #b91c1c;
+        }
+        75% {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.8), 0 0 25px rgba(239, 68, 68, 0.5);
+            border-color: #dc2626;
+        }
+        100% {
+            box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+            border-color: #ef4444;
+        }
+    }
+
+    .urgent-glow {
+        animation: urgent-glow 1.5s ease-in-out infinite;
+    }
+
+    /* Dot pulsing animation */
+    @keyframes urgent-dot-pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #fff;
+        }
+        50% {
+            transform: scale(1.3);
+            opacity: 0.9;
+            background-color: #fee2e2;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #fff;
+        }
+    }
+
+    .urgent-dot {
+        animation: urgent-dot-pulse 1s ease-in-out infinite;
+    }
+
+    /* Urgent filter button */
+    #show-urgent-only {
+        transition: all 0.3s ease;
+    }
+
+    #show-urgent-only.active {
+        background-color: #dc2626;
+        color: white;
+        animation: urgent-glow 1.5s ease-in-out infinite;
+    }
+
+    /* Urgent count badge */
+    .urgent-count-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #dc2626;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: bold;
+        padding: 0.25rem 0.5rem;
+        border-radius: 9999px;
+        margin-left: 0.5rem;
+        animation: urgent-pulse 1.2s ease-in-out infinite;
+    }
+
+    /* Urgent status badge */
+    .status-urgent {
+        background-color: #dc2626 !important;
+        color: white !important;
+        font-weight: bold;
+        animation: urgent-pulse 1.2s ease-in-out infinite;
+    }
+
+    /* Urgent button */
+    .btn-urgent-receive {
+        background: linear-gradient(45deg, #dc2626, #b91c1c, #991b1b, #b91c1c, #dc2626);
+        background-size: 300% 300%;
+        animation: gradient-shift 3s ease infinite, urgent-glow 1.5s ease-in-out infinite;
+        color: white;
+        font-weight: bold;
+        border: none;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    .btn-urgent-process {
+        background-color: #dc2626;
+        color: white;
+        font-weight: bold;
+        animation: urgent-glow 1.5s ease-in-out infinite;
+        border: none;
+    }
+
+    .btn-urgent-process:hover {
+        background-color: #b91c1c;
+        transform: scale(1.05);
+    }
+
+    /* Urgent column badge */
+    .urgent-column-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        background-color: #dc2626;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: bold;
+        border-radius: 9999px;
+        animation: urgent-pulse 1.2s ease-in-out infinite;
+    }
+
+    /* Ensure table layout is fixed */
+    .table-fixed {
+        table-layout: fixed;
+    }
+
+    /* Column width adjustments */
+    .w-urgent {
+        width: 8%;
+    }
+</style>
+
 @section('content')
 <div class="min-h-screen bg-gray-50 pt-24 pb-8">
     <div class="max-w-[95rem] mx-auto px-6">
@@ -86,8 +288,8 @@
             </div>
         </div>
 
-        <!-- Sorting Controls -->
-        <div class="flex gap-2 mb-6">
+        <!-- Sorting Controls with Urgent Filter -->
+        <div class="flex flex-wrap gap-2 mb-6">
             <button id="sort-by-priority" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"></path>
@@ -106,6 +308,16 @@
                 </svg>
                 Show Critical Only (10+ days)
             </button>
+            
+            <!-- 🚨 URGENT ONLY BUTTON - NEW -->
+            <button id="show-urgent-only" class="px-4 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-200 transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                </svg>
+                Show Urgent Only
+                <span id="urgent-count-badge" class="hidden urgent-count-badge">0</span>
+            </button>
+            
             <button id="show-all" class="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition flex items-center gap-2" style="display: none;">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
@@ -133,7 +345,7 @@
                     <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                         <svg class="w-12 h-12 text-gray-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg> <!-- Fixed: Added closing </svg> tag -->
+                        </svg>
                     </div>
                     <p class="text-gray-500">Loading requests...</p>
                 </div>
@@ -212,6 +424,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let searchTerm = "";
     let cachedAgingData = [];
     let isCriticalOnlyView = false;
+    let isUrgentOnlyView = false; // 🚨 NEW
     let currentSort = 'priority';
     
     // Pagination state
@@ -261,17 +474,46 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ============ PUSHER EVENT LISTENERS ============
     
-    // Listen for new DV requests from Outgoing
-    accountingChannel.bind('dv-request-finalized', function(data) {
-        console.log('New DV request received from Outgoing:', data);
-        showToast(`New request from Outgoing - ${data.control_number || 'N/A'}`, 'success');
+ // Add this to your RANCA blade file's Pusher event listeners
+accountingChannel.bind('dv-request-finalized', function(data) {
+    console.log('🔔 New finalized document from Outgoing:', data);
+    
+    // 🚨 Check if this is an urgent document
+    const isUrgent = data.is_urgent == 1 || data.is_urgent === true || data.is_urgent === '1';
+    
+    if (isUrgent) {
+        // Play urgent notification sound
+        try {
+            const audio = new Audio('/sounds/urgent-notification.mp3');
+            audio.play().catch(e => console.log('Audio play failed:', e));
+        } catch(e) { console.log('Audio not supported'); }
+        
+        // Show dramatic urgent toast with animation
+        showToast(`
+            <div class="flex items-center">
+                <span class="text-3xl mr-3 animate-pulse">🚨🚨🚨</span>
+                <div>
+                    <strong class="text-red-600 text-lg">URGENT DOCUMENT RECEIVED!</strong><br>
+                    <span class="font-semibold">ORS: ${data.ors_number || 'N/A'}</span><br>
+                    <span>${data.submitted_by || 'Unknown'} - ${data.program || 'N/A'}</span><br>
+                    <span class="text-sm">Amount: ₱${data.amount || '0'}</span>
+                </div>
+            </div>
+        `, 'warning');
+        
+        // Force immediate refresh to show urgent document
         fetchDvRequests();
-        setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 500);
-    });
-
+        fetchAgingDocuments();
+        updateStatistics();
+        
+        // Update urgent count badge
+        setTimeout(() => updateUrgentCountBadge(), 300);
+        
+    } else {
+        showToast(`New document from Outgoing - ${data.control_number || 'N/A'}`, 'success');
+        fetchDvRequests();
+    }
+});
     // Listen for received events
     accountingChannel.bind('dv-request-received', function(data) {
         console.log('DV request received:', data);
@@ -476,6 +718,7 @@ document.addEventListener('DOMContentLoaded', function() {
         cachedAgingData = [];
         searchTerm = "";
         isCriticalOnlyView = false;
+        isUrgentOnlyView = false; // 🚨 RESET
         currentSort = 'priority';
         
         fetchDvRequests();
@@ -582,21 +825,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function performSearch() {
         // Start with all requests
-        filteredRequests = allRequests;
+        filteredRequests = [...allRequests];
         
         // Apply search filter first
         if (searchTerm) {
             filteredRequests = filterRequests(filteredRequests, searchTerm);
         }
         
-        // Ensure days_old is positive
+        // Ensure days_old is positive and add is_urgent flag
         filteredRequests = filteredRequests.map(req => ({
             ...req,
-            days_old: Math.abs(req.days_old) || 0
+            days_old: Math.abs(req.days_old) || 0,
+            is_urgent: req.is_urgent || false // 🚨 ADD THIS
         }));
         
-        // Apply critical filter if active (10+ days for critical)
-        if (isCriticalOnlyView) {
+        // 🚨 Apply URGENT filter if active
+        if (isUrgentOnlyView) {
+            filteredRequests = filteredRequests.filter(req => req.is_urgent === true);
+        }
+        // Apply critical filter if active and urgent filter is not active
+        else if (isCriticalOnlyView) {
             filteredRequests = filteredRequests.filter(req => req.days_old >= 10);
         }
         
@@ -616,44 +864,29 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function sortByPriority() {
-    filteredRequests.sort((a, b) => {
-        // 1. PRIMARY SORT: RANCA_received status comes FIRST
-        const aIsRancaReceived = a.status === 'RANCA_received';
-        const bIsRancaReceived = b.status === 'RANCA_received';
-        
-        if (aIsRancaReceived && !bIsRancaReceived) return -1;
-        if (!aIsRancaReceived && bIsRancaReceived) return 1;
-        
-        // 2. SECONDARY SORT: Outgoing_finalized status comes second
-        const aIsFinalized = a.status === 'Outgoing_finalized';
-        const bIsFinalized = b.status === 'Outgoing_finalized';
-        
-        if (aIsFinalized && !bIsFinalized) return -1;
-        if (!aIsFinalized && bIsFinalized) return 1;
-        
-        // 3. TERTIARY SORT: Age-based priority for the rest
-        const aCritical = a.days_old >= 10;
-        const bCritical = b.days_old >= 10;
-        
-        if (aCritical && !bCritical) return -1;
-        if (!aCritical && bCritical) return 1;
-        
-        const aHigh = a.days_old >= 7;
-        const bHigh = b.days_old >= 7;
-        
-        if (aHigh && !bHigh) return -1;
-        if (!aHigh && bHigh) return 1;
-        
-        const aMedium = a.days_old >= 3;
-        const bMedium = b.days_old >= 3;
-        
-        if (aMedium && !bMedium) return -1;
-        if (!aMedium && bMedium) return 1;
-        
-        // Then by days old descending within same priority
-        return b.days_old - a.days_old;
-    });
-}
+        filteredRequests.sort((a, b) => {
+            // 🚨 1. HIGHEST PRIORITY: Urgent documents ALWAYS come FIRST
+            if (a.is_urgent && !b.is_urgent) return -1;
+            if (!a.is_urgent && b.is_urgent) return 1;
+            
+            // 2. PRIMARY SORT: RANCA_received status comes next
+            const aIsRancaReceived = a.status === 'RANCA_received';
+            const bIsRancaReceived = b.status === 'RANCA_received';
+            
+            if (aIsRancaReceived && !bIsRancaReceived) return -1;
+            if (!aIsRancaReceived && bIsRancaReceived) return 1;
+            
+            // 3. SECONDARY SORT: Outgoing_finalized status comes next
+            const aIsFinalized = a.status === 'Outgoing_finalized';
+            const bIsFinalized = b.status === 'Outgoing_finalized';
+            
+            if (aIsFinalized && !bIsFinalized) return -1;
+            if (!aIsFinalized && bIsFinalized) return 1;
+            
+            // 4. TERTIARY SORT: Age-based priority
+            return b.days_old - a.days_old;
+        });
+    }
 
     function sortByDate() {
         filteredRequests.sort((a, b) => {
@@ -667,6 +900,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const priorityBtn = document.getElementById('sort-by-priority');
         const dateBtn = document.getElementById('sort-by-date');
         const criticalBtn = document.getElementById('show-critical-only');
+        const urgentBtn = document.getElementById('show-urgent-only');
         const showAllBtn = document.getElementById('show-all');
         
         if (priorityBtn) {
@@ -705,8 +939,29 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
+        // 🚨 Urgent button styles
+        if (urgentBtn) {
+            if (isUrgentOnlyView) {
+                urgentBtn.className = 'px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition flex items-center gap-2 active';
+                urgentBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    Showing Urgent Only
+                `;
+            } else {
+                urgentBtn.className = 'px-4 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-200 transition flex items-center gap-2';
+                urgentBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    Show Urgent Only
+                `;
+            }
+        }
+        
         if (showAllBtn) {
-            if (isCriticalOnlyView) {
+            if (isCriticalOnlyView || isUrgentOnlyView) {
                 showAllBtn.style.display = 'flex';
             } else {
                 showAllBtn.style.display = 'none';
@@ -714,9 +969,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // 🚨 Update urgent count badge
+    function updateUrgentCountBadge() {
+        const urgentCount = allRequests.filter(req => req.is_urgent === true).length;
+        const badge = document.getElementById('urgent-count-badge');
+        
+        if (badge) {
+            if (urgentCount > 0) {
+                badge.textContent = urgentCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+    }
+
     // ============ TABLE RENDERING ============
     function renderTable(dvRequests) {
         if (dvRequests.length === 0) {
+            let message = '';
+            if (isUrgentOnlyView) {
+                message = '<p class="text-sm text-red-600 mt-2">No urgent documents found.</p>';
+            } else if (isCriticalOnlyView) {
+                message = '<p class="text-sm text-red-600 mt-2">No critical documents (10+ days) found.</p>';
+            }
+            
             tableContainer.innerHTML = `
                 <div class="text-center py-16">
                     <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -727,7 +1004,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
                     <p class="text-gray-500">${searchTerm ? 'Try adjusting your search filter.' : 'No requests available.'}</p>
-                    ${isCriticalOnlyView ? '<p class="text-sm text-red-600 mt-2">No critical documents (10+ days) found.</p>' : ''}
+                    ${message}
                 </div>
             `;
             return;
@@ -738,15 +1015,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
                     <thead class="bg-gray-50 text-[13px]">
                         <tr>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DV Number</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ORS Number</th>
-                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Particulars</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                            <th class="px-5 py-3 w-urgent text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Urgent</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DV Number</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ORS Number</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Particulars</th>
+                            <th class="px-5 py-3 w-[10%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                            <th class="px-5 py-3 w-[10%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Received</th>
                             <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -757,12 +1035,19 @@ document.addEventListener('DOMContentLoaded', function() {
             const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
             const daysOld = Math.round(request.days_old) || 0;
             
-            // Determine row styling based on age
+            // 🚨 Check if document is urgent
+            const isUrgent = request.is_urgent == 1 || request.is_urgent === true || request.is_urgent === '1';
+            
+            // Determine row styling based on age or urgent flag
             let rowClasses = 'hover:bg-gray-50 transition-colors duration-150';
             let textColorClass = 'text-gray-900';
             let rowBgClass = '';
             
-            if (daysOld >= 10) {
+            if (isUrgent) {
+                rowBgClass = 'urgent-blink';
+                rowClasses = 'border-l-4 border-red-600';
+                textColorClass = 'text-gray-900 font-medium';
+            } else if (daysOld >= 10) {
                 rowBgClass = 'bg-red-50/50 hover:bg-red-100/50';
                 rowClasses = 'border-l-4 border-red-400';
             } else if (daysOld >= 7) {
@@ -775,7 +1060,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 rowBgClass = 'bg-white hover:bg-gray-50';
             }
             
-            // Button styling based on age and status
+            // 🚨 Urgent badge for column
+            let urgentColumnBadge = '';
+            if (isUrgent) {
+                urgentColumnBadge = `
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-bold text-white bg-red-600 rounded-full urgent-badge">
+                        <svg class="w-3 h-3 mr-1 urgent-dot" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                        URGENT
+                    </span>
+                `;
+            } else {
+                urgentColumnBadge = `<span class="text-gray-400">—</span>`;
+            }
+            
+            // Button styling based on age, status, and urgent flag
             let buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700';
             let buttonText = 'Receive';
             let buttonHref = '';
@@ -783,7 +1083,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (request.status === 'Outgoing_finalized') {
                 isReceiveButton = true;
-                if (daysOld >= 10) {
+                if (isUrgent) {
+                    buttonClass = 'btn-urgent-receive';
+                    buttonText = '⚡ RECEIVE NOW';
+                } else if (daysOld >= 10) {
                     buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700 border border-green-300 font-medium';
                     buttonText = 'RECEIVE';
                 } else if (daysOld >= 7) {
@@ -794,7 +1097,10 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 // For already received documents
                 buttonHref = `/Accounting/dvrequests/${request.id}`;
-                if (daysOld >= 10) {
+                if (isUrgent) {
+                    buttonClass = 'btn-urgent-process';
+                    buttonText = '⚡ PROCESS NOW';
+                } else if (daysOld >= 10) {
                     buttonClass = 'bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 font-medium';
                     buttonText = 'VIEW / PROCESS';
                 } else if (daysOld >= 7) {
@@ -809,8 +1115,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
+            // Status badge styling
+            let statusBadgeClass = bgClass;
+            let statusDotClass = dotClass;
+            let statusLabel = label;
+            
+            if (isUrgent) {
+                statusBadgeClass = 'status-urgent';
+                statusDotClass = 'bg-white urgent-dot';
+                statusLabel = 'URGENT - ' + label;
+            } else if (daysOld >= 10) {
+                statusBadgeClass = 'bg-red-100 text-red-800 border border-red-200';
+                statusDotClass = 'bg-red-500';
+            } else if (daysOld >= 7) {
+                statusBadgeClass = 'bg-orange-100 text-orange-800 border border-orange-200';
+                statusDotClass = 'bg-orange-400';
+            } else if (daysOld >= 3) {
+                statusBadgeClass = 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+                statusDotClass = 'bg-yellow-400';
+            }
+            
             html += `
-                <tr class="${rowClasses} ${rowBgClass}">
+                <tr class="${rowClasses} ${rowBgClass}" data-dv-id="${request.id}">
+                    <td class="px-6 py-4 text-sm">
+                        ${urgentColumnBadge}
+                    </td>
                     <td class="px-6 py-4 text-sm font-medium ${textColorClass}">
                         ${request.control_no ?? '—'}
                     </td>
@@ -824,6 +1153,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td class="px-6 py-4 text-sm ${textColorClass}">${request.particulars}</td>
                     <td class="px-6 py-4 text-sm">
                         <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            isUrgent ? 'bg-red-100 text-red-800 urgent-badge' :
                             daysOld >= 10 ? 'bg-red-100 text-red-800' : 
                             daysOld >= 7 ? 'bg-orange-100 text-orange-800' : 
                             daysOld >= 3 ? 'bg-yellow-100 text-yellow-800' : 
@@ -834,40 +1164,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                     <td class="px-6 py-4 text-sm font-semibold ${textColorClass}">₱${request.amount}</td>
                     <td class="px-6 py-4">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                            daysOld >= 10 ? 'bg-red-100 text-red-800 border border-red-200' : 
-                            daysOld >= 7 ? 'bg-orange-100 text-orange-800 border border-orange-200' : 
-                            daysOld >= 3 ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
-                            bgClass
-                        }">
-                            <span class="w-2 h-2 mr-2 rounded-full ${
-                                daysOld >= 10 ? 'bg-red-500' : 
-                                daysOld >= 7 ? 'bg-orange-400' : 
-                                daysOld >= 3 ? 'bg-yellow-400' : 
-                                dotClass
-                            }"></span>
-                            ${label}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass}">
+                            <span class="w-2 h-2 mr-2 rounded-full ${statusDotClass}"></span>
+                            ${statusLabel}
                         </span>
                     </td>
                     <td class="px-6 py-4">
                         <div class="text-sm ${textColorClass}">${request.date}</div>
                         <div class="text-xs ${
+                            isUrgent ? 'text-red-600 font-bold' :
                             daysOld >= 10 ? 'text-red-600' : 
                             daysOld >= 7 ? 'text-orange-600' : 
                             daysOld >= 3 ? 'text-yellow-600' : 
                             'text-gray-500'
                         } font-medium mt-1">
-                            ${daysOld} ${daysOld === 1 ? 'day' : 'days'} old
+                            ${isUrgent ? '⚠️ URGENT - ' : ''}${daysOld} ${daysOld === 1 ? 'day' : 'days'} old
                         </div>
                     </td>
                     <td class="px-5 py-4 text-center text-sm font-medium">
                         ${isReceiveButton 
                             ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" 
-                               class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-[13px] font-medium rounded-md transition-all duration-200 min-w-[120px]">
+                               class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-[13px] font-medium rounded-md transition-all duration-200 min-w-[120px] ${isUrgent ? 'urgent-glow' : ''}">
                                ${buttonText}
                                </button>`    
                             : `<a href="${buttonHref}" 
-                               class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-xs font-medium rounded-md transition-colors duration-200 min-w-[120px]">
+                               class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-xs font-medium rounded-md transition-colors duration-200 min-w-[120px] ${isUrgent ? 'urgent-glow' : ''}">
                                ${buttonText}
                                </a>`
                         }
@@ -885,6 +1206,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await res.json();
             
             allRequests = data;
+            updateUrgentCountBadge(); // 🚨 Update urgent badge
             performSearch();
             
         } catch (err) {
@@ -952,196 +1274,183 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function renderAgingAlerts(documents, count) {
-    if (!agingAlertsContainer || !documents || documents.length === 0) {
-        if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
-        return;
-    }
-
-    // Filter for aging RANCA documents (exclude validated/completed)
-    const agingDocs = documents.filter(doc => !['RANCA_validated', 'completed'].includes(doc.status));
-    
-    if (agingDocs.length === 0) {
-        agingAlertsContainer.innerHTML = '';
-        return;
-    }
-
-    // Ensure positive days_old values
-    agingDocs.forEach(doc => {
-        const days = Math.abs(Math.floor(Number(doc.days_old))) || 0;
-        doc.days_old = days;
-        // RANCA urgency: critical (10+ days), high (7-10), medium (3-7), low (<3)
-        doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
-    });
-
-    // Calculate statistics
-    const stats = {
-        critical: agingDocs.filter(doc => doc.days_old >= 10).length,
-        high: agingDocs.filter(doc => doc.days_old >= 7 && doc.days_old < 10).length,
-        medium: agingDocs.filter(doc => doc.days_old >= 3 && doc.days_old < 7).length,
-        total: agingDocs.length
-    };
-
-    // Find oldest document
-    const oldestDoc = agingDocs.reduce((oldest, doc) => 
-        doc.days_old > oldest.days_old ? doc : oldest
-    , agingDocs[0]);
-
-    // Calculate average age
-    const avgAge = Math.round(agingDocs.reduce((sum, doc) => sum + doc.days_old, 0) / agingDocs.length);
-
-    // Determine overall urgency level
-    const highestUrgency = stats.critical > 0 ? 'critical' : 
-                          stats.high > 0 ? 'high' : 
-                          stats.medium > 0 ? 'medium' : 'low';
-
-    const config = {
-        'critical': { 
-            icon: '🚨', 
-            bg: 'bg-red-50 border-red-500', 
-            text: 'text-red-900',
-            accentBg: 'bg-red-100',
-            accentText: 'text-red-700'
-        },
-        'high': { 
-            icon: '⚠️', 
-            bg: 'bg-orange-50 border-orange-500', 
-            text: 'text-orange-900',
-            accentBg: 'bg-orange-100',
-            accentText: 'text-orange-700'
-        },
-        'medium': { 
-            icon: '⏰', 
-            bg: 'bg-yellow-50 border-yellow-500', 
-            text: 'text-yellow-900',
-            accentBg: 'bg-yellow-100',
-            accentText: 'text-yellow-700'
-        },
-        'low': { 
-            icon: 'ℹ️', 
-            bg: 'bg-blue-50 border-blue-500', 
-            text: 'text-blue-900',
-            accentBg: 'bg-blue-100',
-            accentText: 'text-blue-700'
+        // ... (keep your existing renderAgingAlerts function - it's already perfect)
+        if (!agingAlertsContainer || !documents || documents.length === 0) {
+            if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
+            return;
         }
-    };
 
-    const c = config[highestUrgency];
-
-    // Check if minimized
-    const alertState = JSON.parse(localStorage.getItem('rancaAgingAlertMinimized') || 'false');
-    const isMinimized = alertState === true;
-
-    // Build summary text
-    let summaryText = `You currently have <strong>${stats.total} aging RANCA document${stats.total > 1 ? 's' : ''}</strong> that require validation. `;
-    
-    // Add breakdown by priority
-    const priorities = [];
-    if (stats.critical > 0) priorities.push(`<strong class="text-red-700">${stats.critical} critical</strong> (10+ days old)`);
-    if (stats.high > 0) priorities.push(`<strong class="text-orange-700">${stats.high} high priority</strong> (7-10 days)`);
-    if (stats.medium > 0) priorities.push(`<strong class="text-yellow-700">${stats.medium} medium priority</strong> (3-7 days)`);
-    
-    if (priorities.length > 0) {
-        if (priorities.length === 1) {
-            summaryText += `This includes ${priorities[0]}. `;
-        } else if (priorities.length === 2) {
-            summaryText += `This includes ${priorities[0]} and ${priorities[1]}. `;
-        } else {
-            summaryText += `This includes ${priorities[0]}, ${priorities[1]}, and ${priorities[2]}. `;
+        const agingDocs = documents.filter(doc => !['RANCA_validated', 'completed'].includes(doc.status));
+        
+        if (agingDocs.length === 0) {
+            agingAlertsContainer.innerHTML = '';
+            return;
         }
-    }
-    
-    summaryText += `The average age of pending RANCA documents is <strong>${avgAge} days</strong>, with the oldest being <strong class="${c.accentText}">${oldestDoc.control_number || oldestDoc.dv_number || 'Unknown'}</strong> at <strong>${oldestDoc.days_old} days old</strong> from ${oldestDoc.submitted_by || 'Unknown'}.`;
-    
-    // Add urgent action message if critical
-    let urgentMessage = '';
-    if (stats.critical > 0) {
-        urgentMessage = `
-            <div class="mt-3 pt-3 border-t ${c.accentText === 'text-red-700' ? 'border-red-200' : 'border-gray-200'}">
-                <div class="flex items-start gap-2">
-                    <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-                    </svg>
-                    <p class="text-sm text-red-800 leading-relaxed">
-                        <strong>Urgent:</strong> ${stats.critical} RANCA document${stats.critical > 1 ? 's have' : ' has'} exceeded the 10-day validation threshold and require${stats.critical === 1 ? 's' : ''} immediate attention.
-                    </p>
+
+        agingDocs.forEach(doc => {
+            const days = Math.abs(Math.floor(Number(doc.days_old))) || 0;
+            doc.days_old = days;
+            doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
+        });
+
+        const stats = {
+            critical: agingDocs.filter(doc => doc.days_old >= 10).length,
+            high: agingDocs.filter(doc => doc.days_old >= 7 && doc.days_old < 10).length,
+            medium: agingDocs.filter(doc => doc.days_old >= 3 && doc.days_old < 7).length,
+            total: agingDocs.length
+        };
+
+        const oldestDoc = agingDocs.reduce((oldest, doc) => 
+            doc.days_old > oldest.days_old ? doc : oldest
+        , agingDocs[0]);
+
+        const avgAge = Math.round(agingDocs.reduce((sum, doc) => sum + doc.days_old, 0) / agingDocs.length);
+
+        const highestUrgency = stats.critical > 0 ? 'critical' : 
+                              stats.high > 0 ? 'high' : 
+                              stats.medium > 0 ? 'medium' : 'low';
+
+        const config = {
+            'critical': { 
+                icon: '🚨', 
+                bg: 'bg-red-50 border-red-500', 
+                text: 'text-red-900',
+                accentBg: 'bg-red-100',
+                accentText: 'text-red-700'
+            },
+            'high': { 
+                icon: '⚠️', 
+                bg: 'bg-orange-50 border-orange-500', 
+                text: 'text-orange-900',
+                accentBg: 'bg-orange-100',
+                accentText: 'text-orange-700'
+            },
+            'medium': { 
+                icon: '⏰', 
+                bg: 'bg-yellow-50 border-yellow-500', 
+                text: 'text-yellow-900',
+                accentBg: 'bg-yellow-100',
+                accentText: 'text-yellow-700'
+            },
+            'low': { 
+                icon: 'ℹ️', 
+                bg: 'bg-blue-50 border-blue-500', 
+                text: 'text-blue-900',
+                accentBg: 'bg-blue-100',
+                accentText: 'text-blue-700'
+            }
+        };
+
+        const c = config[highestUrgency];
+
+        const alertState = JSON.parse(localStorage.getItem('rancaAgingAlertMinimized') || 'false');
+        const isMinimized = alertState === true;
+
+        let summaryText = `You currently have <strong>${stats.total} aging RANCA document${stats.total > 1 ? 's' : ''}</strong> that require validation. `;
+        
+        const priorities = [];
+        if (stats.critical > 0) priorities.push(`<strong class="text-red-700">${stats.critical} critical</strong> (10+ days old)`);
+        if (stats.high > 0) priorities.push(`<strong class="text-orange-700">${stats.high} high priority</strong> (7-10 days)`);
+        if (stats.medium > 0) priorities.push(`<strong class="text-yellow-700">${stats.medium} medium priority</strong> (3-7 days)`);
+        
+        if (priorities.length > 0) {
+            if (priorities.length === 1) {
+                summaryText += `This includes ${priorities[0]}. `;
+            } else if (priorities.length === 2) {
+                summaryText += `This includes ${priorities[0]} and ${priorities[1]}. `;
+            } else {
+                summaryText += `This includes ${priorities[0]}, ${priorities[1]}, and ${priorities[2]}. `;
+            }
+        }
+        
+        summaryText += `The average age of pending RANCA documents is <strong>${avgAge} days</strong>, with the oldest being <strong class="${c.accentText}">${oldestDoc.control_number || oldestDoc.dv_number || 'Unknown'}</strong> at <strong>${oldestDoc.days_old} days old</strong> from ${oldestDoc.submitted_by || 'Unknown'}.`;
+        
+        let urgentMessage = '';
+        if (stats.critical > 0) {
+            urgentMessage = `
+                <div class="mt-3 pt-3 border-t ${c.accentText === 'text-red-700' ? 'border-red-200' : 'border-gray-200'}">
+                    <div class="flex items-start gap-2">
+                        <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                        <p class="text-sm text-red-800 leading-relaxed">
+                            <strong>Urgent:</strong> ${stats.critical} RANCA document${stats.critical > 1 ? 's have' : ' has'} exceeded the 10-day validation threshold and require${stats.critical === 1 ? 's' : ''} immediate attention.
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        agingAlertsContainer.innerHTML = `
+            <div class="rounded-lg border-l-4 p-4 ${c.bg} shadow-md ranca-aging-alert-container">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 flex-1">
+                        <span class="text-2xl flex-shrink-0">${c.icon}</span>
+                        <div class="flex-1">
+                            <h3 class="font-bold text-base ${c.text} mb-2">RANCA Aging Documents Summary</h3>
+                            <div class="ranca-alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
+                                <p class="text-sm ${c.text} leading-relaxed opacity-90">
+                                    ${summaryText}
+                                </p>
+                                ${urgentMessage}
+                            </div>
+                            <div class="ranca-alert-collapsed transition-all duration-300 ease-in-out ${isMinimized ? 'block' : 'hidden'}">
+                                <p class="text-sm ${c.text} opacity-90">
+                                    <strong>${stats.total}</strong> aging RANCA document${stats.total > 1 ? 's' : ''} 
+                                    ${stats.critical > 0 ? `(<strong class="text-red-700">${stats.critical} critical</strong>)` : ''} • 
+                                    Oldest: <strong>${oldestDoc.days_old} days</strong>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="minimize-ranca-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50 flex-shrink-0" 
+                            title="${isMinimized ? 'Expand' : 'Minimize'}">
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                             style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         `;
-    }
 
-    agingAlertsContainer.innerHTML = `
-        <div class="rounded-lg border-l-4 p-4 ${c.bg} shadow-md ranca-aging-alert-container">
-            <div class="flex items-start justify-between gap-3">
-                <div class="flex items-start gap-3 flex-1">
-                    <span class="text-2xl flex-shrink-0">${c.icon}</span>
-                    <div class="flex-1">
-                        <h3 class="font-bold text-base ${c.text} mb-2">RANCA Aging Documents Summary</h3>
-                        <div class="ranca-alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
-                            <p class="text-sm ${c.text} leading-relaxed opacity-90">
-                                ${summaryText}
-                            </p>
-                            ${urgentMessage}
-                        </div>
-                        <div class="ranca-alert-collapsed transition-all duration-300 ease-in-out ${isMinimized ? 'block' : 'hidden'}">
-                            <p class="text-sm ${c.text} opacity-90">
-                                <strong>${stats.total}</strong> aging RANCA document${stats.total > 1 ? 's' : ''} 
-                                ${stats.critical > 0 ? `(<strong class="text-red-700">${stats.critical} critical</strong>)` : ''} • 
-                                Oldest: <strong>${oldestDoc.days_old} days</strong>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <button class="minimize-ranca-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50 flex-shrink-0" 
-                        title="${isMinimized ? 'Expand' : 'Minimize'}">
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                         style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                              d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    `;
-
-    // Add event listener for the minimize button
-    const minimizeBtn = agingAlertsContainer.querySelector('.minimize-ranca-alert-btn');
-    const alertContent = agingAlertsContainer.querySelector('.ranca-alert-content');
-    const alertCollapsed = agingAlertsContainer.querySelector('.ranca-alert-collapsed');
-    
-    if (minimizeBtn && alertContent && alertCollapsed) {
-        minimizeBtn.addEventListener('click', function() {
-            const isCurrentlyMinimized = alertContent.classList.contains('hidden');
-            
-            if (isCurrentlyMinimized) {
-                // Expand
-                alertContent.classList.remove('hidden');
-                alertContent.classList.add('block');
-                alertCollapsed.classList.remove('block');
-                alertCollapsed.classList.add('hidden');
-                this.innerHTML = `
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                `;
-                this.setAttribute('title', 'Minimize');
-                localStorage.setItem('rancaAgingAlertMinimized', 'false');
-            } else {
-                // Minimize
-                alertContent.classList.remove('block');
-                alertContent.classList.add('hidden');
-                alertCollapsed.classList.remove('hidden');
-                alertCollapsed.classList.add('block');
-                this.innerHTML = `
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                    </svg>
-                `;
-                this.setAttribute('title', 'Expand');
-                localStorage.setItem('rancaAgingAlertMinimized', 'true');
-            }
-        });
+        const minimizeBtn = agingAlertsContainer.querySelector('.minimize-ranca-alert-btn');
+        const alertContent = agingAlertsContainer.querySelector('.ranca-alert-content');
+        const alertCollapsed = agingAlertsContainer.querySelector('.ranca-alert-collapsed');
+        
+        if (minimizeBtn && alertContent && alertCollapsed) {
+            minimizeBtn.addEventListener('click', function() {
+                const isCurrentlyMinimized = alertContent.classList.contains('hidden');
+                
+                if (isCurrentlyMinimized) {
+                    alertContent.classList.remove('hidden');
+                    alertContent.classList.add('block');
+                    alertCollapsed.classList.remove('block');
+                    alertCollapsed.classList.add('hidden');
+                    this.innerHTML = `
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    `;
+                    this.setAttribute('title', 'Minimize');
+                    localStorage.setItem('rancaAgingAlertMinimized', 'false');
+                } else {
+                    alertContent.classList.remove('block');
+                    alertContent.classList.add('hidden');
+                    alertCollapsed.classList.remove('hidden');
+                    alertCollapsed.classList.add('block');
+                    this.innerHTML = `
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    `;
+                    this.setAttribute('title', 'Expand');
+                    localStorage.setItem('rancaAgingAlertMinimized', 'true');
+                }
+            });
+        }
     }
-}
 
     // ============ EVENT LISTENERS ============
     perPageSelect.addEventListener('change', function() {
@@ -1175,7 +1484,10 @@ document.addEventListener('DOMContentLoaded', function() {
         renderTable(getPaginatedData());
         updatePaginationInfo();
         updateSortButtonStyles();
-        showToast('Sorted by priority (most delayed first)', 'info');
+        
+        const urgentCount = filteredRequests.filter(req => req.is_urgent).length;
+        const urgentMessage = urgentCount > 0 ? ` (${urgentCount} urgent)` : '';
+        showToast(`Sorted by priority${urgentMessage} (urgent first)`, 'info');
     });
 
     document.getElementById('sort-by-date')?.addEventListener('click', function() {
@@ -1192,10 +1504,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('show-critical-only')?.addEventListener('click', function() {
         if (!isCriticalOnlyView) {
             isCriticalOnlyView = true;
-            searchInput.value = ''; // Clear search when switching to critical view
+            isUrgentOnlyView = false; // Turn off urgent filter
+            searchInput.value = '';
             searchTerm = '';
             
-            // Count critical documents from all requests
             const criticalCount = allRequests.filter(req => {   
                 const days = Math.abs(req.days_old) || 0;
                 return days >= 10;
@@ -1216,10 +1528,36 @@ document.addEventListener('DOMContentLoaded', function() {
         updateSortButtonStyles();
     });
 
+    // 🚨 Show Urgent Only button
+    document.getElementById('show-urgent-only')?.addEventListener('click', function() {
+        if (!isUrgentOnlyView) {
+            isUrgentOnlyView = true;
+            isCriticalOnlyView = false; // Turn off critical filter
+            searchInput.value = '';
+            searchTerm = '';
+            
+            const urgentCount = allRequests.filter(req => req.is_urgent === true).length;
+            
+            if (urgentCount === 0) {
+                showToast('No urgent documents found', 'warning');
+                isUrgentOnlyView = false;
+            } else {
+                showToast(`Showing ${urgentCount} urgent document(s) only`, 'info');
+            }
+        } else {
+            isUrgentOnlyView = false;
+            showToast('Showing all documents', 'info');
+        }
+        
+        performSearch();
+        updateSortButtonStyles();
+    });
+
     // Show All button
     document.getElementById('show-all')?.addEventListener('click', function() {
         isCriticalOnlyView = false;
-        searchInput.value = ''; // Clear search as well
+        isUrgentOnlyView = false;
+        searchInput.value = '';
         searchTerm = '';
         performSearch();
         updateSortButtonStyles();
@@ -1227,9 +1565,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // ============ AUTO-REFRESH ============
-    setInterval(fetchAgingDocuments, 2 * 60 * 1000); // Every 2 minutes
+    setInterval(fetchAgingDocuments, 2 * 60 * 1000);
     setInterval(updateStatistics, 2 * 60 * 1000);
-    setInterval(fetchDvRequests, 5 * 60 * 1000); // Every 5 minutes
+    setInterval(fetchDvRequests, 5 * 60 * 1000);
 
     // ============ INITIALIZATION ============
     updatePaginationInfo();

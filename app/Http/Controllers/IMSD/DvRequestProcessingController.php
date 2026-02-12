@@ -64,15 +64,13 @@ class DvRequestProcessingController extends Controller
 
         return view('RegionalOffices.IMSD.index', compact('dvRequests'));
     }
-
-  // For JSON polling with search
 public function fetchAll(Request $request)
 {
     $currentUserId = auth()->id();
     $lockDuration = now()->subMinutes(10);
 
     $query = DvRequest::with(['focalPerson', 'program', 'respocenter', 'accountingUnit'])
-        ->whereIn('status', ['submitted', 'IMSD_received'])
+        ->whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process'])
         ->where(function ($q) use ($currentUserId, $lockDuration) {
             $q->whereNull('locked_by')
             ->orWhere('locked_by', $currentUserId)
@@ -93,33 +91,32 @@ public function fetchAll(Request $request)
         });
     }
 
-    // Get all DV requests
     $dvRequests = $query->get();
     
-    // Calculate age for each request and add priority score
     $dvRequests = $dvRequests->map(function ($request) {
         $daysOld = now()->diffInDays($request->created_at);
         
-        // PRIORITY SCORING: IMSD_received gets HIGHEST priority
         $priorityScore = 0;
         
-        // Status-based priority - IMSD_received gets HIGHEST priority (comes FIRST)
+        // 🔥 UPDATED: URGENT gets HIGHEST priority (50000 points)
+        if ($request->is_urgent) {
+            $priorityScore += 50000;
+        }
+        
         if ($request->status === 'IMSD_received') {
-            $priorityScore += 10000; // EXTREMELY HIGH priority - ensures it's always first
+            $priorityScore += 10000;
         } elseif ($request->status === 'submitted') {
             $priorityScore += 50;
         }
         
-        // Age-based priority (secondary factor)
         if ($daysOld >= 10) {
-            $priorityScore += 1000; // Critical priority
+            $priorityScore += 1000;
         } elseif ($daysOld >= 7) {
-            $priorityScore += 500; // High priority
+            $priorityScore += 500;
         } elseif ($daysOld >= 3) {
-            $priorityScore += 200; // Medium priority
+            $priorityScore += 200;
         }
         
-        // Add small random factor to prevent exact ties
         $priorityScore += rand(0, 10);
         
         $request->days_old = $daysOld;
@@ -128,15 +125,24 @@ public function fetchAll(Request $request)
         return $request;
     });
     
-    // Sort by priority score (descending) - HIGHEST priority comes FIRST
-    // This ensures IMSD_received documents (10000+ score) appear at the top
     $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
     $result = $dvRequests->map(function ($request) {
         $urgency = $this->getUrgencyLevel($request->days_old);
-        $base = [
+        
+        // 🔥 UPDATED: Override urgency if marked as urgent
+        if ($request->is_urgent) {
+            $urgency = 'urgent';
+        }
+        
+        $controlNumber = '—';
+        if ($request->accounting_control_number) {
+            $controlNumber = 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT);
+        }
+        
+        return [
             'id'             => $request->id,
-            'accounting_control_number' => $request->accounting_control_number ? 'CN #-' . now()->year . '-' . str_pad($request->accounting_control_number, 4, '0', STR_PAD_LEFT): '—', 
+            'accounting_control_number' => $controlNumber,
             'submitted_by'   => trim(($request->payee_fname ?? $request->focalPerson->fname) . ' ' . ($request->payee_lname ?? $request->focalPerson->lname)),
             'submitted_to'   => auth()->id(),
             'program'        => $request->program->prcode ?? 'N/A',
@@ -148,17 +154,13 @@ public function fetchAll(Request $request)
             'urgency'        => $urgency,
             'priority_score' => $request->priority_score,
             'created_at_timestamp' => $request->created_at->timestamp,
+            'is_urgent'      => $request->is_urgent ?? false, // 🔥 CRITICAL: Include is_urgent flag
+            'urgent_remarks' => $request->urgent_remarks ?? null, // 🔥 NEW: Include remarks
         ];
-
-        if (auth()->guard('focal')->check()) {
-            $base['user_sequence'] = $request->user_sequence;
-        }
-
-        return $base;
     });
 
     return response()->json($result);
-}
+}   
     /**
      * Get urgency level based on whole number of days
      */
@@ -518,7 +520,6 @@ public function fetchAll(Request $request)
                             'TEV' => 'dv-requests-incoming-tev',
                             'TUPAD' => 'dv-requests-incoming-tupad',
                         ];
-
                         if (isset($channelMap[$programCode])) {
                             try {
                                 $this->pusher->trigger($channelMap[$programCode], 'dv-request-submitted', [
@@ -528,6 +529,8 @@ public function fetchAll(Request $request)
                                     'program' => $programCode,
                                     'timestamp' => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                                     'imsd_verified_at' => $dvRequest->imsd_verified_at ? $dvRequest->imsd_verified_at->toISOString() : null,
+                                    'is_urgent' => $dvRequest->is_urgent ?? false, // 🔥 ADD THIS
+                                    'urgent_remarks' => $dvRequest->urgent_remarks ?? null, // 🔥 ADD THIS
                                 ]);
                             } catch (\Exception $pusherError) {
                                 \Log::warning('Program channel notification failed for DV #' . $dvRequest->id);
@@ -818,14 +821,20 @@ public function fetchAll(Request $request)
                 ];
 
                 if (isset($channelMap[$programCode])) {
-                    $this->pusher->trigger($channelMap[$programCode], 'dv-request-submitted', [
-                        'dv_request_id' => $dvRequest->id,
-                        'status'        => $newStatus,
-                        'submitted_by'  => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-                        'program'       => $programCode,
-                        'timestamp'     => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                        'imsd_verified_at' => $dvRequest->imsd_verified_at ? $dvRequest->imsd_verified_at->toISOString() : null,
-                    ]);
+                    try {
+                        $this->pusher->trigger($channelMap[$programCode], 'dv-request-submitted', [
+                            'dv_request_id' => $dvRequest->id,
+                            'status' => $newStatus,
+                            'submitted_by' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                            'program' => $programCode,
+                            'timestamp' => $verifiedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                            'imsd_verified_at' => $dvRequest->imsd_verified_at ? $dvRequest->imsd_verified_at->toISOString() : null,
+                            'is_urgent' => $dvRequest->is_urgent ?? false, // 🔥 ADD THIS
+                            'urgent_remarks' => $dvRequest->urgent_remarks ?? null, // 🔥 ADD THIS
+                        ]);
+                    } catch (\Exception $pusherError) {
+                        \Log::warning('Program channel notification failed for DV #' . $dvRequest->id);
+                    }
                 }
 
                 $this->saveVerificationHistory(

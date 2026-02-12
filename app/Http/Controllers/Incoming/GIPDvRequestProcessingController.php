@@ -313,12 +313,6 @@ class GIPDvRequestProcessingController extends Controller
         $currentUserId = auth()->id();
         $lockDuration = now()->subMinutes(10);
 
-        \Log::info('GIP fetchAll called', [
-            'user_id' => $currentUserId,
-            'search' => $request->input('search'),
-            'url' => $request->fullUrl()
-        ]);
-
         $query = DvRequest::with(['focalPerson', 'program', 'respocenter'])
             ->whereHas('program', fn($q) => $q->where('prcode', 'GIP'))
             ->whereIn('status', ['IMSD_verified','Incoming-GIP_received'])
@@ -330,7 +324,6 @@ class GIPDvRequestProcessingController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->input('search');
-
             $query->where(function ($q) use ($search) {
                 $q->whereHas('program', fn($p) => $p->where('prcode', 'like', "%{$search}%"))
                   ->orWhereHas('focalPerson', fn($fp) =>
@@ -347,37 +340,33 @@ class GIPDvRequestProcessingController extends Controller
             });
         }
 
-        // Get the results
         $dvRequests = $query->get();
         
-        \Log::info('GIP fetchAll results count', ['count' => $dvRequests->count()]);
-
-        // Calculate age for each request and add priority score
         $dvRequests = $dvRequests->map(function ($request) {
-            // For GIP, use gip_received_at if available, otherwise created_at
             $baseDate = $request->gip_received_at ?? $request->created_at;
             $daysOld = now()->diffInDays($baseDate);
             
-            // PRIORITY SCORING: Incoming-GIP_received gets HIGHEST priority
             $priorityScore = 0;
             
-            // Status-based priority - Incoming-GIP_received gets HIGHEST priority (comes FIRST)
+            // ✅ URGENT flag - highest priority
+            if ($request->is_urgent) {
+                $priorityScore += 50000;
+            }
+            
             if ($request->status === 'Incoming-GIP_received') {
-                $priorityScore += 10000; // EXTREMELY HIGH priority - ensures it's always first
+                $priorityScore += 10000;
             } elseif ($request->status === 'IMSD_verified') {
                 $priorityScore += 50;
             }
             
-            // Age-based priority (secondary factor)
             if ($daysOld >= 10) {
-                $priorityScore += 1000; // Critical priority
+                $priorityScore += 1000;
             } elseif ($daysOld >= 7) {
-                $priorityScore += 500; // High priority
+                $priorityScore += 500;
             } elseif ($daysOld >= 3) {
-                $priorityScore += 200; // Medium priority
+                $priorityScore += 200;
             }
             
-            // Add small random factor to prevent exact ties
             $priorityScore += rand(0, 10);
             
             $request->days_old = $daysOld;
@@ -387,14 +376,16 @@ class GIPDvRequestProcessingController extends Controller
             return $request;
         });
         
-        // Sort by priority score (descending) - HIGHEST priority comes FIRST
-        // This ensures Incoming-GIP_received documents (10000+ score) appear at the top
         $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
         $result = $dvRequests->map(function ($request) {
-            // Show which date was used for age calculation
-            $dateUsed = $request->gip_received_at ? 'gip_received_at' : 'created_at';
             $baseDate = $request->gip_received_at ?? $request->created_at;
+            $urgency = $this->getUrgencyLevel($request->days_old);
+            
+            // Override urgency if marked urgent
+            if ($request->is_urgent) {
+                $urgency = 'urgent';
+            }
             
             return [
                 'id'           => $request->id,
@@ -416,27 +407,19 @@ class GIPDvRequestProcessingController extends Controller
                 'gip_last_action_at' => $request->gip_last_action_at ? $request->gip_last_action_at->toISOString() : null,
                 'last_action_at' => $request->last_action_at ? $request->last_action_at->toISOString() : null,
                 'days_old'     => $request->days_old ?? 0,
-                'urgency'      => $request->urgency ?? 'low',
+                'urgency'      => $urgency,
                 'priority_score' => $request->priority_score ?? 0,
-                'date_used_for_age' => $dateUsed,
+                'date_used_for_age' => $dateUsed ?? 'created_at',
+                // ✅ CRITICAL: ADD THIS LINE
+                'is_urgent'    => $request->is_urgent ?? false,
             ];
         });
-
-        \Log::info('GIP fetchAll returning', ['result_count' => $result->count()]);
 
         return response()->json($result);
 
     } catch (\Exception $e) {
-        \Log::error('Error in GIP fetchAll: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString(),
-            'request' => $request->all()
-        ]);
-        
-        return response()->json([
-            'error' => 'Server Error',
-            'message' => $e->getMessage(),
-            'trace' => config('app.debug') ? $e->getTraceAsString() : null
-        ], 500);
+        \Log::error('Error in GIP fetchAll: ' . $e->getMessage());
+        return response()->json(['error' => 'Server Error'], 500);
     }
 }
 /**
@@ -616,6 +599,7 @@ protected function getUrgencyLevel($daysOld)
                     'action_performer_id' => $currentUserId,
                     'gip_received_at' => $dvRequest->gip_received_at ? $dvRequest->gip_received_at->format('M d, Y H:i:s') : null,
                     'gip_last_action_at' => $dvRequest->gip_last_action_at ? $dvRequest->gip_last_action_at->format('M d, Y H:i:s') : null,
+                    'is_urgent'    => $dvRequest->is_urgent ?? false,
                 ]);
 
                 $this->pusher->trigger('dv-requests-' . $focalId, 'status-updated', [

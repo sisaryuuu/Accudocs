@@ -398,4 +398,20 @@ class DvRequest extends Model
     {
         return $this->belongsTo(AccountingUnit::class, 'last_acted_by');
     }
+   public function scopeExceededSLA($query)
+{
+    return $query->whereIn('status', [
+        'submitted', 
+        'IMSD_received', 
+        'IMSD_in_process'
+    ])
+    ->where('created_at', '<=', now()->subDays(10))
+    ->where('is_urgent', false);
+}
+
+
+public function scopeUrgent($query)
+{
+    return $query->where('is_urgent', true);
+}
 }

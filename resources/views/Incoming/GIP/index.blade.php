@@ -1,6 +1,158 @@
 @extends('layouts.app')
 
 @section('title', 'Incoming-GIP - DV Requests')
+<style>
+    /* ============ URGENT BLINKING ANIMATIONS ============ */
+    @keyframes urgent-blink {
+        0% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+        25% {
+            background-color: #fecaca;
+            border-left-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+        }
+        50% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+        75% {
+            background-color: #fecaca;
+            border-left-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+        }
+        100% {
+            background-color: #fee2e2;
+            border-left-color: #ef4444;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+        }
+    }
+
+    .urgent-blink {
+        animation: urgent-blink 1.2s ease-in-out infinite;
+        transition: all 0.2s ease;
+    }
+
+    /* Badge pulsing effect */
+    @keyframes urgent-pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #dc2626;
+        }
+        50% {
+            transform: scale(1.08);
+            opacity: 0.95;
+            background-color: #b91c1c;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #dc2626;
+        }
+    }
+
+    .urgent-badge {
+        animation: urgent-pulse 1.2s ease-in-out infinite;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Glowing effect for buttons */
+    @keyframes urgent-glow {
+        0% {
+            box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+            border-color: #ef4444;
+        }
+        25% {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.8), 0 0 25px rgba(239, 68, 68, 0.5);
+            border-color: #dc2626;
+        }
+        50% {
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6), 0 0 30px rgba(220, 38, 38, 0.4);
+            border-color: #b91c1c;
+        }
+        75% {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.8), 0 0 25px rgba(239, 68, 68, 0.5);
+            border-color: #dc2626;
+        }
+        100% {
+            box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+            border-color: #ef4444;
+        }
+    }
+
+    .urgent-glow {
+        animation: urgent-glow 1.5s ease-in-out infinite;
+    }
+
+    /* Dot pulsing animation */
+    @keyframes urgent-dot-pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #fff;
+        }
+        50% {
+            transform: scale(1.3);
+            opacity: 0.9;
+            background-color: #fee2e2;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+            background-color: #fff;
+        }
+    }
+
+    .urgent-dot {
+        animation: urgent-dot-pulse 1s ease-in-out infinite;
+    }
+
+    /* Urgent button */
+    .btn-urgent-receive {
+        background: linear-gradient(45deg, #dc2626, #b91c1c, #991b1b, #b91c1c, #dc2626);
+        background-size: 300% 300%;
+        animation: gradient-shift 3s ease infinite, urgent-glow 1.5s ease-in-out infinite;
+        color: white;
+        font-weight: bold;
+        border: none;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    .btn-urgent-process {
+        background-color: #dc2626;
+        color: white;
+        font-weight: bold;
+        animation: urgent-glow 1.5s ease-in-out infinite;
+        border: none;
+    }
+
+    .btn-urgent-process:hover {
+        background-color: #b91c1c;
+        transform: scale(1.05);
+    }
+
+    /* Ensure table layout is fixed */
+    .table-fixed {
+        table-layout: fixed;
+    }
+
+    /* Column width adjustments for urgent column */
+    .w-urgent {
+        width: 8%;
+    }
+</style>
+
 
 @section('content')
 <div class="min-h-screen bg-gray-50 pt-24 pb-8">
@@ -87,7 +239,7 @@
         </div>
 
         <!-- Sorting Controls -->
-        <div class="flex gap-2 mb-6">
+        <div class="flex flex-wrap gap-2 mb-6">
             <button id="sort-by-priority" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"></path>
@@ -261,30 +413,41 @@ document.addEventListener('DOMContentLoaded', function() {
     const gipChannel = pusher.subscribe('dv-requests-incoming-gip');
 
     // ============ PUSHER EVENT LISTENERS ============
+   gipChannel.bind('dv-request-submitted', function(data) {
+    console.log('New DV request received from IMSD:', data);
     
-    // Listen for new DV request submissions from IMSD
-    gipChannel.bind('dv-request-submitted', function(data) {
-        console.log('New DV request received from IMSD:', data);
-        fetchDvRequests();
+    if (data.is_urgent) {
+        // Show urgent notification
+        window.showToast(
+            `🚨 URGENT: Document ${data.dv_request_id} from ${data.submitted_by} requires immediate attention`,
+            'warning'
+        );
+        
+        // After fetching, highlight the new urgent document
         setTimeout(() => {
-            fetchAgingDocuments();
-            updateStatistics();
-        }, 500);
-    });
+            const row = document.querySelector(`tr[data-dv-id="${data.dv_request_id}"]`);
+            if (row) {
+                row.classList.add('ring-4', 'ring-red-500', 'ring-opacity-50');
+                setTimeout(() => {
+                    row.classList.remove('ring-4', 'ring-red-500', 'ring-opacity-50');
+                }, 3000);
+            }
+        }, 1000);
+    }
+    
+    fetchDvRequests();
+    setTimeout(() => {
+        fetchAgingDocuments();
+        updateStatistics();
+    }, 500);
+});
 
-    // Listen for received events
     gipChannel.bind('dv-request-received', function(data) {
         console.log('DV request received:', data);
-        
         if (data.action_performer_id === currentUserId) {
-            const controlNumber = data.accounting_control_number || 
-                                 data.dv_request?.accounting_control_number ||
-                                 data.control_number ||
-                                 'Unknown Document';
-            
+            const controlNumber = data.accounting_control_number || data.dv_request?.accounting_control_number || data.control_number || 'Unknown Document';
             showToast(`Document ${controlNumber} received successfully`, 'success');
         }
-        
         fetchDvRequests();
         setTimeout(() => {
             fetchAgingDocuments();
@@ -292,14 +455,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     });
 
-    // Listen for processing started events
     gipChannel.bind('dv-request-processing', function(data) {
         console.log('DV request processing started:', data);
-        
         if (data.action_performer_id === currentUserId) {
             showToast('Document processing started successfully', 'success');
         }
-        
         fetchDvRequests();
         setTimeout(() => {
             fetchAgingDocuments();
@@ -307,14 +467,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     });
 
-    // Listen for verified events
     gipChannel.bind('dv-request-verified', function(data) {
         console.log('DV request verified:', data);
-        
         if (data.action_performer_id === currentUserId) {
             showToast('Document verified successfully', 'success');
         }
-        
         fetchDvRequests();
         setTimeout(() => {
             fetchAgingDocuments();
@@ -322,14 +479,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
     });
 
-    // Listen for rejected events
     gipChannel.bind('dv-request-rejected', function(data) {
         console.log('DV request rejected:', data);
-        
         if (data.action_performer_id === currentUserId) {
             showToast('Document rejected', 'error');
         }
-        
         fetchDvRequests();
         setTimeout(() => {
             fetchAgingDocuments();
@@ -337,14 +491,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
     });
 
-    // Listen for status updates
     gipChannel.bind('status-updated', function(data) {
         console.log('DV request status updated:', data);
-        
         if (data.action_performer_id === currentUserId) {
             showToast('Document status updated', 'info');
         }
-        
         fetchDvRequests();
         setTimeout(() => {
             fetchAgingDocuments();
@@ -352,7 +503,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000);
     });
 
-    // Listen for aging alerts
     gipChannel.bind('document-aging-alert', function(data) {
         console.log('GIP Aging alert received:', data);
         showToast(`Aging document: ${data.control_number} is ${data.days_old} days old`, 'warning');
@@ -579,129 +729,99 @@ document.addEventListener('DOMContentLoaded', function() {
             );
         });
     }
-// Replace the performSearch() function in your GIP index.blade.php with this:
 
-function performSearch() {
-    // First, filter all requests based on search term
-    let tempFiltered = filterRequests(allRequests, searchTerm);
-    
-    // Ensure days_old is positive for all requests
-    tempFiltered = tempFiltered.map(req => ({
-        ...req,
-        days_old: Math.abs(req.days_old) || 0
-    }));
-    
-    // Apply sorting - DEFAULT: Priority sort with Incoming-GIP_received FIRST
-    if (currentSort === 'priority') {
-        // PRIMARY SORT: Incoming-GIP_received status ALWAYS comes FIRST
-        tempFiltered.sort((a, b) => {
-            // 1. HIGHEST PRIORITY: Incoming-GIP_received status comes FIRST
+    function performSearch() {
+        let tempFiltered = filterRequests(allRequests, searchTerm);
+        
+        tempFiltered = tempFiltered.map(req => ({
+            ...req,
+            days_old: Math.abs(req.days_old) || 0,
+            is_urgent: req.is_urgent || false
+        }));
+        
+        if (currentSort === 'priority') {
+            tempFiltered.sort((a, b) => {
+                // 1. HIGHEST PRIORITY: Urgent documents ALWAYS come FIRST
+                if (a.is_urgent && !b.is_urgent) return -1;
+                if (!a.is_urgent && b.is_urgent) return 1;
+                
+                // 2. SECOND PRIORITY: Incoming-GIP_received status
+                const aIsReceived = a.status === 'Incoming-GIP_received';
+                const bIsReceived = b.status === 'Incoming-GIP_received';
+                
+                if (aIsReceived && !bIsReceived) return -1;
+                if (!aIsReceived && bIsReceived) return 1;
+                
+                // 3. THIRD PRIORITY: Age (oldest first)
+                return b.days_old - a.days_old;
+            });
+        } else if (currentSort === 'date') {
+            tempFiltered.sort((a, b) => {
+                const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
+                const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
+                return aDate - bDate;
+            });
+        }
+        
+        if (isCriticalOnlyView) {
+            tempFiltered = tempFiltered.filter(req => req.days_old >= 10);
+        }
+        
+        filteredRequests = tempFiltered;
+        
+        totalRecords = filteredRequests.length;
+        totalPages = Math.ceil(totalRecords / perPage);
+        
+        if (searchTerm || isCriticalOnlyView) {
+            currentPage = 1;
+        } else {
+            if (currentPage > totalPages && totalPages > 0) {
+                currentPage = totalPages;
+            }
+        }
+        
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
+    }
+
+    function sortByPriority() {
+        const sorted = [...filteredRequests];
+        
+        sorted.sort((a, b) => {
+            // 1. HIGHEST PRIORITY: Urgent documents ALWAYS come FIRST
+            if (a.is_urgent && !b.is_urgent) return -1;
+            if (!a.is_urgent && b.is_urgent) return 1;
+            
+            // 2. SECOND PRIORITY: Incoming-GIP_received status
             const aIsReceived = a.status === 'Incoming-GIP_received';
             const bIsReceived = b.status === 'Incoming-GIP_received';
             
-            if (aIsReceived && !bIsReceived) return -1; // a comes first
-            if (!aIsReceived && bIsReceived) return 1;  // b comes first
+            if (aIsReceived && !bIsReceived) return -1;
+            if (!aIsReceived && bIsReceived) return 1;
             
-            // 2. SECONDARY SORT: If both are Incoming-GIP_received or both aren't, sort by age
-            // Within same status, oldest documents come first
+            // 3. THIRD PRIORITY: Age (oldest first)
             return b.days_old - a.days_old;
         });
-    } else if (currentSort === 'date') {
-        // Sort by date (created_at) - oldest first
-        tempFiltered.sort((a, b) => {
-            const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
-            const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
-            return aDate - bDate;
-        });
-    }
-    
-    // Apply critical filter if active
-    if (isCriticalOnlyView) {
-        tempFiltered = tempFiltered.filter(req => req.days_old >= 10);
-    }
-    
-    // Store the filtered results
-    filteredRequests = tempFiltered;
-    
-    // Update pagination
-    totalRecords = filteredRequests.length;
-    totalPages = Math.ceil(totalRecords / perPage);
-    
-    // Reset to first page only if search term changed or critical filter toggled
-    if (searchTerm || isCriticalOnlyView) {
+        
+        filteredRequests = sorted;
         currentPage = 1;
-    } else {
-        // Keep current page but ensure it's within bounds
-        if (currentPage > totalPages && totalPages > 0) {
-            currentPage = totalPages;
-        }
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
     }
-    
-    // Render the current page
-    renderTable(getPaginatedData());
-    updatePaginationInfo();
-}
 
-// Replace the sortByPriority() function with this updated version:
-
-function sortByPriority() {
-    // Create a copy to sort
-    const sorted = [...filteredRequests];
-    
-    sorted.sort((a, b) => {
-        // 1. PRIMARY SORT: Incoming-GIP_received status ALWAYS comes FIRST
-        const aIsReceived = a.status === 'Incoming-GIP_received';
-        const bIsReceived = b.status === 'Incoming-GIP_received';
-        
-        if (aIsReceived && !bIsReceived) return -1; // a comes first
-        if (!aIsReceived && bIsReceived) return 1;  // b comes first
-        
-        // 2. SECONDARY SORT: Within Incoming-GIP_received group, sort by urgency and age
-        if (aIsReceived && bIsReceived) {
-            // Both are Incoming-GIP_received, sort by age (oldest first)
-            return b.days_old - a.days_old;
-        }
-        
-        // 3. TERTIARY SORT: For non-Incoming-GIP_received (IMSD_verified), sort by urgency level
-        // Critical (10+ days) comes first
-        const aCritical = a.days_old >= 10;
-        const bCritical = b.days_old >= 10;
-        
-        if (aCritical && !bCritical) return -1;
-        if (!aCritical && bCritical) return 1;
-        
-        // Then high priority (7-9 days)
-        const aHigh = a.days_old >= 7;
-        const bHigh = b.days_old >= 7;
-        
-        if (aHigh && !bHigh) return -1;
-        if (!aHigh && bHigh) return 1;
-        
-        // Then medium priority (3-6 days)
-        const aMedium = a.days_old >= 3;
-        const bMedium = b.days_old >= 3;
-        
-        if (aMedium && !bMedium) return -1;
-        if (!aMedium && bMedium) return 1;
-        
-        // Finally by days old descending within same priority
-        return b.days_old - a.days_old;
-    });
-    
-    // Update the filteredRequests array
-    filteredRequests = sorted;
-    
-    // Reset to first page when sorting
-    currentPage = 1;
-    renderTable(getPaginatedData());
-    updatePaginationInfo();
-}
     function sortByDate() {
-        filteredRequests.sort((a, b) => {
+        const sorted = [...filteredRequests];
+        
+        sorted.sort((a, b) => {
             const aDate = a.created_at_timestamp ? new Date(a.created_at_timestamp) : new Date(a.date);
             const bDate = b.created_at_timestamp ? new Date(b.created_at_timestamp) : new Date(b.date);
             return aDate - bDate;
         });
+        
+        filteredRequests = sorted;
+        currentPage = 1;
+        renderTable(getPaginatedData());
+        updatePaginationInfo();
     }
 
     function updateSortButtonStyles() {
@@ -758,6 +878,11 @@ function sortByPriority() {
     // ============ TABLE RENDERING ============
     function renderTable(dvRequests) {
         if (dvRequests.length === 0) {
+            let message = '';
+            if (isCriticalOnlyView) {
+                message = '<p class="text-sm text-red-600 mt-2">No critical documents (10+ days) found.</p>';
+            }
+            
             tableContainer.innerHTML = `
                 <div class="text-center py-16">
                     <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -768,7 +893,7 @@ function sortByPriority() {
                     </div>
                     <h3 class="text-lg font-medium text-gray-900 mb-2">No DV requests found</h3>
                     <p class="text-gray-500">${searchTerm ? 'Try adjusting your search filter.' : 'No requests available.'}</p>
-                    ${isCriticalOnlyView ? '<p class="text-sm text-red-600 mt-2">No critical documents (10+ days) found.</p>' : ''}
+                    ${message}
                 </div>
             `;
             return;
@@ -779,13 +904,14 @@ function sortByPriority() {
                 <table class="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13.5px]">
                     <thead class="bg-gray-50 text-[13px]">
                         <tr>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
-                            <th class="px-5 py-3 w-[18%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Particulars</th>
-                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-5 py-3 w-[16%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control No.</th>
+                            <th class="px-5 py-3 w-[15%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted By</th>
+                            <th class="px-5 py-3 w-urgent text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Urgent</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                            <th class="px-5 py-3 w-[15%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Particulars</th>
+                            <th class="px-5 py-3 w-[10%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-5 py-3 w-[12%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-5 py-3 w-[14%] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
                             <th class="px-5 py-3 w-[12%] text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -795,31 +921,59 @@ function sortByPriority() {
         dvRequests.forEach(request => {
             const [bgClass, dotClass, label] = statusColors[request.status] || ['bg-gray-100 text-gray-800','bg-gray-400', request.status];
             const daysOld = Math.round(request.days_old) || 0;
+            const isUrgent = request.is_urgent == 1 || request.is_urgent === true || request.is_urgent === '1';
             
-            // Determine row styling based on age
+            // Row styling
             let rowClasses = 'hover:bg-gray-50 transition-colors duration-150';
             let textColorClass = 'text-gray-900';
             let rowBgClass = '';
             
-            if (daysOld >= 10) {
+            if (isUrgent) {
+                rowBgClass = 'urgent-blink';
+                rowClasses = 'border-l-4 border-red-600';
+                textColorClass = 'text-gray-900 font-medium';
+            } else if (daysOld >= 10) {
                 rowBgClass = 'bg-red-50/50 hover:bg-red-100/50';
                 rowClasses = 'border-l-4 border-red-400';
+                textColorClass = 'text-gray-900';
             } else if (daysOld >= 7) {
                 rowBgClass = 'bg-orange-50/50 hover:bg-orange-100/50';
                 rowClasses = 'border-l-4 border-orange-300';
+                textColorClass = 'text-gray-900';
             } else if (daysOld >= 3) {
                 rowBgClass = 'bg-yellow-50/50 hover:bg-yellow-100/50';
                 rowClasses = 'border-l-4 border-yellow-300';
+                textColorClass = 'text-gray-900';
             } else {
                 rowBgClass = 'bg-white hover:bg-gray-50';
+                rowClasses = '';
+                textColorClass = 'text-gray-900';
             }
             
-            // Button styling based on age
+            // Urgent badge for column
+            let urgentColumnBadge = '';
+            if (isUrgent) {
+                urgentColumnBadge = `
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-bold text-white bg-red-600 rounded-full urgent-badge">
+                        <svg class="w-3 h-3 mr-1 urgent-dot" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                        URGENT
+                    </span>
+                `;
+            } else {
+                urgentColumnBadge = `<span class="text-gray-400">—</span>`;
+            }
+            
+            // Button styling
             let buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700';
             let buttonText = 'Receive';
             
             if (request.status === 'IMSD_verified') {
-                if (daysOld >= 10) {
+                if (isUrgent) {
+                    buttonClass = 'btn-urgent-receive';
+                    buttonText = '⚡ RECEIVE NOW';
+                } else if (daysOld >= 10) {
                     buttonClass = 'bg-green-100 hover:bg-green-200 text-green-700 border border-green-300 font-medium';
                     buttonText = 'RECEIVE';
                 } else if (daysOld >= 7) {
@@ -829,14 +983,38 @@ function sortByPriority() {
                 }
             }
             
+            // Status badge styling
+            let statusBadgeClass = bgClass;
+            let statusDotClass = dotClass;
+            let statusLabel = label;
+            
+            if (isUrgent) {
+                statusBadgeClass = 'status-urgent';
+                statusDotClass = 'bg-white urgent-dot';
+                statusLabel = 'URGENT - ' + label;
+            } else if (daysOld >= 10) {
+                statusBadgeClass = 'bg-red-100 text-red-800 border border-red-200';
+                statusDotClass = 'bg-red-500';
+            } else if (daysOld >= 7) {
+                statusBadgeClass = 'bg-orange-100 text-orange-800 border border-orange-200';
+                statusDotClass = 'bg-orange-400';
+            } else if (daysOld >= 3) {
+                statusBadgeClass = 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+                statusDotClass = 'bg-yellow-400';
+            }
+            
             html += `
-                <tr class="${rowClasses} ${rowBgClass}">
+                <tr class="${rowClasses} ${rowBgClass}" data-dv-id="${request.id}">
                     <td class="px-6 py-4 text-sm font-medium ${textColorClass}">
                         ${request.accounting_control_number}
                     </td>
                     <td class="px-6 py-4 text-sm ${textColorClass}">${request.submitted_by}</td>
                     <td class="px-6 py-4 text-sm">
+                        ${urgentColumnBadge}
+                    </td>
+                    <td class="px-6 py-4 text-sm">
                         <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            isUrgent ? 'bg-red-100 text-red-800 urgent-badge' :
                             daysOld >= 10 ? 'bg-red-100 text-red-800' : 
                             daysOld >= 7 ? 'bg-orange-100 text-orange-800' : 
                             daysOld >= 3 ? 'bg-yellow-100 text-yellow-800' : 
@@ -845,49 +1023,41 @@ function sortByPriority() {
                             ${request.program}
                         </span>
                     </td>
-                    <td class="px-6 py-4 text-sm font-semibold ${textColorClass}">${request.particulars}</td>
+                    <td class="px-6 py-4 text-sm ${textColorClass}">${request.particulars || 'N/A'}</td>
                     <td class="px-6 py-4 text-sm font-semibold ${textColorClass}">₱${request.amount}</td>
                     <td class="px-6 py-4">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                            daysOld >= 10 ? 'bg-red-100 text-red-800 border border-red-200' : 
-                            daysOld >= 7 ? 'bg-orange-100 text-orange-800 border border-orange-200' : 
-                            daysOld >= 3 ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 
-                            bgClass
-                        }">
-                            <span class="w-2 h-2 mr-2 rounded-full ${
-                                daysOld >= 10 ? 'bg-red-500' : 
-                                daysOld >= 7 ? 'bg-orange-400' : 
-                                daysOld >= 3 ? 'bg-yellow-400' : 
-                                dotClass
-                            }"></span>
-                            ${label}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass}">
+                            <span class="w-2 h-2 mr-2 rounded-full ${statusDotClass}"></span>
+                            ${statusLabel}
                         </span>
                     </td>
                     <td class="px-6 py-4">
                         <div class="text-sm ${textColorClass}">${request.date}</div>
                         <div class="text-xs ${
+                            isUrgent ? 'text-red-600 font-bold' :
                             daysOld >= 10 ? 'text-red-600' : 
                             daysOld >= 7 ? 'text-orange-600' : 
                             daysOld >= 3 ? 'text-yellow-600' : 
                             'text-gray-500'
                         } font-medium mt-1">
-                            ${daysOld} ${daysOld === 1 ? 'day' : 'days'} ago
+                            ${isUrgent ? '⚠️ URGENT - ' : ''}${daysOld} ${daysOld === 1 ? 'day' : 'days'} ago
                         </div>
                     </td>
                     <td class="px-5 py-4 text-center text-sm font-medium">
                         ${request.status === 'IMSD_verified' 
                             ? `<button type="button" onclick="handleReceiveAction(${request.id}, this)" 
-                               class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-[13px] font-medium rounded-md transition-all duration-200 min-w-[120px]">
+                               class="inline-flex items-center justify-center px-3 py-2 ${buttonClass} text-[13px] font-medium rounded-md transition-all duration-200 min-w-[120px] ${isUrgent ? 'urgent-glow' : ''}">
                                ${buttonText}
                                </button>`    
                             : `<a href="/Incoming/GIP/dvrequests/${request.id}" 
                                class="inline-flex items-center justify-center px-3 py-2 ${
+                                   isUrgent ? 'btn-urgent-process' :
                                    daysOld >= 10 ? 'bg-red-100 hover:bg-red-200 text-red-700 border border-red-300' : 
                                    daysOld >= 7 ? 'bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300' : 
                                    daysOld >= 3 ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border border-yellow-300' : 
                                    'bg-blue-100 hover:bg-blue-200 text-blue-700'
-                               } text-xs font-medium rounded-md transition-colors duration-200 min-w-[120px]">
-                               View / Process
+                               } text-xs font-medium rounded-md transition-colors duration-200 min-w-[120px] ${isUrgent ? 'urgent-glow' : ''}">
+                               ${isUrgent ? '⚡ PROCESS NOW' : 'View / Process'}
                                </a>`
                         }
                     </td>
@@ -898,6 +1068,7 @@ function sortByPriority() {
         tableContainer.innerHTML = html;
     }
 
+    // ============ AGING DOCUMENTS FUNCTIONS ============
     async function fetchDvRequests() {
         try {
             const res = await fetch("{{ route('Incoming.GIP.fetchAll') }}?search=" + encodeURIComponent(searchTerm));
@@ -912,7 +1083,6 @@ function sortByPriority() {
         }
     }
 
-    // ============ AGING DOCUMENTS FUNCTIONS ============
     async function fetchAgingDocuments() {
         try {
             const res = await fetch('{{ route("GIP.aging.documents") }}');
@@ -969,196 +1139,184 @@ function sortByPriority() {
             console.error('Failed to fetch statistics:', err);
         }
     }
-function renderAgingAlerts(documents, count) {
-    if (!agingAlertsContainer || !documents || documents.length === 0) {
-        if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
-        return;
-    }
 
-    // Filter for aging documents (should NOT filter out IMSD_verified for GIP)
-    const agingDocs = documents.filter(doc => !['Incoming-GIP_verified', 'Cashier_released'].includes(doc.status));
-    
-    if (agingDocs.length === 0) {
-        agingAlertsContainer.innerHTML = '';
-        return;
-    }
-
-    // Ensure positive days_old values
-    agingDocs.forEach(doc => {
-        const days = Math.abs(Math.floor(Number(doc.days_old))) || 0;
-        doc.days_old = days;
-        doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
-    });
-
-    // Calculate statistics
-    const stats = {
-        critical: agingDocs.filter(doc => doc.days_old >= 10).length,
-        high: agingDocs.filter(doc => doc.days_old >= 7 && doc.days_old < 10).length,
-        medium: agingDocs.filter(doc => doc.days_old >= 3 && doc.days_old < 7).length,
-        total: agingDocs.length
-    };
-
-    // Find oldest document
-    const oldestDoc = agingDocs.reduce((oldest, doc) => 
-        doc.days_old > oldest.days_old ? doc : oldest
-    , agingDocs[0]);
-
-    // Calculate average age
-    const avgAge = Math.round(agingDocs.reduce((sum, doc) => sum + doc.days_old, 0) / agingDocs.length);
-
-    // Determine overall urgency level
-    const highestUrgency = stats.critical > 0 ? 'critical' : 
-                          stats.high > 0 ? 'high' : 
-                          stats.medium > 0 ? 'medium' : 'low';
-
-    const config = {
-        'critical': { 
-            icon: '🚨', 
-            bg: 'bg-red-50 border-red-500', 
-            text: 'text-red-900',
-            accentBg: 'bg-red-100',
-            accentText: 'text-red-700'
-        },
-        'high': { 
-            icon: '⚠️', 
-            bg: 'bg-orange-50 border-orange-500', 
-            text: 'text-orange-900',
-            accentBg: 'bg-orange-100',
-            accentText: 'text-orange-700'
-        },
-        'medium': { 
-            icon: '⏰', 
-            bg: 'bg-yellow-50 border-yellow-500', 
-            text: 'text-yellow-900',
-            accentBg: 'bg-yellow-100',
-            accentText: 'text-yellow-700'
-        },
-        'low': { 
-            icon: 'ℹ️', 
-            bg: 'bg-blue-50 border-blue-500', 
-            text: 'text-blue-900',
-            accentBg: 'bg-blue-100',
-            accentText: 'text-blue-700'
+    function renderAgingAlerts(documents, count) {
+        if (!agingAlertsContainer || !documents || documents.length === 0) {
+            if (agingAlertsContainer) agingAlertsContainer.innerHTML = '';
+            return;
         }
-    };
 
-    const c = config[highestUrgency];
-
-    // Check if minimized
-    const alertState = JSON.parse(localStorage.getItem('gipAgingAlertMinimized') || 'false');
-    const isMinimized = alertState === true;
-
-    // Build summary text
-    let summaryText = `You currently have <strong>${stats.total} aging document${stats.total > 1 ? 's' : ''}</strong> that require attention. `;
-    
-    // Add breakdown by priority
-    const priorities = [];
-    if (stats.critical > 0) priorities.push(`<strong class="text-red-700">${stats.critical} critical</strong> (10+ days old)`);
-    if (stats.high > 0) priorities.push(`<strong class="text-orange-700">${stats.high} high priority</strong> (7-10 days)`);
-    if (stats.medium > 0) priorities.push(`<strong class="text-yellow-700">${stats.medium} medium priority</strong> (3-7 days)`);
-    
-    if (priorities.length > 0) {
-        if (priorities.length === 1) {
-            summaryText += `This includes ${priorities[0]}. `;
-        } else if (priorities.length === 2) {
-            summaryText += `This includes ${priorities[0]} and ${priorities[1]}. `;
-        } else {
-            summaryText += `This includes ${priorities[0]}, ${priorities[1]}, and ${priorities[2]}. `;
+        const agingDocs = documents.filter(doc => !['Incoming-GIP_verified', 'Cashier_released'].includes(doc.status));
+        
+        if (agingDocs.length === 0) {
+            agingAlertsContainer.innerHTML = '';
+            return;
         }
-    }
-    
-    summaryText += `The average age of pending documents is <strong>${avgAge} days</strong>, with the oldest being <strong class="${c.accentText}">${oldestDoc.control_number}</strong> at <strong>${oldestDoc.days_old} days old</strong> from ${oldestDoc.submitted_by}.`;
-    
-    // Add urgent action message if critical
-    let urgentMessage = '';
-    if (stats.critical > 0) {
-        urgentMessage = `
-            <div class="mt-3 pt-3 border-t ${c.accentText === 'text-red-700' ? 'border-red-200' : 'border-gray-200'}">
-                <div class="flex items-start gap-2">
-                    <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-                    </svg>
-                    <p class="text-sm text-red-800 leading-relaxed">
-                        <strong>Urgent:</strong> ${stats.critical} document${stats.critical > 1 ? 's have' : ' has'} exceeded the 10-day processing threshold and require${stats.critical === 1 ? 's' : ''} immediate attention.
-                    </p>
+
+        agingDocs.forEach(doc => {
+            const days = Math.abs(Math.floor(Number(doc.days_old))) || 0;
+            doc.days_old = days;
+            doc.urgency = days >= 10 ? 'critical' : days >= 7 ? 'high' : days >= 3 ? 'medium' : 'low';
+        });
+
+        const stats = {
+            critical: agingDocs.filter(doc => doc.days_old >= 10).length,
+            high: agingDocs.filter(doc => doc.days_old >= 7 && doc.days_old < 10).length,
+            medium: agingDocs.filter(doc => doc.days_old >= 3 && doc.days_old < 7).length,
+            total: agingDocs.length
+        };
+
+        const oldestDoc = agingDocs.reduce((oldest, doc) => 
+            doc.days_old > oldest.days_old ? doc : oldest
+        , agingDocs[0]);
+
+        const avgAge = Math.round(agingDocs.reduce((sum, doc) => sum + doc.days_old, 0) / agingDocs.length);
+
+        const highestUrgency = stats.critical > 0 ? 'critical' : 
+                              stats.high > 0 ? 'high' : 
+                              stats.medium > 0 ? 'medium' : 'low';
+
+        const config = {
+            'critical': { 
+                icon: '🚨', 
+                bg: 'bg-red-50 border-red-500', 
+                text: 'text-red-900',
+                accentBg: 'bg-red-100',
+                accentText: 'text-red-700'
+            },
+            'high': { 
+                icon: '⚠️', 
+                bg: 'bg-orange-50 border-orange-500', 
+                text: 'text-orange-900',
+                accentBg: 'bg-orange-100',
+                accentText: 'text-orange-700'
+            },
+            'medium': { 
+                icon: '⏰', 
+                bg: 'bg-yellow-50 border-yellow-500', 
+                text: 'text-yellow-900',
+                accentBg: 'bg-yellow-100',
+                accentText: 'text-yellow-700'
+            },
+            'low': { 
+                icon: 'ℹ️', 
+                bg: 'bg-blue-50 border-blue-500', 
+                text: 'text-blue-900',
+                accentBg: 'bg-blue-100',
+                accentText: 'text-blue-700'
+            }
+        };
+
+        const c = config[highestUrgency];
+
+        const alertState = JSON.parse(localStorage.getItem('gipAgingAlertMinimized') || 'false');
+        const isMinimized = alertState === true;
+
+        let summaryText = `You currently have <strong>${stats.total} aging document${stats.total > 1 ? 's' : ''}</strong> that require attention. `;
+        
+        const priorities = [];
+        if (stats.critical > 0) priorities.push(`<strong class="text-red-700">${stats.critical} critical</strong> (10+ days old)`);
+        if (stats.high > 0) priorities.push(`<strong class="text-orange-700">${stats.high} high priority</strong> (7-10 days)`);
+        if (stats.medium > 0) priorities.push(`<strong class="text-yellow-700">${stats.medium} medium priority</strong> (3-7 days)`);
+        
+        if (priorities.length > 0) {
+            if (priorities.length === 1) {
+                summaryText += `This includes ${priorities[0]}. `;
+            } else if (priorities.length === 2) {
+                summaryText += `This includes ${priorities[0]} and ${priorities[1]}. `;
+            } else {
+                summaryText += `This includes ${priorities[0]}, ${priorities[1]}, and ${priorities[2]}. `;
+            }
+        }
+        
+        summaryText += `The average age of pending documents is <strong>${avgAge} days</strong>, with the oldest being <strong class="${c.accentText}">${oldestDoc.control_number}</strong> at <strong>${oldestDoc.days_old} days old</strong> from ${oldestDoc.submitted_by}.`;
+        
+        let urgentMessage = '';
+        if (stats.critical > 0) {
+            urgentMessage = `
+                <div class="mt-3 pt-3 border-t ${c.accentText === 'text-red-700' ? 'border-red-200' : 'border-gray-200'}">
+                    <div class="flex items-start gap-2">
+                        <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                        <p class="text-sm text-red-800 leading-relaxed">
+                            <strong>Urgent:</strong> ${stats.critical} document${stats.critical > 1 ? 's have' : ' has'} exceeded the 10-day processing threshold and require${stats.critical === 1 ? 's' : ''} immediate attention.
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        agingAlertsContainer.innerHTML = `
+            <div class="rounded-lg border-l-4 p-4 ${c.bg} shadow-md aging-alert-container">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 flex-1">
+                        <span class="text-2xl flex-shrink-0">${c.icon}</span>
+                        <div class="flex-1">
+                            <h3 class="font-bold text-base ${c.text} mb-2">Aging Documents Summary</h3>
+                            <div class="alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
+                                <p class="text-sm ${c.text} leading-relaxed opacity-90">
+                                    ${summaryText}
+                                </p>
+                                ${urgentMessage}
+                            </div>
+                            <div class="alert-collapsed transition-all duration-300 ease-in-out ${isMinimized ? 'block' : 'hidden'}">
+                                <p class="text-sm ${c.text} opacity-90">
+                                    <strong>${stats.total}</strong> aging document${stats.total > 1 ? 's' : ''} 
+                                    ${stats.critical > 0 ? `(<strong class="text-red-700">${stats.critical} critical</strong>)` : ''} • 
+                                    Oldest: <strong>${oldestDoc.days_old} days</strong>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="minimize-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50 flex-shrink-0" 
+                            title="${isMinimized ? 'Expand' : 'Minimize'}">
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                             style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         `;
-    }
 
-    agingAlertsContainer.innerHTML = `
-        <div class="rounded-lg border-l-4 p-4 ${c.bg} shadow-md aging-alert-container">
-            <div class="flex items-start justify-between gap-3">
-                <div class="flex items-start gap-3 flex-1">
-                    <span class="text-2xl flex-shrink-0">${c.icon}</span>
-                    <div class="flex-1">
-                        <h3 class="font-bold text-base ${c.text} mb-2">Aging Documents Summary</h3>
-                        <div class="alert-content transition-all duration-300 ease-in-out ${isMinimized ? 'hidden' : 'block'}">
-                            <p class="text-sm ${c.text} leading-relaxed opacity-90">
-                                ${summaryText}
-                            </p>
-                            ${urgentMessage}
-                        </div>
-                        <div class="alert-collapsed transition-all duration-300 ease-in-out ${isMinimized ? 'block' : 'hidden'}">
-                            <p class="text-sm ${c.text} opacity-90">
-                                <strong>${stats.total}</strong> aging document${stats.total > 1 ? 's' : ''} 
-                                ${stats.critical > 0 ? `(<strong class="text-red-700">${stats.critical} critical</strong>)` : ''} • 
-                                Oldest: <strong>${oldestDoc.days_old} days</strong>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <button class="minimize-alert-btn text-gray-600 hover:text-gray-800 transition-colors p-1 rounded hover:bg-white/50 flex-shrink-0" 
-                        title="${isMinimized ? 'Expand' : 'Minimize'}">
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                         style="${isMinimized ? 'transform: rotate(-90deg);' : ''}">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                              d="${isMinimized ? 'M9 5l7 7-7 7' : 'M19 9l-7 7-7-7'}"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    `;
-
-    // Add event listener for the minimize button
-    const minimizeBtn = agingAlertsContainer.querySelector('.minimize-alert-btn');
-    const alertContent = agingAlertsContainer.querySelector('.alert-content');
-    const alertCollapsed = agingAlertsContainer.querySelector('.alert-collapsed');
-    
-    if (minimizeBtn && alertContent && alertCollapsed) {
-        minimizeBtn.addEventListener('click', function() {
-            const isCurrentlyMinimized = alertContent.classList.contains('hidden');
-            
-            if (isCurrentlyMinimized) {
-                // Expand
-                alertContent.classList.remove('hidden');
-                alertContent.classList.add('block');
-                alertCollapsed.classList.remove('block');
-                alertCollapsed.classList.add('hidden');
-                this.innerHTML = `
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                `;
-                this.setAttribute('title', 'Minimize');
-                localStorage.setItem('gipAgingAlertMinimized', 'false');
-            } else {
-                // Minimize
-                alertContent.classList.remove('block');
-                alertContent.classList.add('hidden');
-                alertCollapsed.classList.remove('hidden');
-                alertCollapsed.classList.add('block');
-                this.innerHTML = `
-                    <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                    </svg>
-                `;
-                this.setAttribute('title', 'Expand');
-                localStorage.setItem('gipAgingAlertMinimized', 'true');
-            }
-        });
+        const minimizeBtn = agingAlertsContainer.querySelector('.minimize-alert-btn');
+        const alertContent = agingAlertsContainer.querySelector('.alert-content');
+        const alertCollapsed = agingAlertsContainer.querySelector('.alert-collapsed');
+        
+        if (minimizeBtn && alertContent && alertCollapsed) {
+            minimizeBtn.addEventListener('click', function() {
+                const isCurrentlyMinimized = alertContent.classList.contains('hidden');
+                
+                if (isCurrentlyMinimized) {
+                    alertContent.classList.remove('hidden');
+                    alertContent.classList.add('block');
+                    alertCollapsed.classList.remove('block');
+                    alertCollapsed.classList.add('hidden');
+                    this.innerHTML = `
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    `;
+                    this.setAttribute('title', 'Minimize');
+                    localStorage.setItem('gipAgingAlertMinimized', 'false');
+                } else {
+                    alertContent.classList.remove('block');
+                    alertContent.classList.add('hidden');
+                    alertCollapsed.classList.remove('hidden');
+                    alertCollapsed.classList.add('block');
+                    this.innerHTML = `
+                        <svg class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    `;
+                    this.setAttribute('title', 'Expand');
+                    localStorage.setItem('gipAgingAlertMinimized', 'true');
+                }
+            });
+        }
     }
-}
 
     // ============ EVENT LISTENERS ============
     perPageSelect.addEventListener('change', function() {
@@ -1174,7 +1332,6 @@ function renderAgingAlerts(documents, count) {
     nextPageBtn.addEventListener('click', () => goToPage(currentPage + 1));
     lastPageBtn.addEventListener('click', () => goToPage(totalPages));
 
-    // Search with debounce
     let searchTimeout;
     searchInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
@@ -1184,35 +1341,29 @@ function renderAgingAlerts(documents, count) {
         }, 300);
     });
 
-    // Sorting buttons
     document.getElementById('sort-by-priority')?.addEventListener('click', function() {
         currentSort = 'priority';
         sortByPriority();
-        currentPage = 1;
-        renderTable(getPaginatedData());
-        updatePaginationInfo();
         updateSortButtonStyles();
-        showToast('Sorted by priority (most delayed first)', 'info');
+        
+        const urgentCount = filteredRequests.filter(req => req.is_urgent).length;
+        const urgentMessage = urgentCount > 0 ? ` (${urgentCount} urgent)` : '';
+        showToast(`Sorted by priority${urgentMessage} (urgent first)`, 'info');
     });
 
     document.getElementById('sort-by-date')?.addEventListener('click', function() {
         currentSort = 'date';
         sortByDate();
-        currentPage = 1;
-        renderTable(getPaginatedData());
-        updatePaginationInfo();
         updateSortButtonStyles();
         showToast('Sorted by submission date (oldest first)', 'info');
     });
 
-    // FIXED: Show Critical Only button
     document.getElementById('show-critical-only')?.addEventListener('click', function() {
         if (!isCriticalOnlyView) {
             isCriticalOnlyView = true;
-            searchInput.value = ''; // Clear search when switching to critical view
+            searchInput.value = '';
             searchTerm = '';
             
-            // Count critical documents from all requests
             const criticalCount = allRequests.filter(req => {   
                 const days = Math.abs(req.days_old) || 0;
                 return days >= 10;
@@ -1233,10 +1384,9 @@ function renderAgingAlerts(documents, count) {
         updateSortButtonStyles();
     });
 
-    // FIXED: Show All button
     document.getElementById('show-all')?.addEventListener('click', function() {
         isCriticalOnlyView = false;
-        searchInput.value = ''; // Clear search as well
+        searchInput.value = '';
         searchTerm = '';
         performSearch();
         updateSortButtonStyles();
@@ -1244,9 +1394,9 @@ function renderAgingAlerts(documents, count) {
     });
 
     // ============ AUTO-REFRESH ============
-    setInterval(fetchAgingDocuments, 2 * 60 * 1000); // Every 2 minutes
+    setInterval(fetchAgingDocuments, 2 * 60 * 1000);
     setInterval(updateStatistics, 2 * 60 * 1000);
-    setInterval(fetchDvRequests, 5 * 60 * 1000); // Every 5 minutes
+    setInterval(fetchDvRequests, 5 * 60 * 1000);
 
     // ============ INITIALIZATION ============
     updatePaginationInfo();

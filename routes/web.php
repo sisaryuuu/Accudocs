@@ -126,6 +126,13 @@ Route::middleware(['auth:web','verified', 'role:Admin|Accountant_III'])->group(f
 
     Route::resource('admin/accountingunits', AccountingUnitController::class)
         ->names('admin.accountingunits');
+    
+    Route::get('/admin/dashboard/all-exceeded-documents', [AdminController::class, 'getAllExceededDocuments'])
+        ->name('admin.dashboard.all-exceeded');
+    
+    Route::post('/admin/dashboard/mark-urgent', [AdminController::class, 'markAsUrgent'])
+        ->name('admin.dashboard.mark-urgent');
+
 
     Route::get('/document-tracking', [AdminController::class, 'documentTracking'])->name('admin.document-tracking');
     Route::get('/document-tracking/{dvRequest}', [AdminController::class, 'documentTrackingShow'])->name('admin.document-tracking.show');
@@ -171,17 +178,15 @@ Route::post('/admin/accountingunits/bulk-action', [AccountingUnitController::cla
         ->name('admin.permissions.update');
     Route::delete('admin/permissions/{permission}', [RoleController::class, 'permissionsDestroy'])
         ->name('admin.permissions.destroy');
-    
-    
-    
-    
-    
-    
+
     // Settings routes
     Route::get('admin/settings', [SettingsController::class, 'edit'])
         ->name('admin.settings.edit');
     Route::post('admin/settings', [SettingsController::class, 'update'])
         ->name('admin.settings.update');
+
+
+    
 });
 
 Route::middleware(['auth', 'role:Admin'])->prefix('admin')->group(function () {
@@ -405,7 +410,6 @@ Route::middleware(['auth:web', 'verified', 'role:Admin|IMSD'])->prefix('Regional
         ->name('RegionalOffices.IMSD.dvrequests.fetchimsdRecent');
    
     Route::get('/fetchAll', [DvRequestProcessingController::class, 'fetchAll'])
-    
         ->name('RegionalOffices.IMSD.fetchAll');
     
     Route::get('/dvrequests/{id}', [DvRequestProcessingController::class, 'show'])

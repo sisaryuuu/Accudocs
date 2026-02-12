@@ -3,6 +3,12 @@
 
 @section('content')
 @php
+    // Add this with your other initialized variables at the top of the file
+    $exceededCount = App\Models\DvRequest::whereIn('status', ['submitted', 'IMSD_received', 'IMSD_in_process'])
+        ->where('created_at', '<=', now()->subDays(10))
+        ->count();
+@endphp
+@php
     // Helper functions for safe calculations
     function safeDivide($numerator, $denominator, $default = 0) {
         return $denominator != 0 ? $numerator / $denominator : $default;
@@ -92,27 +98,88 @@
                     </a>
                     @endif
                 </div>
+                
+                <!-- Quick Filter Dropdown -->
+                <div class="relative">
+                    <button type="button" 
+                            id="quickFilterDropdownBtn" 
+                            class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-50 flex items-center justify-center space-x-2 whitespace-nowrap w-full md:w-auto">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                        <span>Quick Filters</span>
+                    </button>
+                    
+                    <!-- Dropdown Menu -->
+                    <div id="quickFilterDropdown" 
+                         class="hidden absolute z-10 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg w-48">
+                        <div class="p-2">
+                            <div class="text-xs text-gray-500 px-3 py-2 uppercase font-semibold">Time Periods</div>
+                            <a href="{{ route('admin.dashboard.preset', 'today') }}" 
+                               class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded">
+                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                Today
+                            </a>
+                            <a href="{{ route('admin.dashboard.preset', 'this_week') }}" 
+                               class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded">
+                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                This Week
+                            </a>
+                            <a href="{{ route('admin.dashboard.preset', 'this_month') }}" 
+                               class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded">
+                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                This Month
+                            </a>
+                            <div class="border-t my-1"></div>
+                            <div class="text-xs text-gray-500 px-3 py-2 uppercase font-semibold">Previous Periods</div>
+                            <a href="{{ route('admin.dashboard.preset', 'yesterday') }}" 
+                               class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded">
+                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                </svg>
+                                Yesterday
+                            </a>
+                            <a href="{{ route('admin.dashboard.preset', 'last_week') }}" 
+                               class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded">
+                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                </svg>
+                                Last Week
+                            </a>
+                            <a href="{{ route('admin.dashboard.preset', 'last_month') }}" 
+                               class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded">
+                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                </svg>
+                                Last Month
+                            </a>
+                            <a href="{{ route('admin.dashboard.preset', 'last_3_months') }}" 
+                               class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded">
+                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                </svg>
+                                Last 3 Months
+                            </a>
+                            <div class="border-t my-1"></div>
+                            <div class="text-xs text-gray-500 px-3 py-2 uppercase font-semibold">Custom Range</div>
+                            <button type="button" onclick="showCustomRange()" 
+                                    class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded w-full">
+                                <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                </svg>
+                                Custom Range
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </form>
-        
-        <!-- Quick Filter Presets -->
-        <div class="flex flex-wrap gap-2">
-            <a href="{{ route('admin.dashboard.preset', 'today') }}" class="px-3 py-2 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200">
-                Today
-            </a>
-            <a href="{{ route('admin.dashboard.preset', 'this_week') }}" class="px-3 py-2 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200">
-                This Week
-            </a>
-            <a href="{{ route('admin.dashboard.preset', 'this_month') }}" class="px-3 py-2 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200">
-                This Month
-            </a>
-            <a href="{{ route('admin.dashboard.preset', 'last_month') }}" class="px-3 py-2 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200">
-                Last Month
-            </a>
-            <a href="{{ route('admin.dashboard.preset', 'last_3_months') }}" class="px-3 py-2 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200">
-                Last 3 Months
-            </a>
-        </div>
             
         <!-- Manual Refresh Button -->
         <button onclick="manualRefresh()" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 flex items-center justify-center space-x-2 whitespace-nowrap">
@@ -123,7 +190,23 @@
         </button>
     </div>
 </div>
-
+<!-- At the top of your dashboard, after the filter display -->
+@if(isset($debug) && $debug['date_range_applied'] && $totalRequests == 0)
+<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+    <div class="flex items-center">
+        <svg class="w-5 h-5 text-yellow-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <div>
+            <h3 class="font-semibold text-yellow-800">No Data Found</h3>
+            <p class="text-yellow-700 text-sm">
+                No requests found for the selected date range ({{ $dateRange['from_formatted'] }} to {{ $dateRange['to_formatted'] }}).
+                Try selecting a different date range or view all requests.
+            </p>
+        </div>
+    </div>
+</div>
+@endif
 <!-- Active Filter Display -->
 @if(request('date_from') || request('date_to'))
 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -143,7 +226,6 @@
     </div>
 </div>
 @endif
-
 <!-- KPI Cards - Clickable with Hover Effects -->
 <div class="flex flex-col md:flex-row gap-4 mb-8">
     <div onclick="openKPIModal('total')" class="flex-1 bg-white p-4 rounded-lg shadow text-center cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-xl hover:bg-blue-50 group">
@@ -172,7 +254,183 @@
         <p class="text-xs text-gray-500 mt-1 group-hover:text-purple-600">Click for details</p>
     </div>
 </div>
+<!-- ONE BUTTON TO RULE THEM ALL -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">Dashboard Overview</h1>
+        <p class="text-gray-600">Real-time monitoring of DV request activities</p>
+    </div>
+    
+    <!-- ONE URGENT BUTTON -->
+    <button onclick="openUrgentModal()" 
+            class="relative bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-8 py-4 rounded-xl text-base font-bold flex items-center space-x-4 transition-all duration-200 hover:shadow-2xl transform hover:scale-105 group">
+        <!-- Animated warning icon -->
+        <div class="relative">
+            <svg class="w-7 h-7 group-hover:animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <!-- Pulse animation when there are documents -->
+            @if($totalExceededCount > 0)
+            <span class="absolute -top-1 -right-1 flex h-4 w-4">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-4 w-4 bg-white"></span>
+            </span>
+            @endif
+        </div>
+        
+        <span class="flex flex-col items-start">
+            <span class="text-xs uppercase tracking-wider opacity-90">Action Required</span>
+            <span class="text-lg font-bold">Mark Exceeded as Urgent</span>
+        </span>
+        
+        <!-- Big counter badge -->
+        <span id="exceededBadge" class="bg-white text-red-700 px-4 py-2 rounded-full text-xl font-black shadow-inner border-2 border-red-300 group-hover:scale-110 transition-transform">
+            {{ $totalExceededCount ?? 0 }}
+        </span>
+    </button>
+</div>
 
+<!-- Quick Stats Summary -->
+<div id="exceededQuickStats" class="flex flex-wrap gap-2 mb-4">
+    <!-- Will be populated by JavaScript -->
+</div>
+
+<!-- URGENT MODAL - ONE MODAL FOR ALL DEPARTMENTS -->
+<div id="urgentModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+        <!-- Modal Header -->
+        <div class="bg-gradient-to-r from-red-600 to-red-700 px-6 py-5 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white bg-opacity-20 p-2 rounded-lg">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 id="modalTitle" class="text-2xl font-bold text-white">All Exceeded Documents</h3>
+                    <p class="text-red-100 text-sm">Select documents to mark as urgent across all departments</p>
+                </div>
+            </div>
+            <button onclick="closeUrgentModal()" class="text-white hover:text-gray-200 bg-black bg-opacity-20 hover:bg-opacity-30 rounded-lg p-2 transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="p-6">
+            <!-- Summary Stats -->
+            <div class="mb-6 bg-gradient-to-r from-yellow-50 to-amber-50 border-l-8 border-yellow-500 rounded-lg p-5">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-yellow-500 p-2 rounded-full">
+                            <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <span class="text-lg font-bold text-yellow-800" id="modalExceededCount">0</span>
+                        <span class="text-yellow-700">documents exceeded SLA</span>
+                    </div>
+                    <div id="modalExceededSummary" class="flex flex-wrap gap-2">
+                        <!-- Department counts will be dynamically populated -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Department Filter Tabs -->
+            <div class="mb-4 border-b border-gray-200">
+                <div class="flex flex-wrap gap-2">
+                    <button id="filter-all" onclick="filterDepartment('all')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-red-600 bg-red-50 text-red-700">
+                        All Departments
+                    </button>
+                    <button id="filter-imsd" onclick="filterDepartment('imsd')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900">
+                        <span class="flex items-center gap-2">
+                            <span class="w-2 h-2 bg-red-500 rounded-full"></span>
+                            IMSD Only
+                        </span>
+                    </button>
+                    <button id="filter-incoming" onclick="filterDepartment('incoming')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900">
+                        <span class="flex items-center gap-2">
+                            <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+                            Incoming Only
+                        </span>
+                    </button>
+                    <button id="filter-urgent" onclick="filterDepartment('urgent')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900">
+                        <span class="flex items-center gap-2">
+                            <span class="w-2 h-2 bg-purple-500 rounded-full"></span>
+                            Already Urgent
+                        </span>
+                    </button>
+                    <button id="filter-not-urgent" onclick="filterDepartment('not_urgent')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900">
+                        <span class="flex items-center gap-2">
+                            <span class="w-2 h-2 bg-gray-500 rounded-full"></span>
+                            Not Yet Urgent
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Remarks -->
+            <div class="mb-4">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Remarks <span class="text-gray-400 text-xs">(Optional)</span></label>
+                <textarea id="urgentRemarks" rows="2" 
+                    class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                    placeholder="Why are these documents being marked as urgent?"></textarea>
+            </div>
+
+            <!-- Documents Table -->
+            <div class="mb-3 flex justify-between items-center">
+                <h4 class="font-bold text-gray-800 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    Documents Ready for Urgent Marking
+                </h4>
+                <label class="flex items-center space-x-2 text-sm bg-gray-100 px-4 py-2 rounded-lg">
+                    <input type="checkbox" id="selectAllDocs" class="rounded border-gray-400 text-red-600 focus:ring-red-500 w-4 h-4">
+                    <span class="font-medium text-gray-700">Select All Visible</span>
+                </label>
+            </div>
+            
+            <div class="max-h-80 overflow-y-auto border-2 border-gray-100 rounded-xl">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">Select</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Control #</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dept</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Focal</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exceededDocumentsList" class="divide-y divide-gray-200 bg-white">
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-3 flex justify-between items-center">
+                <div class="text-sm text-gray-600">
+                    <span id="selectedCount" class="font-bold text-red-600">0</span> document(s) selected
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="closeUrgentModal()" class="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition">
+                        Cancel
+                    </button>
+                    <button onclick="submitUrgentMarking()" class="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg hover:shadow-xl transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Mark Selected as Urgent
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 <!-- KPI Details Modal -->
 <div id="kpiModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden transform transition-all">
@@ -626,66 +884,106 @@
         </div>
     </div>
     
-    <!-- Documents per Role -->
-    <div class="bg-white p-4 rounded-lg shadow">
-        <h2 class="text-lg font-semibold mb-4">Documents Handled per Role</h2>
-        <div class="chart-container" style="height: 300px;">
-            <canvas id="documentsPerRole"></canvas>
-        </div>
-        <div class="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-            <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
-                <svg class="w-4 h-4 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-                </svg>
-                Workload Distribution
-            </h3>
-            
-            @php
-                $docsPerRole = $documentsPerRole;
-                $totalDocs = $docsPerRole->sum();
-                
-                if ($docsPerRole->isNotEmpty()) {
-                    $busiestRole = $docsPerRole->sortDesc()->keys()->first();
-                    $busiestCount = $docsPerRole->max();
-                    $lightestRole = $docsPerRole->sort()->keys()->first();
-                    $lightestCount = $docsPerRole->min();
-                    $workloadGap = $busiestCount - $lightestCount;
-                    $workloadGapPercent = $lightestCount > 0 ? round((($busiestCount - $lightestCount) / $lightestCount) * 100, 1) : 0;
-                } else {
-                    $busiestRole = $lightestRole = 'No data';
-                    $busiestCount = $lightestCount = $workloadGap = $workloadGapPercent = 0;
-                }
-            @endphp
-            
-            <div class="space-y-2 text-sm text-gray-700">
-                <p class="text-sm text-gray-700">
-                    <strong class="text-purple-700">{{ $busiestRole }}</strong> handles the most documents with 
-                    <strong>{{ number_format($busiestCount) }}</strong> requests, accounting for 
-                    {{ round(($busiestCount / ($totalDocs > 0 ? $totalDocs : 1)) * 100, 1) }}% of total workload. 
-                    There is a workload gap of <strong>{{ number_format($workloadGap) }}</strong> documents between the busiest 
-                    ({{ $busiestRole }}) and lightest ({{ $lightestRole }}) roles. 
-                    @if($workloadGapPercent > 50)
-                    This represents a <strong class="text-orange-700">significant imbalance of {{ $workloadGapPercent }}%</strong>, 
-                    indicating a need for task redistribution and load balancing.
-                    @elseif($workloadGapPercent > 25)
-                    This represents a <strong class="text-yellow-700">moderate imbalance of {{ $workloadGapPercent }}%</strong> 
-                    that should be monitored for potential overload.
-                    @elseif($busiestCount > 0)
-                    The workload distribution is <strong class="text-green-700">relatively balanced</strong> across roles.
-                    @endif
-                </p>
-                
-                @if($workloadGapPercent > 50)
-                <div class="mt-3 p-2 bg-orange-100 border-l-4 border-orange-500 rounded">
-                    <p class="text-xs text-orange-800">
-                        <strong>⚠ Action Required:</strong> {{ $busiestRole }} is handling {{ $workloadGapPercent }}% more documents than {{ $lightestRole }}. 
-                        Consider adding staff or implementing parallel processing.
-                    </p>
-                </div>
-                @endif
-            </div>
-        </div>
+<!-- Documents per Role - UPDATED INSIGHT SECTION -->
+<div class="bg-white p-4 rounded-lg shadow">
+    <h2 class="text-lg font-semibold mb-4">Documents Handled per Role</h2>
+    <div class="chart-container" style="height: 300px;">
+        <canvas id="documentsPerRole"></canvas>
     </div>
+    <div class="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+        <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
+            <svg class="w-4 h-4 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+            Workload Distribution
+        </h3>
+        
+        @php
+            $docsPerRole = $documentsPerRole;
+            $totalDocs = $docsPerRole->sum();
+            
+            if ($docsPerRole->isNotEmpty()) {
+                $busiestRole = $docsPerRole->sortDesc()->keys()->first();
+                $busiestCount = $docsPerRole->max();
+                $busiestPercent = $totalDocs > 0 ? round(($busiestCount / $totalDocs) * 100, 1) : 0;
+                
+                $lightestRole = $docsPerRole->sort()->keys()->first();
+                $lightestCount = $docsPerRole->min();
+                $lightestPercent = $totalDocs > 0 ? round(($lightestCount / $totalDocs) * 100, 1) : 0;
+                
+                $workloadGap = $busiestCount - $lightestCount;
+                
+                // Calculate average workload per role
+                $avgDocsPerRole = $totalDocs / $docsPerRole->count();
+                
+                // Determine balance status
+                $isBalanced = $busiestPercent < 30; // No single role dominates
+                $isModerateImbalance = $busiestPercent >= 30 && $busiestPercent < 40;
+                $isHighImbalance = $busiestPercent >= 40;
+            } else {
+                $busiestRole = $lightestRole = 'No data';
+                $busiestCount = $lightestCount = $workloadGap = 0;
+                $busiestPercent = $lightestPercent = 0;
+                $avgDocsPerRole = 0;
+                $isBalanced = true;
+                $isModerateImbalance = $isHighImbalance = false;
+            }
+        @endphp
+
+        <div class="space-y-2 text-sm text-gray-700">
+            <p class="text-sm text-gray-700">
+                {{-- UPDATED TEXT TO CLARIFY DATE FILTERING --}}
+                For requests <strong class="text-blue-700">created in the selected period</strong>, 
+                <strong class="text-purple-700">{{ $busiestRole }}</strong> handled the most documents with 
+                <strong>{{ number_format($busiestCount) }}</strong> requests, representing 
+                <strong>{{ $busiestPercent }}%</strong> of total workload. 
+                
+                In contrast, <strong>{{ $lightestRole }}</strong> handled the least with 
+                <strong>{{ number_format($lightestCount) }}</strong> requests ({{ $lightestPercent }}% of total). 
+                
+                The workload gap is <strong>{{ number_format($workloadGap) }}</strong> documents. 
+                
+                @if($isHighImbalance)
+                This represents a <strong class="text-orange-700">significant concentration</strong> of work in one role, 
+                indicating a need for workload redistribution and resource reallocation.
+                @elseif($isModerateImbalance)
+                This shows <strong class="text-yellow-700">moderate concentration</strong> that should be monitored 
+                to prevent potential bottlenecks.
+                @elseif($busiestCount > 0)
+                The workload distribution is <strong class="text-green-700">relatively balanced</strong> across roles, 
+                with no single role handling more than 30% of total documents.
+                @endif
+                
+                The average workload is <strong>{{ number_format($avgDocsPerRole, 1) }}</strong> documents per role.
+            </p>
+            
+            {{-- INFO BOX TO EXPLAIN THE METRIC --}}
+            <div class="mt-3 p-2 bg-blue-50 border-l-4 border-blue-500 rounded">
+                <p class="text-xs text-blue-800">
+                    <strong>ℹ️ Note:</strong> This shows how many requests (created in the selected date range) 
+                    each role processed during their workflow stage. A request created on Jan 15 will be counted 
+                    for all roles that handled it, regardless of when they processed it.
+                </p>
+            </div>
+            
+            @if($isHighImbalance)
+            <div class="mt-3 p-2 bg-orange-100 border-l-4 border-orange-500 rounded">
+                <p class="text-xs text-orange-800">
+                    <strong>⚠ Action Required:</strong> {{ $busiestRole }} is handling {{ $busiestPercent }}% of all documents. 
+                    Consider redistributing tasks or adding staff support to this role.
+                </p>
+            </div>
+            @elseif($isModerateImbalance)
+            <div class="mt-3 p-2 bg-yellow-100 border-l-4 border-yellow-500 rounded">
+                <p class="text-xs text-yellow-800">
+                    <strong>⚠ Monitor:</strong> {{ $busiestRole }} handles {{ $busiestPercent }}% of total workload. 
+                    Continue monitoring to ensure this doesn't become a bottleneck.
+                </p>
+            </div>
+            @endif
+        </div>
+    </div>  
+</div>
     
     <!-- Monthly Requests Trend -->
     <div class="bg-white p-4 rounded-lg shadow">
@@ -1118,6 +1416,68 @@
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+    const dropdownBtn = document.getElementById('quickFilterDropdownBtn');
+    const dropdown = document.getElementById('quickFilterDropdown');
+    
+    if (dropdownBtn && dropdown) {
+        // Toggle dropdown on button click
+        dropdownBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+            dropdownBtn.classList.toggle('bg-gray-50');
+            dropdownBtn.classList.toggle('border-blue-300');
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!dropdown.contains(e.target) && !dropdownBtn.contains(e.target)) {
+                dropdown.classList.add('hidden');
+                dropdownBtn.classList.remove('bg-gray-50');
+                dropdownBtn.classList.remove('border-blue-300');
+            }
+        });
+        
+        // Close dropdown on ESC key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !dropdown.classList.contains('hidden')) {
+                dropdown.classList.add('hidden');
+                dropdownBtn.classList.remove('bg-gray-50');
+                dropdownBtn.classList.remove('border-blue-300');
+            }
+        });
+        
+        // Highlight active filter in dropdown
+        highlightActiveFilter();
+    }
+});
+
+function highlightActiveFilter() {
+    // You can implement this based on your current filter state
+    // For example, check the URL parameters and add 'active' class to matching links
+    const currentUrl = window.location.href;
+    const dropdownLinks = document.querySelectorAll('#quickFilterDropdown a');
+    
+    dropdownLinks.forEach(link => {
+        if (link.href === currentUrl) {
+            link.classList.add('active');
+        }
+    });
+}
+
+function showCustomRange() {
+    // This function would show a custom range picker
+    // For now, just focus on the date inputs
+    const dateFromInput = document.getElementById('date_from');
+    const dateToInput = document.getElementById('date_to');
+    
+    if (dateFromInput) {
+        dateFromInput.focus();
+    }
+    
+    // Close the dropdown
+    document.getElementById('quickFilterDropdown').classList.add('hidden');
+}
 // Store current KPI data globally for modal access
 let currentKPIData = {
     total: {{ $totalRequests }},
@@ -1957,6 +2317,355 @@ function formatNumber(num) {
         maximumFractionDigits: 2
     });
 }
+// ============ URGENT MODAL FUNCTIONS - ONE BUTTON FOR ALL DEPARTMENTS ============
+
+// Global state
+let allExceededDocuments = [];
+let currentFilter = 'all';
+
+// Open Urgent Modal
+window.openUrgentModal = function() {
+    const modal = document.getElementById('urgentModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        fetchAllExceededDocuments();
+    }
+};
+
+// Close Urgent Modal
+window.closeUrgentModal = function() {
+    const modal = document.getElementById('urgentModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+    }
+};
+
+// Fetch ALL exceeded documents from ALL departments
+function fetchAllExceededDocuments() {
+    fetch('/admin/dashboard/all-exceeded-documents')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            allExceededDocuments = data.documents || [];
+            
+            // Update modal counts
+            document.getElementById('modalExceededCount').textContent = data.count || 0;
+            
+            // Update badge in button
+            const badge = document.getElementById('exceededBadge');
+            if (badge) {
+                badge.textContent = data.count || 0;
+                
+                // Show/hide pulse animation
+                const pulse = document.getElementById('urgentPulse');
+                if (pulse) {
+                    if (data.count > 0) {
+                        pulse.classList.remove('hidden');
+                    } else {
+                        pulse.classList.add('hidden');
+                    }
+                }
+            }
+            
+            // Update summary badges
+            updateSummaryBadges(data.summary);
+            
+            // Update quick stats
+            updateQuickStats(data.summary);
+            
+            // Apply current filter and render
+            applyFilter();
+        })
+        .catch(error => {
+            console.error('Error fetching exceeded documents:', error);
+            document.getElementById('exceededDocumentsList').innerHTML = `
+                <tr>
+                    <td colspan="8" class="px-4 py-8 text-center text-red-500">
+                        Error loading documents. Please try again.
+                    </td>
+                </tr>
+            `;
+        });
+}
+
+// Update summary badges in modal
+function updateSummaryBadges(summary) {
+    const summaryContainer = document.getElementById('modalExceededSummary');
+    if (!summaryContainer) return;
+    
+    let html = '';
+    if (summary) {
+        if (summary.imsd > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                        <span class="w-2 h-2 bg-red-500 rounded-full mr-1.5"></span>
+                        IMSD: ${summary.imsd}
+                    </span>`;
+        }
+        if (summary.incoming > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                        <span class="w-2 h-2 bg-blue-500 rounded-full mr-1.5"></span>
+                        Incoming: ${summary.incoming}
+                    </span>`;
+        }
+        if (summary.urgent > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                        <span class="w-2 h-2 bg-purple-500 rounded-full mr-1.5"></span>
+                        Already Urgent: ${summary.urgent}
+                    </span>`;
+        }
+        if (summary.not_urgent > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+                        <span class="w-2 h-2 bg-gray-500 rounded-full mr-1.5"></span>
+                        Ready to Mark: ${summary.not_urgent}
+                    </span>`;
+        }
+    }
+    summaryContainer.innerHTML = html;
+}
+
+// Update quick stats in main dashboard
+function updateQuickStats(summary) {
+    const statsContainer = document.getElementById('exceededQuickStats');
+    if (!statsContainer) return;
+    
+    let html = '<div class="flex flex-wrap gap-2">';
+    if (summary) {
+        if (summary.imsd > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-medium border border-red-200">
+                        <span class="w-2 h-2 bg-red-500 rounded-full mr-1.5"></span>
+                        IMSD: ${summary.imsd}
+                    </span>`;
+        }
+        if (summary.incoming > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium border border-blue-200">
+                        <span class="w-2 h-2 bg-blue-500 rounded-full mr-1.5"></span>
+                        Incoming: ${summary.incoming}
+                    </span>`;
+        }
+    }
+    html += '</div>';
+    statsContainer.innerHTML = html;
+}
+
+// Filter department
+window.filterDepartment = function(filter) {
+    currentFilter = filter;
+    
+    // Update tab styles
+    ['all', 'imsd', 'incoming', 'urgent', 'not_urgent'].forEach(f => {
+        const btn = document.getElementById(`filter-${f}`);
+        if (btn) {
+            if (f === filter) {
+                btn.className = 'px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-red-600 bg-red-50 text-red-700';
+            } else {
+                btn.className = 'px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900';
+            }
+        }
+    });
+    
+    applyFilter();
+};
+
+// Apply current filter
+function applyFilter() {
+    let filtered = [...allExceededDocuments];
+    
+    switch(currentFilter) {
+        case 'imsd':
+            filtered = filtered.filter(doc => doc.department === 'IMSD');
+            break;
+        case 'incoming':
+            filtered = filtered.filter(doc => doc.department === 'Incoming');
+            break;
+        case 'urgent':
+            filtered = filtered.filter(doc => doc.is_urgent === true);
+            break;
+        case 'not_urgent':
+            filtered = filtered.filter(doc => doc.is_urgent === false);
+            break;
+        default:
+            // 'all' - no filter
+            break;
+    }
+    
+    renderDocumentsTable(filtered);
+}
+
+// Render documents table
+function renderDocumentsTable(documents) {
+    const tbody = document.getElementById('exceededDocumentsList');
+    
+    if (!documents || documents.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="px-4 py-12 text-center">
+                    <div class="flex flex-col items-center justify-center">
+                        <svg class="w-16 h-16 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <p class="text-gray-500 font-medium">No documents found</p>
+                        <p class="text-gray-400 text-sm mt-1">Try changing your filter</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    let html = '';
+    documents.forEach(doc => {
+        const daysClass = doc.days_old >= 15 ? 'bg-red-100 text-red-800' : 
+                         doc.days_old >= 12 ? 'bg-orange-100 text-orange-800' : 
+                         'bg-yellow-100 text-yellow-800';
+        
+        const deptClass = doc.department === 'IMSD' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800';
+        const rowClass = doc.days_old >= 15 ? 'bg-red-50' : '';
+        
+        html += `
+            <tr class="${rowClass} hover:bg-gray-50 transition">
+                <td class="px-4 py-3">
+                    <input type="checkbox" 
+                           class="doc-checkbox rounded border-gray-300 text-red-600 focus:ring-red-500 w-4 h-4" 
+                           value="${doc.id}"
+                           ${doc.is_urgent ? 'disabled' : ''}
+                           onchange="updateSelectedCount()">
+                    ${doc.is_urgent ? '<span class="ml-1 text-xs text-purple-600 font-medium">(urgent)</span>' : ''}
+                </td>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">${doc.control_number}</td>
+                <td class="px-4 py-3 text-sm">
+                    <span class="px-2.5 py-1.5 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+                        ${doc.program}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm">
+                    <span class="px-2.5 py-1.5 ${daysClass} rounded-full text-xs font-medium">
+                        ${Math.round(doc.days_old)} days
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm">
+                    <span class="px-2.5 py-1.5 ${deptClass} rounded-full text-xs font-medium">
+                        ${doc.department}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm">
+                    <span class="px-2.5 py-1.5 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+                        ${doc.status}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm font-semibold text-gray-900">${doc.amount}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${doc.focal || 'N/A'}</td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+    
+    // Reset select all checkbox
+    const selectAll = document.getElementById('selectAllDocs');
+    if (selectAll) {
+        selectAll.checked = false;
+        selectAll.onchange = function(e) {
+            document.querySelectorAll('.doc-checkbox:not(:disabled)').forEach(cb => {
+                cb.checked = e.target.checked;
+            });
+            updateSelectedCount();
+        };
+    }
+    
+    updateSelectedCount();
+}
+
+// Update selected count
+function updateSelectedCount() {
+    const selected = document.querySelectorAll('.doc-checkbox:checked').length;
+    const countSpan = document.getElementById('selectedCount');
+    if (countSpan) {
+        countSpan.textContent = selected;
+    }
+}
+
+// Submit Urgent Marking
+window.submitUrgentMarking = function() {
+    const selectedDocs = Array.from(document.querySelectorAll('.doc-checkbox:checked'))
+        .map(cb => cb.value);
+    
+    if (selectedDocs.length === 0) {
+        showNotification('Please select at least one document to mark as urgent', 'warning');
+        return;
+    }
+
+    const remarks = document.getElementById('urgentRemarks').value;
+    const submitBtn = event.target.closest('button');
+    const originalText = submitBtn.innerHTML;
+    
+    submitBtn.innerHTML = '<span class="animate-spin">⏳</span> Processing...';
+    submitBtn.disabled = true;
+    
+    fetch('/admin/dashboard/mark-urgent', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            dv_request_ids: selectedDocs,
+            remarks: remarks || 'Marked urgent from admin dashboard - Exceeded 10-day SLA'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            closeUrgentModal();
+            // Refresh dashboard data
+            if (typeof manualRefresh === 'function') {
+                manualRefresh();
+            }
+            // Refresh data
+            fetchAllExceededDocuments();
+        } else {
+            showNotification(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error marking documents as urgent', 'error');
+    })
+    .finally(() => {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    });
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', function(e) {
+    const modal = document.getElementById('urgentModal');
+    if (e.target === modal) {
+        closeUrgentModal();
+    }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeUrgentModal();
+    }
+});
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Small delay to ensure DOM is fully loaded
+    setTimeout(() => {
+        fetchAllExceededDocuments();
+    }, 100);
+});
+
 function updateDashboard(data) {
     if (!data) return;
     

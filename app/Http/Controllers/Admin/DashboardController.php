@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Traits\TriggersDashboardUpdate;
+use App\Models\DvRequest;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
@@ -39,8 +40,39 @@ class DashboardController extends Controller
             'days_count' => Carbon::parse($dateFrom)->diffInDays(Carbon::parse($dateTo)),
             'applied' => $request->has('date_from') || $request->has('date_to')
         ];
-        
-        return view('Admin.dashboard', $data);
+ $totalExceededCount = DvRequest::where(function($q) {
+        $q->whereIn('status', [
+            'submitted', 'IMSD_received', 'IMSD_in_process', 'IMSD_verified'
+        ])
+        ->orWhereIn('status', [
+            'Incoming-TUPAD_received', 'Incoming-TUPAD_in_process',
+            'Incoming-GIP_received', 'Incoming-GIP_in_process',
+            'Incoming-TEV_received', 'Incoming-TEV_in_process'
+        ])
+        ->orWhereIn('status', [
+            'Incoming-TUPAD_verified',
+            'Incoming-GIP_verified',
+            'Incoming-TEV_verified',
+            'ORS_received',
+            'ORS_in_process',
+            'ORS_onhold',
+            'ORS_for_revision'
+        ])
+        ->orWhereIn('status', [
+            'ORS_obligated',
+            'Outgoing_received'
+        ])
+        // 🚨🚨🚨 ADD ACCOUNTANT STATUSES 🚨🚨🚨
+        ->orWhereIn('status', [
+            'Outgoing_finalized',
+            'RANCA_received'
+        ]);
+    })
+    ->where('created_at', '<=', now()->subDays(10))
+    ->count();
+
+// Pass to view
+return view('Admin.dashboard', compact('totalExceededCount') + $data);
     }
 
     /**

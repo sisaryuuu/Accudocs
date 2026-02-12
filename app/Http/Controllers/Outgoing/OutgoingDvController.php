@@ -40,136 +40,148 @@ class OutgoingDvController extends Controller
         return view('Outgoing.index');
     }
 
-    public function fetchDvRequests(Request $request)
-    {
-        try {
-            $currentUserId = auth()->id();
-            $lockDuration  = now()->subMinutes(10);
-            
-            $searchTerm = $request->input('search', '');
+  public function fetchDvRequests(Request $request)
+{
+    try {
+        $currentUserId = auth()->id();
+        $lockDuration  = now()->subMinutes(10);
+        
+        $searchTerm = $request->input('search', '');
 
-            $query = DvRequest::with([
-                'program', 
-                'focalPerson', 
-                'respocenter',
-                'orsRequest',
-            ])
-            ->whereIn('status', ['ORS_obligated', 'Outgoing_received'])
-            ->where(function ($q) use ($currentUserId, $lockDuration) {
-                $q->whereNull('locked_by')
-                  ->orWhere('locked_by', $currentUserId)
-                  ->orWhere('locked_at', '<=', $lockDuration);
-            })
-            ->when($searchTerm, function ($query) use ($searchTerm) {
-                $query->where(function ($q) use ($searchTerm) {
-                    $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
-                      ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
-                          $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
-                                     ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
-                      })
-                      ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
-                          $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
-                      })
-                      ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
-                          $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
-                                     ->orWhere('description', 'LIKE', "%{$searchTerm}%");
-                      })
-                      ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
-                      ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
-                      ->orWhere('status', 'LIKE', "%{$searchTerm}%")
-                      ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
-                          $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
-                      })
-                      ->orWhere('dv_number', 'LIKE', "%{$searchTerm}%");
-                });
+        $query = DvRequest::with([
+            'program', 
+            'focalPerson', 
+            'respocenter',
+            'orsRequest',
+        ])
+        ->whereIn('status', ['ORS_obligated', 'Outgoing_received'])
+        ->where(function ($q) use ($currentUserId, $lockDuration) {
+            $q->whereNull('locked_by')
+              ->orWhere('locked_by', $currentUserId)
+              ->orWhere('locked_at', '<=', $lockDuration);
+        })
+        ->when($searchTerm, function ($query) use ($searchTerm) {
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('accounting_control_number', 'LIKE', "%{$searchTerm}%")
+                  ->orWhereHas('focalPerson', function ($personQuery) use ($searchTerm) {
+                      $personQuery->where('fname', 'LIKE', "%{$searchTerm}%")
+                                 ->orWhere('lname', 'LIKE', "%{$searchTerm}%");
+                  })
+                  ->orWhereHas('program', function ($programQuery) use ($searchTerm) {
+                      $programQuery->where('prcode', 'LIKE', "%{$searchTerm}%");
+                  })
+                  ->orWhereHas('respocenter', function ($centerQuery) use ($searchTerm) {
+                      $centerQuery->where('rccode', 'LIKE', "%{$searchTerm}%")
+                                 ->orWhere('description', 'LIKE', "%{$searchTerm}%");
+                  })
+                  ->orWhere('particulars', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('amount', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('status', 'LIKE', "%{$searchTerm}%")
+                  ->orWhereHas('orsRequest', function ($orsQuery) use ($searchTerm) {
+                      $orsQuery->where('ors_number', 'LIKE', "%{$searchTerm}%");
+                  })
+                  ->orWhere('dv_number', 'LIKE', "%{$searchTerm}%");
             });
+        });
 
-            $dvRequests = $query->get();
+        $dvRequests = $query->get();
+        
+        $dvRequests = $dvRequests->map(function ($request) {
+            // Use outgoing_received_at if available, otherwise created_at
+            $baseDate = $request->outgoing_received_at ?? $request->created_at;
+            $daysOld = $baseDate ? now()->diffInDays($baseDate) : 0;
             
-            $dvRequests = $dvRequests->map(function ($request) {
-                // Use outgoing_received_at if available, otherwise created_at
-                $baseDate = $request->outgoing_received_at ?? $request->created_at;
-                $daysOld = $baseDate ? now()->diffInDays($baseDate) : 0;
-                
-                $priorityScore = 0;
-                
-                if ($daysOld >= 10) {
-                    $priorityScore += 1000;
-                } elseif ($daysOld >= 7) {
-                    $priorityScore += 500;
-                } elseif ($daysOld >= 3) {
-                    $priorityScore += 200;
-                }
-                
-                if ($request->status === 'ORS_obligated') {
-                    $priorityScore += 100; // Extra priority for unreceived
-                }
-                
-                if ($request->status === 'Outgoing_received') {
-                    $priorityScore += 50;
-                }
-                
-                $priorityScore += rand(0, 10);
-                
-                $request->days_old = $daysOld;
-                $request->priority_score = $priorityScore;
-                $request->urgency = $this->getOutgoingUrgencyLevel($daysOld);
-                
-                return $request;
-            });
+            $priorityScore = 0;
             
-            $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
+            // 🚨 URGENT FLAG - HIGHEST PRIORITY
+            if ($request->is_urgent) {
+                $priorityScore += 50000; // Highest priority for urgent documents
+            }
+            
+            if ($daysOld >= 10) {
+                $priorityScore += 1000;
+            } elseif ($daysOld >= 7) {
+                $priorityScore += 500;
+            } elseif ($daysOld >= 3) {
+                $priorityScore += 200;
+            }
+            
+            if ($request->status === 'ORS_obligated') {
+                $priorityScore += 100;
+            }
+            
+            if ($request->status === 'Outgoing_received') {
+                $priorityScore += 50;
+            }
+            
+            $priorityScore += rand(0, 10);
+            
+            $request->days_old = $daysOld;
+            $request->priority_score = $priorityScore;
+            $request->urgency = $this->getOutgoingUrgencyLevel($daysOld);
+            
+            // Override urgency if marked urgent
+            if ($request->is_urgent) {
+                $request->urgency = 'urgent';
+            }
+            
+            return $request;
+        });
+        
+        $dvRequests = $dvRequests->sortByDesc('priority_score')->values();
 
-            return response()->json($dvRequests->map(function ($req) {
-                $baseDate = $req->outgoing_received_at ?? $req->created_at;
-                
-                // Helper function to safely convert date to ISO string
-                $safeToISO = function ($date) {
-                    if (!$date) return null;
-                    if (is_string($date)) {
-                        try {
-                            $date = \Carbon\Carbon::parse($date);
-                        } catch (\Exception $e) {
-                            return null;
-                        }
+        return response()->json($dvRequests->map(function ($req) {
+            $baseDate = $req->outgoing_received_at ?? $req->created_at;
+            
+            // Helper function to safely convert date to ISO string
+            $safeToISO = function ($date) {
+                if (!$date) return null;
+                if (is_string($date)) {
+                    try {
+                        $date = \Carbon\Carbon::parse($date);
+                    } catch (\Exception $e) {
+                        return null;
                     }
-                    return method_exists($date, 'toISOString') ? $date->toISOString() : null;
-                };
-                
-                return [
-                    'id'           => $req->id,
-                    'control_no'   => $req->accounting_control_number ? 
-                        'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
-                        '—',
-                    'dv_number'    => $req->dv_number ?? null,
-                    'ors_number'   => $req->orsRequest->ors_number ?? null,
-                    'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                    'program'      => $req->program->prcode ?? 'N/A',
-                    'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                    'particulars'  => $req->particulars,
-                    'amount'       => number_format($req->amount, 2),
-                    'status'       => $req->status,
-                    'date'         => $baseDate ? $baseDate->format('M d, Y') : '—',
-                    'created_at_timestamp' => $safeToISO($req->created_at),
-                    'outgoing_received_at' => $safeToISO($req->outgoing_received_at),
-                    'outgoing_verified_at' => $safeToISO($req->outgoing_verified_at),
-                    'outgoing_last_action_at' => $safeToISO($req->outgoing_last_action_at),
-                    'last_action_at' => $safeToISO($req->last_action_at),
-                    'days_old'     => $req->days_old,
-                    'urgency'      => $req->urgency,
-                    'priority_score' => $req->priority_score,
-                ];
-            }));
-
-        } catch (\Exception $e) {
-            Log::error('Error in Outgoing fetchDvRequests: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+                }
+                return method_exists($date, 'toISOString') ? $date->toISOString() : null;
+            };
             
-            return response()->json([
-                'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
-            ], 500);
-        }
+            return [
+                'id'           => $req->id,
+                'control_no'   => $req->accounting_control_number ? 
+                    'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
+                    '—',
+                'dv_number'    => $req->dv_number ?? null,
+                'ors_number'   => $req->orsRequest->ors_number ?? null,
+                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                'program'      => $req->program->prcode ?? 'N/A',
+                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                'particulars'  => $req->particulars,
+                'amount'       => number_format($req->amount, 2),
+                'status'       => $req->status,
+                'date'         => $baseDate ? $baseDate->format('M d, Y') : '—',
+                'created_at_timestamp' => $safeToISO($req->created_at),
+                'outgoing_received_at' => $safeToISO($req->outgoing_received_at),
+                'outgoing_verified_at' => $safeToISO($req->outgoing_verified_at),
+                'outgoing_last_action_at' => $safeToISO($req->outgoing_last_action_at),
+                'last_action_at' => $safeToISO($req->last_action_at),
+                'days_old'     => $req->days_old,
+                'urgency'      => $req->urgency,
+                'priority_score' => $req->priority_score,
+                // 🚨🚨🚨 ADD THIS LINE - CRITICAL FOR URGENT FLAG 🚨🚨🚨
+                'is_urgent'    => $req->is_urgent ?? false,
+            ];
+        }));
+
+    } catch (\Exception $e) {
+        Log::error('Error in Outgoing fetchDvRequests: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Failed to fetch DV requests: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     protected function getOutgoingUrgencyLevel($daysOld)
     {
@@ -354,6 +366,7 @@ class OutgoingDvController extends Controller
                     'status'        => $newStatus,
                     'remarks'       => $remarks,
                     'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'is_urgent' => $dvRequest->is_urgent ?? false,
                 ]);
 
                 $this->pusher->trigger('dv-requests-outgoing', 'dv-request-received', [
@@ -365,7 +378,8 @@ class OutgoingDvController extends Controller
                     'timestamp'     => $receivedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
                     'outgoing_received_at' => $receivedAt->toISOString(),
                     'outgoing_last_action_at' => $receivedAt->toISOString(),
-                    'last_action_at' => $receivedAt->toISOString(),
+                    'last_action_at' => $receivedAt->toISOString(), 
+                    'is_urgent' => $dvRequest->is_urgent ?? false,
                 ]);
             });
 
@@ -382,6 +396,7 @@ class OutgoingDvController extends Controller
                         'outgoing_received_at' => $receivedAt->format('M d, Y H:i:s'),
                         'outgoing_last_action_at' => $receivedAt->format('M d, Y H:i:s'),
                         'last_action_at' => $receivedAt->format('M d, Y H:i:s'),
+                        'is_urgent' => $dvRequest->is_urgent ?? false,
                     ]
                 ]);
             }
@@ -741,15 +756,27 @@ class OutgoingDvController extends Controller
                 'timestamp'     => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
             ]);
 
-            $this->pusher->trigger('dv-requests-ranca', 'dv-request-submitted', [
+           // ✅ CRITICAL: Trigger Pusher event for RANCA with is_urgent flag
+            $this->pusher->trigger('dv-requests-ranca', 'dv-request-finalized', [
                 'dv_request_id' => $dvRequest->id,
-                'control_number' => $dvRequest->control_number ?? '#' . $dvRequest->id,
+                'control_number' => $dvRequest->accounting_control_number ?
+                    'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) :
+                    'Pending',
+                'dv_number' => $dvRequest->dv_number ?? '—',
+                'ors_number' => $dvRequest->orsRequest->ors_number ?? '—',
+                'status' => $newStatus,
                 'submitted_by' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
                 'program' => $dvRequest->program->prcode ?? 'N/A',
-                'amount' => $dvRequest->amount,
-                'status' => $newStatus,
-                'timestamp' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'particulars' => $dvRequest->particulars ?? 'N/A',
+                'amount' => number_format($dvRequest->amount, 2),
+                'timestamp' => $finalizedAt->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'action_performer_id' => $currentUserId,
+                'outgoing_finalized_at' => $finalizedAt->toISOString(),
+                // ✅ CRITICAL: Pass the urgent flag to RANCA
+                'is_urgent' => $dvRequest->is_urgent ?? false,
+                'days_old' => now()->diffInDays($dvRequest->outgoing_received_at ?? $dvRequest->budget_verified_at ?? $dvRequest->created_at),
             ]);
+
 
             $this->logAction(
                 $dvRequest->id,
