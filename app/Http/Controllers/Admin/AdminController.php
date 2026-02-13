@@ -349,78 +349,94 @@ public function getAllExceededDocuments()
     ]);
 }
 public function markAsUrgent(Request $request)
-    {
-        try {
-            $request->validate([
-                'dv_request_ids' => 'required|array',
-                'dv_request_ids.*' => 'exists:dv_requests,id',
-                'remarks' => 'nullable|string|max:255'
+{
+    try {
+        $request->validate([
+            'dv_request_ids' => 'required|array',
+            'dv_request_ids.*' => 'exists:dv_requests,id',
+            'remarks' => 'nullable|string|max:255'
+        ]);
+
+        $updated = DvRequest::whereIn('id', $request->dv_request_ids)
+            ->update([
+                'is_urgent' => true,
+                'marked_urgent_at' => now(),
+                'marked_urgent_by' => auth()->id(),
+                'urgent_remarks' => $request->remarks ?? 'Marked urgent from dashboard'
             ]);
 
-            $updated = DvRequest::whereIn('id', $request->dv_request_ids)
-                ->update([
-                    'is_urgent' => true,
-                    'marked_urgent_at' => now(),
-                    'marked_urgent_by' => auth()->id(),
-                    'urgent_remarks' => $request->remarks ?? 'Marked urgent from dashboard'
-                ]);
-
-            // 🔥 NEW: Broadcast to IMSD channel for each document
-            $pusher = app(\App\Services\PusherService::class);
+        // 🔥 Broadcast to channels
+        $pusher = app(\App\Services\PusherService::class);
+        
+        // All channels to broadcast to
+        $channels = [
+            'dv-requests-imsd',
+            'dv-requests-incoming-tupad',
+            'dv-requests-incoming-gip',
+            'dv-requests-incoming-tev',
+            'dv-requests-budget-officer',
+            'dv-requests-outgoing',
+            'dv-requests-accountant',
+        ];
+        
+        foreach ($request->dv_request_ids as $id) {
+            // Log the action
+            DvRequestLog::create([
+                'dv_request_id' => $id,
+                'accountingunit_id' => auth()->id(),
+                'action' => 'marked_urgent',
+                'remarks' => $request->remarks ?? 'Marked urgent from admin dashboard'
+            ]);
             
-            foreach ($request->dv_request_ids as $id) {
-                // Log the action
-                DvRequestLog::create([
-                    'dv_request_id' => $id,
-                    'accountingunit_id' => auth()->id(),
-                    'action' => 'marked_urgent',
-                    'remarks' => $request->remarks ?? 'Marked urgent from admin dashboard'
-                ]);
+            // Get the DV request details for broadcasting
+            $dvRequest = DvRequest::with(['program', 'focalPerson'])->find($id);
+            if ($dvRequest) {
+                $controlNumber = $dvRequest->accounting_control_number 
+                    ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
+                    : 'Pending-CN';
                 
-                // Get the DV request details for broadcasting
-                $dvRequest = DvRequest::with(['program', 'focalPerson'])->find($id);
-                if ($dvRequest) {
-                    $controlNumber = $dvRequest->accounting_control_number 
-                        ? 'CN #-' . now()->year . '-' . str_pad($dvRequest->accounting_control_number, 4, '0', STR_PAD_LEFT) 
-                        : 'Pending-CN';
-                    
-                    // 🔥 Broadcast to IMSD channel
+                $payload = [
+                    'dv_request_id' => $dvRequest->id,
+                    'control_number' => $controlNumber,
+                    'is_urgent' => true,
+                    'marked_by' => auth()->user()->name ?? 'Admin',
+                    'marked_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                    'remarks' => $request->remarks ?? 'Marked urgent from admin dashboard',
+                    'program' => $dvRequest->program->prcode ?? 'N/A',
+                    'submitted_by' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
+                    'status' => $dvRequest->status,
+                    'amount' => number_format($dvRequest->amount, 2),
+                    'days_old' => now()->diffInDays($dvRequest->created_at),
+                ];
+                
+                // Broadcast to ALL channels
+                foreach ($channels as $channel) {
                     try {
-                        $pusher->trigger('dv-requests-imsd', 'dv-request-marked-urgent', [
-                            'dv_request_id' => $dvRequest->id,
-                            'control_number' => $controlNumber,
-                            'is_urgent' => true,
-                            'marked_by' => auth()->user()->name ?? 'Admin',
-                            'marked_at' => now()->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                            'remarks' => $request->remarks ?? 'Marked urgent from admin dashboard',
-                            'program' => $dvRequest->program->prcode ?? 'N/A',
-                            'submitted_by' => trim(($dvRequest->focalPerson->fname ?? '') . ' ' . ($dvRequest->focalPerson->lname ?? '')),
-                            'status' => $dvRequest->status,
-                            'amount' => number_format($dvRequest->amount, 2),
-                            'days_old' => now()->diffInDays($dvRequest->created_at),
-                        ]);
+                        $pusher->trigger($channel, 'dv-request-marked-urgent', $payload);
                     } catch (\Exception $pusherError) {
-                        \Log::warning('Pusher broadcast failed for urgent marking DV #' . $dvRequest->id);
+                        \Log::warning("Pusher broadcast failed for {$channel} urgent marking DV #{$dvRequest->id}");
                     }
-                    
-                    // 🔥 Also notify the focal person
                 }
+                
+                // 🔥 Also notify the focal person
+                // (Your existing focal person notification logic here)
             }
-
-            return response()->json([
-                'success' => true,
-                'message' => "{$updated} document(s) marked as urgent",
-                'count' => $updated
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('Error marking documents as urgent: ' . $e->getMessage());
-            \Log::error($e->getTraceAsString());
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage()
-            ], 500);
         }
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$updated} document(s) marked as urgent",
+            'count' => $updated
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Error marking documents as urgent: ' . $e->getMessage());
+        \Log::error($e->getTraceAsString());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Error: ' . $e->getMessage()
+        ], 500);
     }
+}
 }

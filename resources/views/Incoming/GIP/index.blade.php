@@ -516,6 +516,47 @@ document.addEventListener('DOMContentLoaded', function() {
         fetchAgingDocuments();
         updateStatistics();
     });
+gipChannel.bind('dv-request-marked-urgent', function(data) {
+    console.log('🚨 Document marked as urgent by admin:', data);
+    
+    // Find the document in allRequests and update it
+    const requestIndex = allRequests.findIndex(req => req.id === data.dv_request_id);
+    if (requestIndex !== -1) {
+        allRequests[requestIndex].is_urgent = true;
+        allRequests[requestIndex].urgent_remarks = data.remarks;
+        
+        // Update filteredRequests as well
+        const filteredIndex = filteredRequests.findIndex(req => req.id === data.dv_request_id);
+        if (filteredIndex !== -1) {
+            filteredRequests[filteredIndex].is_urgent = true;
+            filteredRequests[filteredIndex].urgent_remarks = data.remarks;
+        }
+        
+        // Re-sort if priority sorting is active
+        if (currentSort === 'priority') {
+            performSearch(); // This will re-sort with urgent docs at top
+        } else {
+            // Just re-render the current view
+            renderTable(getPaginatedData());
+        }
+        
+        // Show notification
+        showToast(
+            `🚨 URGENT: ${data.control_number} marked as urgent by ${data.marked_by}`,
+            'warning'
+        );
+    } else {
+        // Document not in current view, refresh all data
+        console.log('Document not in view, fetching all data...');
+        fetchDvRequests();
+    }
+    
+    // Always refresh aging data since urgent status affects priority
+    setTimeout(() => {
+        fetchAgingDocuments();
+        updateStatistics();
+    }, 500);
+});
 
     // ============ TOAST FUNCTIONS ============
     function showToast(message, type = 'success') {
