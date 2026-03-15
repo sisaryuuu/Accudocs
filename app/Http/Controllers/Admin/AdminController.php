@@ -156,21 +156,6 @@ class AdminController extends Controller
         ]);
     }
    
-/**
- * Get ALL exceeded documents from ALL departments 
- * IMSD: submitted, IMSD_received, IMSD_in_process, IMSD_verified
- * Incoming: Incoming-*_received, Incoming-*_in_process
- * Budget Officer: Incoming-*_verified, ORS_received, ORS_in_process, ORS_onhold, ORS_for_revision
- * Outgoing: ORS_obligated, Outgoing_received
- */
-/**
- * Get ALL exceeded documents from ALL departments 
- * IMSD: submitted, IMSD_received, IMSD_in_process, IMSD_verified
- * Incoming: Incoming-*_received, Incoming-*_in_process
- * Budget Officer: Incoming-*_verified, ORS_received, ORS_in_process, ORS_onhold, ORS_for_revision
- * Outgoing: ORS_obligated, Outgoing_received
- * Accountant/Accountant_III: Outgoing_finalized, RANCA_received
- */
 public function getAllExceededDocuments()
 {
     $exceededDocs = DvRequest::with(['program', 'focalPerson', 'orsRequest'])
@@ -203,7 +188,7 @@ public function getAllExceededDocuments()
                   'ORS_obligated',
                   'Outgoing_received'
               ])
-              // 🚨🚨🚨 ACCOUNTANT/ACCOUNTANT_III STATUSES - ADD THIS 🚨🚨🚨
+              // Accountant/Accountant_III statuses
               ->orWhereIn('status', [
                   'Outgoing_finalized',
                   'RANCA_received'
@@ -266,7 +251,7 @@ public function getAllExceededDocuments()
                     default => $doc->status
                 };
             }
-            // 🚨🚨🚨 ACCOUNTANT/ACCOUNTANT_III DEPARTMENT - ADD THIS 🚨🚨🚨
+            // Accountant/Accountant_III department
             elseif (in_array($doc->status, ['Outgoing_finalized', 'RANCA_received'])) {
                 $department = 'Accountant';
                 $badge_color = 'bg-indigo-100 text-indigo-800';
@@ -295,6 +280,9 @@ public function getAllExceededDocuments()
                 $ors_number = $doc->orsRequest->ors_number;
             }
             
+            // Calculate days old - ensure it's always positive using abs()
+            $daysOld = abs(now()->diffInDays($doc->created_at, false));
+            
             return [
                 'id' => $doc->id,
                 'control_number' => $doc->accounting_control_number 
@@ -302,7 +290,7 @@ public function getAllExceededDocuments()
                     : 'Pending-CN',
                 'ors_number' => $ors_number,
                 'program' => $doc->program->prcode ?? 'N/A',
-                'days_old' => now()->diffInDays($doc->created_at),
+                'days_old' => $daysOld, // Now always positive
                 'status' => $status_friendly,
                 'original_status' => $doc->status,
                 'status_badge_color' => $badge_color,
@@ -315,14 +303,20 @@ public function getAllExceededDocuments()
             ];
         });
 
-    // Summary statistics - ADD ACCOUNTANT COUNTS
+    // Calculate urgent and non-urgent counts from the collection
+    $urgentCount = $exceededDocs->where('is_urgent', true)->count();
+    $notUrgentCount = $exceededDocs->where('is_urgent', false)->count();
+
+    // Summary statistics
     $summary = [
         'total' => $exceededDocs->count(),
         'imsd' => $exceededDocs->where('department', 'IMSD')->count(),
         'incoming' => $exceededDocs->where('department', 'Incoming')->count(),
         'budget_officer' => $exceededDocs->where('department', 'Budget Officer')->count(),
         'outgoing' => $exceededDocs->where('department', 'Outgoing')->count(),
-        'accountant' => $exceededDocs->where('department', 'Accountant')->count(), // 🚨 ADDED
+        'accountant' => $exceededDocs->where('department', 'Accountant')->count(),
+        'urgent' => $urgentCount,
+        'not_urgent' => $notUrgentCount,
         'incoming_tupad' => $exceededDocs->where('program', 'TUPAD')->where('department', 'Incoming')->count(),
         'incoming_gip' => $exceededDocs->where('program', 'GIP')->where('department', 'Incoming')->count(),
         'incoming_tev' => $exceededDocs->where('program', 'TEV')->where('department', 'Incoming')->count(),
@@ -334,10 +328,8 @@ public function getAllExceededDocuments()
         'budget_pending_obligation' => $exceededDocs->where('original_status', 'ORS_received')->count(),
         'outgoing_pending_receive' => $exceededDocs->where('original_status', 'ORS_obligated')->count(),
         'outgoing_pending_finalize' => $exceededDocs->where('original_status', 'Outgoing_received')->count(),
-        'accountant_pending_receive' => $exceededDocs->where('original_status', 'Outgoing_finalized')->count(), // 🚨 ADDED
-        'accountant_pending_validate' => $exceededDocs->where('original_status', 'RANCA_received')->count(), // 🚨 ADDED
-        'urgent' => $exceededDocs->where('is_urgent', true)->count(),
-        'not_urgent' => $exceededDocs->where('is_urgent', false)->count(),
+        'accountant_pending_receive' => $exceededDocs->where('original_status', 'Outgoing_finalized')->count(),
+        'accountant_pending_validate' => $exceededDocs->where('original_status', 'RANCA_received')->count(),
     ];
 
     return response()->json([
@@ -376,7 +368,7 @@ public function markAsUrgent(Request $request)
             'dv-requests-incoming-tev',
             'dv-requests-budget-officer',
             'dv-requests-outgoing',
-            'dv-requests-accountant',
+            'dv-requests-ranca',
         ];
         
         foreach ($request->dv_request_ids as $id) {

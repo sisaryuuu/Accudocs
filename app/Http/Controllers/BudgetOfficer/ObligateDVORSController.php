@@ -45,7 +45,7 @@ class ObligateDVORSController extends Controller
         return view('BudgetOfficer.index');
     }
 
-   public function fetchDvRequests(Request $request)
+  public function fetchDvRequests(Request $request)
 {
     try {
         $currentUserId = auth()->id();
@@ -136,7 +136,7 @@ class ObligateDVORSController extends Controller
             
             $request->days_old = $daysOld;
             $request->priority_score = $priorityScore;
-            $request->urgency = $this->getUrgencyLevel($daysOld);
+            $request->urgency_level = $this->getUrgencyLevel($daysOld);
             
             return $request;
         });
@@ -171,40 +171,44 @@ class ObligateDVORSController extends Controller
 
             $orsNumber = $orsRequest ? ($orsRequest->ors_number ?? null) : null;
 
-            // ✅ Override urgency if marked urgent
-            $urgency = $this->getUrgencyLevel($req->days_old);
-            if ($req->is_urgent) {
-                $urgency = 'urgent';
-            }
+            // ✅ FIXED: Separate user-flagged urgent from system-calculated priority
+            $isUserFlaggedUrgent = $req->is_urgent ?? false;
+            $systemPriorityLevel = $req->urgency_level ?? 'low';
+            
+            // ✅ Determine display urgency: 
+            // - If user flagged urgent -> show "urgent"
+            // - Otherwise show system priority (critical/high/medium/low)
+            $displayUrgency = $isUserFlaggedUrgent ? 'urgent' : $systemPriorityLevel;
 
             return [
-                'id'           => $req->id,
-                'control_no'   => $req->accounting_control_number ? 
+                'id'                    => $req->id,
+                'control_no'            => $req->accounting_control_number ? 
                     'CN #-' . now()->year . '-' . str_pad($req->accounting_control_number, 4, '0', STR_PAD_LEFT) : 
                     '—',
-                'ors_number'   => $orsNumber,
-                'submitted_by' => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
-                'program'      => $req->program->prcode ?? 'N/A',
-                'respocenter'  => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
-                'particulars'  => $req->particulars,
-                'amount'       => number_format($req->amount, 2),
-                'status'       => $req->status,
-                'date'         => $baseDate->timezone('Asia/Manila')->format('M d, Y h:i A'),
-                'created_at_timestamp' => $req->created_at->toISOString(),
-                'budget_received_at' => $req->budget_received_at ? $req->budget_received_at->toISOString() : null,
+                'ors_number'            => $orsNumber,
+                'submitted_by'          => trim(($req->focalPerson->fname ?? '') . ' ' . ($req->focalPerson->lname ?? '')),
+                'program'               => $req->program->prcode ?? 'N/A',
+                'respocenter'           => trim(($req->respocenter->rccode ?? '') . ' - ' . ($req->respocenter->description ?? '')) ?? 'N/A',
+                'particulars'           => $req->particulars,
+                'amount'                => number_format($req->amount, 2),
+                'status'                => $req->status,
+                'date'                  => $baseDate->timezone('Asia/Manila')->format('M d, Y h:i A'),
+                'created_at_timestamp'  => $req->created_at->toISOString(),
+                'budget_received_at'    => $req->budget_received_at ? $req->budget_received_at->toISOString() : null,
                 'budget_last_action_at' => $req->budget_last_action_at ? $req->budget_last_action_at->toISOString() : null,
-                'last_action_at' => $req->last_action_at ? $req->last_action_at->toISOString() : null,
-                'days_old'     => $req->days_old ?? 0,
-                'urgency'      => $urgency,
-                'priority_score' => $req->priority_score ?? 0,
-                'date_used_for_age' => $dateUsed,
-                'uacs_codes'   => $uacsDisplay,
-                'adl_code'     => $adlCode,
-                'mfopap_code'  => $mfopapCode,
-                'mfocode'      => $mfocode,
-                'mfodescription' => $mfodescription,
-                // ✅ CRITICAL: ADD THIS LINE - URGENT FLAG
-                'is_urgent'    => $req->is_urgent ?? false,
+                'last_action_at'        => $req->last_action_at ? $req->last_action_at->toISOString() : null,
+                'days_old'              => $req->days_old ?? 0,
+                // ✅ FIXED: These three fields clearly separate the concepts
+                'urgency'               => $displayUrgency,                    // What to display in UI
+                'is_urgent'             => $isUserFlaggedUrgent,               // User-flagged urgent (true/false)
+                'system_priority'       => $systemPriorityLevel,               // System-calculated priority
+                'priority_score'        => $req->priority_score ?? 0,
+                'date_used_for_age'     => $dateUsed,
+                'uacs_codes'            => $uacsDisplay,
+                'adl_code'              => $adlCode,
+                'mfopap_code'           => $mfopapCode,
+                'mfocode'               => $mfocode,
+                'mfodescription'        => $mfodescription,
             ];
         });
 

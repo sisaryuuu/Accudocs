@@ -606,7 +606,7 @@ accountingChannel.bind('dv-request-finalized', function(data) {
         updateStatistics();
     });
 // ============ URGENT MARKING EVENT LISTENER FOR RANCA ============
-accountingChannel.bind('dv-request-marked-urgent', function(data) {
+    accountingChannel.bind('dv-request-marked-urgent', function(data) {
     console.log('🚨 Document marked as urgent by admin:', data);
     
     // Find the document in allRequests and update it

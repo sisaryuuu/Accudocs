@@ -36,6 +36,8 @@
         'worst_performer' => 0
     ];
     $bottlenecks = $bottlenecks ?? collect([]);
+    $pendingBottlenecks = $pendingBottlenecks ?? collect([]);
+    $pendingByDepartment = $pendingByDepartment ?? collect([]);
     $staffPerformance = $staffPerformance ?? [
         'individual_metrics' => collect([]),
         'monthly_productivity' => collect([]),
@@ -226,33 +228,337 @@
     </div>
 </div>
 @endif
-<!-- KPI Cards - Clickable with Hover Effects -->
-<div class="flex flex-col md:flex-row gap-4 mb-8">
-    <div onclick="openKPIModal('total')" class="flex-1 bg-white p-4 rounded-lg shadow text-center cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-xl hover:bg-blue-50 group">
-        <h2 class="text-lg font-semibold text-gray-700 group-hover:text-blue-700">Total Requests</h2>
-        <p class="text-2xl font-bold text-blue-600" id="kpi-total">{{ $totalRequests }}</p>
-        <p class="text-xs text-gray-500 mt-1 group-hover:text-blue-600">Click for details</p>
+<!-- KPI Cards - Enhanced HCI Design -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+    <!-- Total Requests Card -->
+    <div onclick="openKPIModal('total')" 
+         class="group relative bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border-l-4 border-blue-500 hover:scale-102 transform">
+        <!-- Animated gradient background on hover -->
+        <div class="absolute inset-0 bg-gradient-to-r from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        
+        <div class="relative p-5">
+            <!-- Header with icon and tooltip -->
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                    <div class="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-600">Total Requests</h3>
+                </div>
+                
+                <!-- Tooltip trigger -->
+                <div class="relative" x-data="{ showTooltip: false }">
+                    <button @mouseenter="showTooltip = true" @mouseleave="showTooltip = false" 
+                            class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                        </svg>
+                    </button>
+                    <div x-show="showTooltip" x-cloak 
+                         class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg whitespace-nowrap z-50">
+                        All DV requests in the system
+                        <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main number with animation -->
+            <div class="flex items-baseline justify-between">
+                <div>
+                    <p class="text-3xl font-bold text-gray-800 group-hover:text-blue-600 transition-colors" id="kpi-total">{{ $totalRequests }}</p>
+                    <p class="text-xs text-gray-500 mt-1 flex items-center">
+                        <span class="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                        All time
+                    </p>
+                </div>
+                
+                <!-- Sparkline/mini trend indicator -->
+                @php
+                    $totalChange = isset($trends['total']) ? $trends['total'] : 0;
+                @endphp
+                <div class="flex items-center {{ $totalChange >= 0 ? 'text-green-600' : 'text-red-600' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    </svg>
+                    <span class="text-xs font-medium">{{ abs($totalChange) }}%</span>
+                </div>
+            </div>
+            
+            <!-- Progress bar showing completion rate -->
+            @php
+                $totalForBar = max($totalRequests, 1);
+                $processedPercent = min(100, round((($approvedRequests + $rejectedRequests) / $totalForBar) * 100));
+            @endphp
+            <div class="mt-3">
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="text-gray-500">Processed</span>
+                    <span class="font-medium text-gray-700">{{ $processedPercent }}%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                    <div class="bg-blue-500 h-1.5 rounded-full transition-all duration-500 group-hover:bg-blue-600" 
+                         style="width: {{ $processedPercent }}%"></div>
+                </div>
+            </div>
+            
+            <!-- Quick stats footer -->
+            <div class="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs">
+                <span class="text-gray-500">Pending: <span class="font-semibold text-yellow-600">{{ $pendingRequests }}</span></span>
+                <span class="text-gray-500">Approved: <span class="font-semibold text-green-600">{{ $approvedRequests }}</span></span>
+            </div>
+        </div>
     </div>
-    <div onclick="openKPIModal('pending')" class="flex-1 bg-white p-4 rounded-lg shadow text-center cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-xl hover:bg-yellow-50 group">
-        <h2 class="text-lg font-semibold text-gray-700 group-hover:text-yellow-700">Pending</h2>
-        <p class="text-2xl font-bold text-yellow-600" id="kpi-pending">{{ $pendingRequests }}</p>
-        <p class="text-xs text-gray-500 mt-1 group-hover:text-yellow-600">Click for details</p>
+
+    <!-- Pending Requests Card -->
+    <div onclick="openKPIModal('pending')" 
+         class="group relative bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border-l-4 border-yellow-500 hover:scale-102 transform">
+        
+        <!-- Urgent indicator if there are pending items beyond threshold -->
+        @if($pendingRequests > 0 && isset($pendingByRole) && collect($pendingByRole)->sum('exceeded_sla_count') > 0)
+        <div class="absolute -top-1 -right-1">
+            <span class="relative flex h-3 w-3">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+        </div>
+        @endif
+        
+        <div class="relative p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                    <div class="p-2 bg-yellow-100 rounded-lg group-hover:bg-yellow-200 transition-colors">
+                        <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-600">Pending</h3>
+                </div>
+                
+                <div class="relative" x-data="{ showTooltip: false }">
+                    <button @mouseenter="showTooltip = true" @mouseleave="showTooltip = false" 
+                            class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"></path>
+                        </svg>
+                    </button>
+                    <div x-show="showTooltip" x-cloak 
+                         class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg whitespace-nowrap z-50">
+                        Requests awaiting processing
+                        <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-baseline justify-between">
+                <div>
+                    <p class="text-3xl font-bold text-gray-800 group-hover:text-yellow-600 transition-colors" id="kpi-pending">{{ $pendingRequests }}</p>
+                    @php
+                        $pendingPercent = $totalRequests > 0 ? round(($pendingRequests / $totalRequests) * 100, 1) : 0;
+                    @endphp
+                    <p class="text-xs text-gray-500 mt-1">{{ $pendingPercent }}% of total</p>
+                </div>
+                
+                <!-- SLA warning indicator -->
+                @if(isset($pendingByRole) && collect($pendingByRole)->sum('exceeded_sla_count') > 0)
+                <div class="flex items-center bg-red-100 px-2 py-1 rounded-full">
+                    <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse mr-1"></span>
+                    <span class="text-xs font-medium text-red-700">{{ collect($pendingByRole)->sum('exceeded_sla_count') }} overdue</span>
+                </div>
+                @endif
+            </div>
+            
+            <!-- Role breakdown mini-bars -->
+            @if(isset($pendingByRole) && collect($pendingByRole)->count() > 0)
+            <div class="mt-3 space-y-1.5">
+                @foreach(collect($pendingByRole)->sortByDesc('total_pending')->take(3) as $role)
+                <div class="flex items-center justify-between text-xs">
+                    <span class="text-gray-600 truncate max-w-[80px]">{{ str_replace('_', ' ', $role->role) }}</span>
+                    <div class="flex items-center space-x-2 flex-1 ml-2">
+                        <div class="flex-1 bg-gray-200 rounded-full h-1.5">
+                            <div class="h-1.5 rounded-full" 
+                                 style="width: {{ min(100, $pendingRequests > 0 ? ($role->total_pending / $pendingRequests) * 100 : 0) }}%; 
+                                        background-color: {{ $role->color ?? '#f59e0b' }}"></div>
+                        </div>
+                        <span class="font-medium text-gray-700">{{ $role->total_pending }}</span>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+            @endif
+            
+            <!-- Age indicator -->
+            @php
+                $maxWait = isset($pendingByRole) ? collect($pendingByRole)->max('avg_wait_days') : 0;
+            @endphp
+            @if($maxWait > 0)
+            <div class="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                <span class="text-gray-500">Longest waiting:</span>
+                <span class="font-semibold {{ $maxWait > 10 ? 'text-red-600' : 'text-yellow-600' }}">
+                    {{ round($maxWait, 1) }} days
+                </span>
+            </div>
+            @endif
+        </div>
     </div>
-    <div onclick="openKPIModal('approved')" class="flex-1 bg-white p-4 rounded-lg shadow text-center cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-xl hover:bg-green-50 group">
-        <h2 class="text-lg font-semibold text-gray-700 group-hover:text-green-700">Approved</h2>
-        <p class="text-2xl font-bold text-green-600" id="kpi-approved">{{ $approvedRequests }}</p>
-        <p class="text-xs text-gray-500 mt-1 group-hover:text-green-600">Click for details</p>
+
+    <!-- Approved Requests Card -->
+    <div onclick="openKPIModal('approved')" 
+         class="group relative bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border-l-4 border-green-500 hover:scale-102 transform">
+        
+        <div class="relative p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                    <div class="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-600">Approved</h3>
+                </div>
+                
+                <div class="relative" x-data="{ showTooltip: false }">
+                    <button @mouseenter="showTooltip = true" @mouseleave="showTooltip = false" 
+                            class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"></path>
+                        </svg>
+                    </button>
+                    <div x-show="showTooltip" x-cloak 
+                         class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg whitespace-nowrap z-50">
+                        Successfully processed and released
+                        <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-baseline justify-between">
+                <div>
+                    <p class="text-3xl font-bold text-gray-800 group-hover:text-green-600 transition-colors" id="kpi-approved">{{ $approvedRequests }}</p>
+                    @php
+                        $approvalRate = $totalRequests > 0 ? round(($approvedRequests / $totalRequests) * 100, 1) : 0;
+                    @endphp
+                    <p class="text-xs text-gray-500 mt-1">{{ $approvalRate }}% approval rate</p>
+                </div>
+                
+                <!-- Success rate indicator -->
+                <div class="flex items-center bg-green-100 px-2 py-1 rounded-full">
+                    <span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                    <span class="text-xs font-medium text-green-700">{{ $approvalRate }}%</span>
+                </div>
+            </div>
+            
+            <!-- Amount stats if available -->
+            @if(isset($budgetPerProgram) && $budgetPerProgram->sum() > 0)
+            <div class="mt-2 text-xs text-gray-600 flex items-center justify-between">
+                <span>Total amount:</span>
+                <span class="font-semibold">₱{{ number_format($budgetPerProgram->sum(), 2) }}</span>
+            </div>
+            @endif
+        </div>
     </div>
-    <div onclick="openKPIModal('rejected')" class="flex-1 bg-white p-4 rounded-lg shadow text-center cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-xl hover:bg-red-50 group">
-        <h2 class="text-lg font-semibold text-gray-700 group-hover:text-red-700">Rejected</h2>
-        <p class="text-2xl font-bold text-red-600" id="kpi-rejected">{{ $rejectedRequests }}</p>
-        <p class="text-xs text-gray-500 mt-1 group-hover:text-red-600">Click for details</p>
+
+    <!-- Rejected Requests Card -->
+    <div onclick="openKPIModal('rejected')" 
+         class="group relative bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border-l-4 border-red-500 hover:scale-102 transform">
+        
+        <div class="relative p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                    <div class="p-2 bg-red-100 rounded-lg group-hover:bg-red-200 transition-colors">
+                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-600">Rejected</h3>
+                </div>
+                
+                <div class="relative" x-data="{ showTooltip: false }">
+                    <button @mouseenter="showTooltip = true" @mouseleave="showTooltip = false" 
+                            class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"></path>
+                        </svg>
+                    </button>
+                    <div x-show="showTooltip" x-cloak 
+                         class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg whitespace-nowrap z-50">
+                        Requests that did not meet requirements
+                        <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-baseline justify-between">
+                <div>
+                    <p class="text-3xl font-bold text-gray-800 group-hover:text-red-600 transition-colors" id="kpi-rejected">{{ $rejectedRequests }}</p>
+                    @php
+                        $rejectionRate = $totalRequests > 0 ? round(($rejectedRequests / $totalRequests) * 100, 1) : 0;
+                    @endphp
+                    <p class="text-xs text-gray-500 mt-1">{{ $rejectionRate }}% rejection rate</p>
+                </div>
+                
+            </div>
+            
+            <!-- Common reasons if available (you'd need to add this data) -->
+            @if($rejectedRequests > 0)
+            <div class="mt-3 bg-red-50 rounded-lg p-2">
+                <p class="text-xs font-medium text-red-800 mb-1">Common reasons:</p>
+                <div class="flex flex-wrap gap-1">
+                    <span class="text-[10px] bg-white text-red-700 px-1.5 py-0.5 rounded-full">Incomplete docs</span>
+                    <span class="text-[10px] bg-white text-red-700 px-1.5 py-0.5 rounded-full">Budget exceeded</span>
+                    <span class="text-[10px] bg-white text-red-700 px-1.5 py-0.5 rounded-full">Invalid info</span>
+                </div>
+            </div>
+            @endif
+        </div>
     </div>
-    <div onclick="openKPIModal('processing')" class="flex-1 bg-white p-4 rounded-lg shadow text-center cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-xl hover:bg-purple-50 group">
-        <h3 class="text-sm font-medium text-gray-700 group-hover:text-purple-700">Average Processing Time</h3>
-        <p class="text-2xl font-bold text-purple-600" id="sla-avg-days">{{ round($slaAnalysis['avg_working_days'], 1) }} days</p>
-        <p class="text-xs text-gray-500 mt-1 group-hover:text-purple-600">Click for details</p>
-    </div>
+
+    <!-- Average Processing Time Card -->
+    <div onclick="openKPIModal('processing')" 
+         class="group relative bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border-l-4 border-purple-500 hover:scale-102 transform">
+        
+        <div class="relative p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                    <div class="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-600">Processing Time</h3>
+                </div>
+                
+                <div class="relative" x-data="{ showTooltip: false }">
+                    <button @mouseenter="showTooltip = true" @mouseleave="showTooltip = false" 
+                            class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"></path>
+                        </svg>
+                    </button>
+                    <div x-show="showTooltip" x-cloak 
+                         class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg whitespace-nowrap z-50">
+                        Average working days from receipt to release
+                        <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                </div>
+            </div>
+            
+            @php
+                $avgDays = round($slaAnalysis['avg_working_days'] ?? 0, 1);
+                $slaTarget = 10;
+                $performancePercent = min(100, round(($avgDays / $slaTarget) * 100));
+                $isWithinSLA = $avgDays <= $slaTarget;
+            @endphp
+            
+            <div class="flex items-baseline justify-between">
+                <div>
+                    <p class="text-3xl font-bold text-gray-800 group-hover:text-purple-600 transition-colors" id="sla-avg-days">{{ $avgDays }}</p>
+                    <p class="text-xs text-gray-500 mt-1">working days</p>
+                </div>
+                
+            </div>
+</div>
+</div>
 </div>
 <!-- ONE BUTTON TO RULE THEM ALL -->
 <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -290,143 +596,176 @@
     </button>
 </div>
 
-<!-- Quick Stats Summary -->
-<div id="exceededQuickStats" class="flex flex-wrap gap-2 mb-4">
-    <!-- Will be populated by JavaScript -->
-</div>
-
 <!-- URGENT MODAL - ONE MODAL FOR ALL DEPARTMENTS -->
-<div id="urgentModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-        <!-- Modal Header -->
-        <div class="bg-gradient-to-r from-red-600 to-red-700 px-6 py-5 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <div class="bg-white bg-opacity-20 p-2 rounded-lg">
-                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<div id="urgentModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 md:p-4 overflow-hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-7xl w-full flex flex-col" style="max-height: 95vh;">
+        <!-- Modal Header - Fixed at top -->
+        <div class="bg-gradient-to-r from-red-600 to-red-700 px-4 md:px-6 py-4 rounded-t-2xl flex justify-between items-center flex-shrink-0">
+            <div class="flex items-center space-x-2 md:space-x-3">
+                <div class="bg-white bg-opacity-20 p-1.5 md:p-2 rounded-lg">
+                    <svg class="w-6 h-6 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                     </svg>
                 </div>
                 <div>
-                    <h3 id="modalTitle" class="text-2xl font-bold text-white">All Exceeded Documents</h3>
-                    <p class="text-red-100 text-sm">Select documents to mark as urgent across all departments</p>
+                    <h3 id="modalTitle" class="text-xl md:text-2xl font-bold text-white">All Exceeded Documents</h3>
+                    <p class="text-red-100 text-xs md:text-sm">Select documents to mark as urgent across all departments</p>
                 </div>
             </div>
-            <button onclick="closeUrgentModal()" class="text-white hover:text-gray-200 bg-black bg-opacity-20 hover:bg-opacity-30 rounded-lg p-2 transition">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button onclick="closeUrgentModal()" class="text-white hover:text-gray-200 bg-black bg-opacity-20 hover:bg-opacity-30 rounded-lg p-1.5 md:p-2 transition">
+                <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
             </button>
         </div>
         
-        <div class="p-6">
+        <!-- Scrollable Content Area - Takes remaining height -->
+        <div class="overflow-y-auto flex-1 p-4 md:p-6" style="max-height: calc(95vh - 80px);">
             <!-- Summary Stats -->
-            <div class="mb-6 bg-gradient-to-r from-yellow-50 to-amber-50 border-l-8 border-yellow-500 rounded-lg p-5">
-                <div class="flex flex-wrap items-center gap-4">
-                    <div class="flex items-center gap-3">
-                        <div class="bg-yellow-500 p-2 rounded-full">
-                            <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <div class="mb-4 md:mb-6 bg-gradient-to-r from-yellow-50 to-amber-50 border-l-8 border-yellow-500 rounded-lg p-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <div class="bg-yellow-500 p-1.5 rounded-full">
+                            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
                             </svg>
                         </div>
-                        <span class="text-lg font-bold text-yellow-800" id="modalExceededCount">0</span>
-                        <span class="text-yellow-700">documents exceeded SLA</span>
+                        <span class="text-base md:text-lg font-bold text-yellow-800" id="modalExceededCount">0</span>
+                        <span class="text-sm text-yellow-700">documents exceeded SLA</span>
                     </div>
-                    <div id="modalExceededSummary" class="flex flex-wrap gap-2">
+                    <div id="modalExceededSummary" class="flex flex-wrap gap-1.5 md:gap-2">
                         <!-- Department counts will be dynamically populated -->
                     </div>
                 </div>
             </div>
 
-            <!-- Department Filter Tabs -->
+            <!-- Department Filter Tabs - Scrollable on mobile -->
             <div class="mb-4 border-b border-gray-200">
-                <div class="flex flex-wrap gap-2">
-                    <button id="filter-all" onclick="filterDepartment('all')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-red-600 bg-red-50 text-red-700">
+                <div class="flex flex-nowrap md:flex-wrap gap-1 md:gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-gray-300">
+                    <button id="filter-all" onclick="filterDepartment('all')" class="px-3 md:px-5 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-red-600 bg-red-50 text-red-700 whitespace-nowrap flex-shrink-0">
                         All Departments
                     </button>
-                    <button id="filter-imsd" onclick="filterDepartment('imsd')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900">
-                        <span class="flex items-center gap-2">
-                            <span class="w-2 h-2 bg-red-500 rounded-full"></span>
-                            IMSD Only
+                    <button id="filter-imsd" onclick="filterDepartment('imsd')" class="px-3 md:px-5 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900 whitespace-nowrap flex-shrink-0">
+                        <span class="flex items-center gap-1 md:gap-2">
+                            <span class="w-1.5 h-1.5 md:w-2 md:h-2 bg-red-500 rounded-full"></span>
+                            IMSD
                         </span>
                     </button>
-                    <button id="filter-incoming" onclick="filterDepartment('incoming')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900">
-                        <span class="flex items-center gap-2">
-                            <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
-                            Incoming Only
+                    <button id="filter-incoming" onclick="filterDepartment('incoming')" class="px-3 md:px-5 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900 whitespace-nowrap flex-shrink-0">
+                        <span class="flex items-center gap-1 md:gap-2">
+                            <span class="w-1.5 h-1.5 md:w-2 md:h-2 bg-blue-500 rounded-full"></span>
+                            Incoming
                         </span>
                     </button>
-                    <button id="filter-urgent" onclick="filterDepartment('urgent')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900">
-                        <span class="flex items-center gap-2">
-                            <span class="w-2 h-2 bg-purple-500 rounded-full"></span>
-                            Already Urgent
+                    <button id="filter-budget" onclick="filterDepartment('budget')" class="px-3 md:px-5 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900 whitespace-nowrap flex-shrink-0">
+                        <span class="flex items-center gap-1 md:gap-2">
+                            <span class="w-1.5 h-1.5 md:w-2 md:h-2 bg-purple-500 rounded-full"></span>
+                            Budget
                         </span>
                     </button>
-                    <button id="filter-not-urgent" onclick="filterDepartment('not_urgent')" class="px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900">
-                        <span class="flex items-center gap-2">
-                            <span class="w-2 h-2 bg-gray-500 rounded-full"></span>
-                            Not Yet Urgent
+                    <button id="filter-outgoing" onclick="filterDepartment('outgoing')" class="px-3 md:px-5 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900 whitespace-nowrap flex-shrink-0">
+                        <span class="flex items-center gap-1 md:gap-2">
+                            <span class="w-1.5 h-1.5 md:w-2 md:h-2 bg-green-500 rounded-full"></span>
+                            Outgoing
+                        </span>
+                    </button>
+                    <button id="filter-accountant" onclick="filterDepartment('accountant')" class="px-3 md:px-5 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900 whitespace-nowrap flex-shrink-0">
+                        <span class="flex items-center gap-1 md:gap-2">
+                            <span class="w-1.5 h-1.5 md:w-2 md:h-2 bg-indigo-500 rounded-full"></span>
+                            Accountant
                         </span>
                     </button>
                 </div>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="mb-4">
+                <div class="relative">
+                    <input type="text" 
+                           id="searchDocuments"
+                           placeholder="Search by control #, ORS #, program, department, status, or focal person..."
+                           class="w-full border-2 border-gray-200 rounded-lg md:rounded-xl pl-9 pr-20 py-2.5 md:py-3 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                           onkeyup="searchDocuments()">
+                    <svg class="absolute left-3 top-3 h-4 w-4 md:h-5 md:w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <div class="absolute right-3 top-2.5 flex items-center space-x-1.5">
+                        <span id="searchResultCount" class="text-xs md:text-sm text-gray-500 font-medium">0</span>
+                        <button onclick="clearSearch()" class="text-gray-400 hover:text-gray-600 transition p-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                    <span class="font-medium">Tip:</span> Search by control number, ORS number, program, department, status, or focal person
+                </p>
             </div>
 
             <!-- Remarks -->
             <div class="mb-4">
-                <label class="block text-sm font-semibold text-gray-700 mb-2">Remarks <span class="text-gray-400 text-xs">(Optional)</span></label>
+                <label class="block text-xs md:text-sm font-semibold text-gray-700 mb-1.5">Remarks <span class="text-gray-400">(Optional)</span></label>
                 <textarea id="urgentRemarks" rows="2" 
-                    class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                    class="w-full border-2 border-gray-200 rounded-lg md:rounded-xl px-3 md:px-4 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
                     placeholder="Why are these documents being marked as urgent?"></textarea>
             </div>
 
-            <!-- Documents Table -->
-            <div class="mb-3 flex justify-between items-center">
-                <h4 class="font-bold text-gray-800 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <!-- Documents Table Header with Select All -->
+            <div class="mb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <h4 class="font-bold text-gray-800 flex items-center gap-1.5 text-sm md:text-base">
+                    <svg class="w-4 h-4 md:w-5 md:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                     </svg>
                     Documents Ready for Urgent Marking
                 </h4>
-                <label class="flex items-center space-x-2 text-sm bg-gray-100 px-4 py-2 rounded-lg">
-                    <input type="checkbox" id="selectAllDocs" class="rounded border-gray-400 text-red-600 focus:ring-red-500 w-4 h-4">
+                <label class="flex items-center space-x-2 text-xs md:text-sm bg-gray-100 px-3 md:px-4 py-1.5 md:py-2 rounded-lg">
+                    <input type="checkbox" id="selectAllDocs" class="rounded border-gray-400 text-red-600 focus:ring-red-500 w-3.5 h-3.5 md:w-4 md:h-4">
                     <span class="font-medium text-gray-700">Select All Visible</span>
                 </label>
             </div>
             
-            <div class="max-h-80 overflow-y-auto border-2 border-gray-100 rounded-xl">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50 sticky top-0">
-                        <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">Select</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Control #</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dept</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Focal</th>
-                        </tr>
-                    </thead>
-                    <tbody id="exceededDocumentsList" class="divide-y divide-gray-200 bg-white">
-                        <!-- Will be populated by JavaScript -->
-                    </tbody>
-                </table>
+            <!-- Documents Table Container with Fixed Height and Scrolling -->
+            <div class="border-2 border-gray-100 rounded-lg md:rounded-xl overflow-hidden mb-4">
+                <div class="overflow-x-auto">
+                    <div class="max-h-64 md:max-h-80 lg:max-h-96 overflow-y-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50 sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase w-10 md:w-12">Select</th>
+                                    <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Control # / ORS #</th>
+                                    <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
+                                    <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
+                                    <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Dept</th>
+                                    <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                    <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                                    <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Focal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="exceededDocumentsList" class="divide-y divide-gray-200 bg-white">
+                                <!-- Will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-            
-            <div class="mt-3 flex justify-between items-center">
-                <div class="text-sm text-gray-600">
-                    <span id="selectedCount" class="font-bold text-red-600">0</span> document(s) selected
-                </div>
-                <div class="flex space-x-3">
-                    <button onclick="closeUrgentModal()" class="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition">
-                        Cancel
-                    </button>
-                    <button onclick="submitUrgentMarking()" class="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg hover:shadow-xl transition">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                        Mark Selected as Urgent
-                    </button>
-                </div>
+        </div>
+        
+        <!-- Footer Actions - Fixed at bottom -->
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-3 p-4 md:p-6 border-t bg-gray-50 rounded-b-2xl flex-shrink-0">
+            <div class="text-xs md:text-sm text-gray-600">
+                <span id="selectedCount" class="font-bold text-red-600">0</span> document(s) selected
+            </div>
+            <div class="flex space-x-2 md:space-x-3 w-full sm:w-auto">
+                <button onclick="closeUrgentModal()" class="flex-1 sm:flex-none px-4 md:px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg text-sm md:text-base transition">
+                    Cancel
+                </button>
+                <button onclick="submitUrgentMarking()" class="flex-1 sm:flex-none px-4 md:px-6 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold rounded-lg flex items-center justify-center gap-1.5 md:gap-2 shadow-lg hover:shadow-xl text-sm md:text-base transition">
+                    <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Mark Selected
+                </button>
             </div>
         </div>
     </div>
@@ -1193,7 +1532,7 @@
     <div class="chart-container" style="height: 300px;">
         <canvas id="bottleneckChart"></canvas>
     </div>
-    <!-- Insights Panel -->
+ <!-- Insights Panel -->
     <div class="mt-4 p-4 bg-gradient-to-r from-red-50 to-rose-50 rounded-lg border border-red-200">
         <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center">
             <svg class="w-4 h-4 mr-2 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1272,7 +1611,435 @@
         </div>
     </div>
 </div>
+<!-- ============================================================
+     PENDING REQUESTS BY ROLE — Full Section (Drop-in Replacement)
+     Replace the entire "Pending Bottleneck Chart" div in your dashboard
+============================================================ -->
+<div class="bg-white p-4 rounded-lg shadow mb-8">
 
+    {{-- ── HEADER ──────────────────────────────────────────────────── --}}
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h2 class="text-lg font-semibold"> Bottlenecks by Role (Pending Documents)</h2>
+            <p class="text-sm text-gray-600">Current backlog and wait times by role</p>
+        </div>
+        @php
+            $criticalRoles = collect($pendingByRole ?? [])->filter(fn($r) => ($r->exceeded_sla_count ?? 0) > 0)->count();
+        @endphp
+        @if($criticalRoles > 0)
+        <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold animate-pulse">
+            {{ $criticalRoles }} Role(s) with Delayed Documents
+        </span>
+        @endif
+    </div>
+
+    {{-- ── ROLE FILTER TABS ────────────────────────────────────────── --}}
+    <div class="mb-4 border-b border-gray-200 overflow-x-auto">
+        <div class="flex flex-nowrap md:flex-wrap gap-1 md:gap-2 pb-1">
+            <button onclick="filterRole('all')" id="filter-role-all"
+                class="px-3 md:px-4 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-blue-600 bg-blue-50 text-blue-700 whitespace-nowrap">
+                All Roles
+            </button>
+            @foreach($pendingByRole ?? [] as $role)
+            <button onclick="filterRole('{{ $role->role }}')"
+                id="filter-role-{{ Str::slug($role->role) }}"
+                class="px-3 md:px-4 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                <span class="flex items-center gap-1">
+                    {{ str_replace('_', ' ', $role->role) }}
+                    <span class="ml-1 text-xs {{ ($role->total_pending ?? 0) > 20 ? 'bg-red-200 text-red-800' : 'bg-gray-200' }} px-1.5 rounded-full">
+                        {{ $role->total_pending ?? 0 }}
+                    </span>
+                </span>
+            </button>
+            @endforeach
+        </div>
+    </div>
+
+    {{-- ── CHART ───────────────────────────────────────────────────── --}}
+    <div class="chart-container" style="height: 350px;">
+        <canvas id="pendingBottleneckChart"></canvas>
+    </div>
+{{-- ══════════════════════════════════════════════════════════════
+     IMPROVED INSIGHTS — summary paragraph style with fixed percentages
+══════════════════════════════════════════════════════════════ --}}
+@if(!empty($pendingByRole) && collect($pendingByRole)->count() > 0)
+@php
+    $pendingByRole = collect($pendingByRole);
+
+    // ── Totals ──────────────────────────────────────────────────
+    $totalPending   = $pendingByRole->sum('total_pending');
+    $totalDelayed   = $pendingByRole->sum('exceeded_sla_count');
+    $totalCritical  = $pendingByRole->sum('critical_count');
+    $roleCount      = $pendingByRole->count();
+    $avgPending     = $roleCount > 0 ? $totalPending / $roleCount : 0;
+    $delayRate      = $totalPending > 0 ? round(($totalDelayed / $totalPending) * 100, 1) : 0;
+    $maxWait        = $pendingByRole->max('avg_wait_days') ?? 0;
+
+    // ── Key roles ────────────────────────────────────────────────
+    $mostBacklogged   = $pendingByRole->sortByDesc('total_pending')->first();
+    $longestWait      = $pendingByRole->sortByDesc('avg_wait_days')->first();
+    $slaBreachedRoles = $pendingByRole->filter(fn($r) => ($r->exceeded_sla_count ?? 0) > 0);
+    $overloadedRoles  = $pendingByRole->filter(fn($r) => ($r->total_pending ?? 0) > ($avgPending * 1.5));
+    $slowRoles        = $pendingByRole->filter(fn($r) => ($r->avg_wait_days ?? 0) > 5)->sortByDesc('avg_wait_days');
+
+    $highestBreachRole = $pendingByRole
+        ->filter(fn($r) => ($r->total_pending ?? 0) > 0 && ($r->exceeded_sla_count ?? 0) > 0)
+        ->sortByDesc(fn($r) => $r->exceeded_sla_count / $r->total_pending)
+        ->first();
+
+    // ── Severity ─────────────────────────────────────────────────
+    if ($delayRate > 50 || $maxWait > 14) {
+        $severity      = 'CRITICAL';
+        $sevColor      = 'text-red-700';
+        $sevBorder     = 'border-l-red-600';
+        $sevBg         = 'bg-red-50 border-red-200';
+        $sevBadgeBg    = 'bg-red-100 text-red-800';
+        $sevDot        = 'bg-red-500';
+        $sevIcon       = '🔴';
+    } elseif ($delayRate > 25 || $maxWait > 7) {
+        $severity      = 'HIGH';
+        $sevColor      = 'text-orange-700';
+        $sevBorder     = 'border-l-orange-500';
+        $sevBg         = 'bg-orange-50 border-orange-200';
+        $sevBadgeBg    = 'bg-orange-100 text-orange-800';
+        $sevDot        = 'bg-orange-500';
+        $sevIcon       = '🟠';
+    } elseif ($delayRate > 0 || $totalDelayed > 0) {
+        $severity      = 'MODERATE';
+        $sevColor      = 'text-yellow-700';
+        $sevBorder     = 'border-l-yellow-500';
+        $sevBg         = 'bg-yellow-50 border-yellow-200';
+        $sevBadgeBg    = 'bg-yellow-100 text-yellow-800';
+        $sevDot        = 'bg-yellow-500';
+        $sevIcon       = '🟡';
+    } else {
+        $severity      = 'HEALTHY';
+        $sevColor      = 'text-green-700';
+        $sevBorder     = 'border-l-green-500';
+        $sevBg         = 'bg-green-50 border-green-200';
+        $sevBadgeBg    = 'bg-green-100 text-green-800';
+        $sevDot        = 'bg-green-500';
+        $sevIcon       = '🟢';
+    }
+
+    // ── Cascade detection ────────────────────────────────────────
+    $workflowOrder = ['IMSD','Incoming-TUPAD','Incoming-GIP','Incoming-TEV',
+                      'Budget_Officer','Outgoing','Accountant_III'];
+    $cascades = [];
+    foreach ($workflowOrder as $idx => $roleName) {
+        $roleObj = $pendingByRole->firstWhere('role', $roleName);
+        if ($roleObj && ($roleObj->total_pending ?? 0) > 10 && isset($workflowOrder[$idx + 1])) {
+            $cascades[] = str_replace('_',' ',$roleName)
+                        . ' → '
+                        . str_replace('_',' ',$workflowOrder[$idx + 1]);
+        }
+    }
+
+    // ── Volume analysis text (FIXED PERCENTAGE CALCULATION) ──────
+    $volumeInsights = [];
+    foreach ($overloadedRoles as $r) {
+        // Calculate percentage of total pending documents this role holds
+        $percentageOfTotal = $totalPending > 0 
+            ? round(($r->total_pending / $totalPending) * 100, 1) 
+            : 0;
+        
+        $txt = '<strong>' . str_replace('_',' ',$r->role) . '</strong> has '
+             . '<strong class="' . $sevColor . '">' . number_format($r->total_pending) . '</strong> documents — '
+             . '<strong>' . $percentageOfTotal . '%</strong> of all pending requests';
+        
+        if (($r->exceeded_sla_count ?? 0) > 0) {
+            $breachPercentage = $r->total_pending > 0 
+                ? round(($r->exceeded_sla_count / $r->total_pending) * 100, 1) 
+                : 0;
+            $txt .= ', with <strong class="text-red-600">' . number_format($r->exceeded_sla_count) . ' (' . $breachPercentage . '%) already exceeded turnaround time threshold</strong>';
+        }
+        $volumeInsights[] = $txt . '.';
+    }
+
+    // ── SLA breach text ──────────────────────────────────────────
+    $slaInsights = [];
+    foreach ($slaBreachedRoles->sortByDesc('exceeded_sla_count') as $r) {
+        $bRate = $r->total_pending > 0
+            ? round(($r->exceeded_sla_count / $r->total_pending) * 100, 1)
+            : 0;
+        $urgency = $bRate > 50
+            ? '<span class="text-red-600 font-semibold"> — CRITICAL: ' . $bRate . '% overdue</span>'
+            : ($bRate > 25 ? '<span class="text-orange-600 font-semibold"> — needs immediate attention (' . $bRate . '%)</span>' : '');
+        $slaInsights[] = '<strong>' . str_replace('_',' ',$r->role) . '</strong> has a '
+                       . '<strong class="text-orange-600">' . $bRate . '% Pending Documents Rate</strong> '
+                       . '(' . number_format($r->exceeded_sla_count) . ' of ' . number_format($r->total_pending) . ' documents)'
+                       . $urgency . '.';
+    }
+
+    // ── Wait time text ───────────────────────────────────────────
+    $waitInsights = [];
+    foreach ($slowRoles as $r) {
+        $label = ($r->avg_wait_days ?? 0) > 14
+            ? '<span class="text-red-600 font-semibold"> — extreme delay, investigate immediately</span>'
+            : (($r->avg_wait_days ?? 0) > 7
+                ? '<span class="text-orange-600 font-semibold"> — significant delay, process improvement needed</span>'
+                : '<span class="text-yellow-700"> — monitor closely</span>');
+        $waitInsights[] = '<strong>' . str_replace('_',' ',$r->role) . '</strong> averages '
+                        . '<strong class="text-purple-600">' . round($r->avg_wait_days,1) . ' days</strong>'
+                        . $label . '.';
+    }
+
+    // ── Recommendations ──────────────────────────────────────────
+    $recs = [];
+
+    if ($mostBacklogged && ($mostBacklogged->total_pending ?? 0) > 15) {
+        $bPct = $totalPending > 0
+            ? round(($mostBacklogged->total_pending / $totalPending) * 100, 1)
+            : 0;
+        $recs[] = [
+            'priority' => $severity === 'CRITICAL' ? 'URGENT' : 'HIGH',
+            'icon'     => '🚨',
+            'text'     => 'Clear the backlog in <strong>' . str_replace('_',' ',$mostBacklogged->role) . '</strong> ('
+                        . number_format($mostBacklogged->total_pending) . ' docs, ' . $bPct . '% of total) — '
+                        . 'consider temporary staff reassignment or overtime authorisation.',
+            'badge'    => $severity === 'CRITICAL' ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800',
+            'dot'      => $severity === 'CRITICAL' ? 'bg-red-500' : 'bg-orange-500',
+        ];
+    }
+
+    if ($totalDelayed > 0) {
+        $recs[] = [
+            'priority' => 'HIGH',
+            'icon'     => '⚠️',
+            'text'     => 'Immediately triage the <strong>' . number_format($totalDelayed) . ' overdue document'
+                        . ($totalDelayed > 1 ? 's' : '') . '</strong> (' . $delayRate . '% of pending).',
+            'badge'    => 'bg-orange-100 text-orange-800',
+            'dot'      => 'bg-orange-500',
+        ];
+    }
+
+    if ($highestBreachRole) {
+        $bRate = round(($highestBreachRole->exceeded_sla_count / max($highestBreachRole->total_pending,1)) * 100, 1);
+        $recs[] = [
+            'priority' => $bRate > 50 ? 'URGENT' : 'MEDIUM',
+            'icon'     => $bRate > 50 ? '🔥' : '📋',
+            'text'     => 'Review workflow in <strong>' . str_replace('_',' ',$highestBreachRole->role) . '</strong> — '
+                        . $bRate . '% of its documents are delayed (' . number_format($highestBreachRole->exceeded_sla_count) . ' of ' . number_format($highestBreachRole->total_pending) . '). '
+                        . 'Check for incomplete submissions, missing attachments, or understaffing.',
+            'badge'    => $bRate > 50 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800',
+            'dot'      => $bRate > 50 ? 'bg-red-500' : 'bg-yellow-500',
+        ];
+    }
+
+    if ($longestWait && ($longestWait->avg_wait_days ?? 0) > 7) {
+        $recs[] = [
+            'priority' => 'HIGH',
+            'icon'     => '⏰',
+            'text'     => 'Reduce wait time in <strong>' . str_replace('_',' ',$longestWait->role) . '</strong> — '
+                        . round($longestWait->avg_wait_days,1) . '-day average is above threshold. '
+                        . 'Consider automating routine checks or introducing daily processing targets.',
+            'badge'    => 'bg-orange-100 text-orange-800',
+            'dot'      => 'bg-orange-500',
+        ];
+    }
+
+    if ($overloadedRoles->count() > 1) {
+        $roleNames = $overloadedRoles->take(2)->map(fn($r) => str_replace('_',' ',$r->role))->implode(' and ');
+        $totalPct = 0;
+        foreach ($overloadedRoles as $r) {
+            $totalPct += $totalPending > 0 ? ($r->total_pending / $totalPending) * 100 : 0;
+        }
+        $recs[] = [
+            'priority' => 'MEDIUM',
+            'icon'     => '⚖️',
+            'text'     => 'Rebalance workload — <strong>' . $roleNames . '</strong> are handling '
+                        . '<strong>' . round($totalPct, 1) . '%</strong> of all pending documents. '
+                        . 'Explore cross-training or parallel processing.',
+            'badge'    => 'bg-yellow-100 text-yellow-800',
+            'dot'      => 'bg-yellow-500',
+        ];
+    }
+
+    foreach (array_slice($cascades, 0, 2) as $cascade) {
+        $recs[] = [
+            'priority' => 'MEDIUM',
+            'icon'     => '🔗',
+            'text'     => 'Resolve workflow cascade: <strong>' . $cascade . '</strong> — '
+                        . 'the upstream queue must clear before downstream roles can proceed.',
+            'badge'    => 'bg-blue-100 text-blue-800',
+            'dot'      => 'bg-blue-500',
+        ];
+    }
+
+    if (empty($recs)) {
+        $recs[] = [
+            'priority' => 'LOW',
+            'icon'     => '✅',
+            'text'     => 'No urgent actions needed — all roles are within acceptable thresholds. '
+                        . 'Continue monitoring for emerging bottlenecks.',
+            'badge'    => 'bg-green-100 text-green-800',
+            'dot'      => 'bg-green-500',
+        ];
+    }
+@endphp
+
+    <div class="mt-5 space-y-4">
+
+        {{-- ── SUMMARY PARAGRAPH ──────────────────────────────────── --}}
+        <div class="rounded-xl border-l-4 {{ $sevBorder }} {{ $sevBg }} border p-4">
+            <div class="flex items-start justify-between gap-3 mb-2">
+                <h4 class="font-bold text-gray-800 text-sm flex items-center gap-2">
+                    <svg class="w-4 h-4 {{ $sevColor }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Pending Analysis
+                </h4>
+                <span class="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 {{ $sevBadgeBg }}">
+                    <span class="w-1.5 h-1.5 rounded-full {{ $sevDot }}"></span>
+                    {{ $sevIcon }} {{ $severity }}
+                </span>
+            </div>
+
+            {{-- Overview sentence --}}
+            <p class="text-sm text-gray-700 leading-relaxed">
+                There are currently
+                <strong class="{{ $sevColor }}">{{ number_format($totalPending) }} pending documents</strong>
+                across {{ $roleCount }} roles.
+
+                @if($totalDelayed > 0)
+                    <strong class="text-red-600">{{ number_format($totalDelayed) }}
+                    ({{ $delayRate }}%)</strong> have exceeded their turnaround time threshold
+                    @if($slaBreachedRoles->count() > 0)
+                        — concentrated in
+                        <strong>{{ $slaBreachedRoles->map(fn($r) => str_replace('_',' ',$r->role))->implode(', ') }}</strong>
+                    @endif.
+                @else
+                    No documents have exceeded their turnaround time threshold.
+                @endif
+
+                @if($mostBacklogged && ($mostBacklogged->total_pending ?? 0) > 0)
+                    @php $bPct = $totalPending > 0 ? round(($mostBacklogged->total_pending / $totalPending) * 100) : 0; @endphp
+                    The largest backlog is at
+                    <strong class="{{ $sevColor }}">{{ str_replace('_',' ',$mostBacklogged->role) }}</strong>
+                    holding <strong>{{ $mostBacklogged->total_pending }} documents ({{ $bPct }}% of total)
+                    @if(($mostBacklogged->avg_wait_days ?? 0) > 0)
+                        with an average wait of {{ round($mostBacklogged->avg_wait_days,1) }} days
+                    @endif
+                    </strong>.
+                @endif
+
+                @if($totalCritical > 0)
+                    <strong class="text-red-600">{{ $totalCritical }} critical
+                    request{{ $totalCritical > 1 ? 's are' : ' is' }}</strong>
+                    waiting more than twice the allowed threshold.
+                @endif
+
+                @if(!empty($cascades))
+                    A workflow cascade is forming at
+                    <strong>{{ implode(' and ', array_slice($cascades,0,2)) }}</strong>,
+                    where upstream backlogs are blocking downstream processing.
+                @endif
+            </p>
+
+            {{-- Volume sub-section --}}
+            @if(count($volumeInsights) > 0)
+            <div class="mt-3">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                    📊 Volume
+                </p>
+                <ul class="space-y-1">
+                    @foreach($volumeInsights as $vi)
+                    <li class="text-sm text-gray-700 flex items-start gap-1.5 leading-snug">
+                        <span class="text-red-400 font-bold flex-shrink-0 mt-0.5">•</span>
+                        <span>{!! $vi !!}</span>
+                    </li>
+                    @endforeach
+                </ul>
+            </div>
+            @endif
+
+            {{-- SLA breach sub-section --}}
+            @if(count($slaInsights) > 0)
+            <div class="mt-3">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                    ⏱ Turnaround Time Violation
+                </p>
+                <ul class="space-y-1">
+                    @foreach($slaInsights as $si)
+                    <li class="text-sm text-gray-700 flex items-start gap-1.5 leading-snug">
+                        <span class="text-orange-400 font-bold flex-shrink-0 mt-0.5">•</span>
+                        <span>{!! $si !!}</span>
+                    </li>
+                    @endforeach
+                </ul>
+            </div>
+            @endif
+
+            {{-- Wait time sub-section --}}
+            @if(count($waitInsights) > 0)
+            <div class="mt-3">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                    🕐 Wait Time
+                </p>
+                <ul class="space-y-1">
+                    @foreach($waitInsights as $wi)
+                    <li class="text-sm text-gray-700 flex items-start gap-1.5 leading-snug">
+                        <span class="text-purple-400 font-bold flex-shrink-0 mt-0.5">•</span>
+                        <span>{!! $wi !!}</span>
+                    </li>
+                    @endforeach
+                </ul>
+            </div>
+            @endif
+
+            {{-- No issues fallback --}}
+            @if(count($volumeInsights) === 0 && count($slaInsights) === 0 && count($waitInsights) === 0)
+            <p class="text-sm text-green-700 mt-2 flex items-center gap-1.5">
+                <span>✓</span> All roles are processing within acceptable thresholds.
+            </p>
+            @endif
+        </div>
+
+        {{-- ── RECOMMENDATIONS ────────────────────────────────────── --}}
+        <div class="bg-green-50 border border-green-100 rounded-xl p-4">
+            <h4 class="text-sm font-bold text-green-800 mb-3 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+                Recommended Actions
+                <span class="ml-auto text-xs font-normal text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                    {{ count($recs) }} action{{ count($recs) > 1 ? 's' : '' }}
+                </span>
+            </h4>
+
+            <div class="space-y-2">
+                @foreach($recs as $i => $rec)
+                <div class="flex items-start gap-3 bg-white rounded-lg px-3 py-2.5 shadow-sm">
+                    <div class="flex-shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                        <span class="w-6 h-6 rounded-full {{ $rec['dot'] }} flex items-center justify-center text-white font-extrabold text-xs">
+                            {{ $i + 1 }}
+                        </span>
+                        <span class="text-sm leading-none">{{ $rec['icon'] }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex flex-wrap items-center gap-1.5 mb-0.5">
+                            <span class="text-xs font-bold px-2 py-0.5 rounded-full {{ $rec['badge'] }}">
+                                {{ $rec['priority'] }}
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-700 leading-snug">{!! $rec['text'] !!}</p>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+
+    </div>{{-- end .space-y-4 --}}
+
+    @else
+    <div class="mt-4 p-6 bg-gray-50 rounded-xl border border-gray-200 text-center">
+        <p class="text-gray-400 text-sm">No pending requests data available.</p>
+    </div>
+    @endif
+
+</div>{{-- end card --}}
 <!-- Insights -->
 <div class="bg-white p-4 rounded-lg shadow mt-6">
     <h2 class="text-lg font-semibold mb-2">Insights & Highlights</h2>
@@ -1451,7 +2218,171 @@
         highlightActiveFilter();
     }
 });
+// Add these variables at the top of your script section
+let pendingBottleneckChart = null;
+let currentView = 'role';
+let currentRoleFilter = 'all';
 
+// Replace your existing initPendingBottleneckChart function
+function initPendingBottleneckChart() {
+    const ctx = document.getElementById('pendingBottleneckChart');
+    if (!ctx) return;
+    
+    updatePendingChartView(currentView);
+}
+
+function updatePendingChartView(view) {
+    const ctx = document.getElementById('pendingBottleneckChart');
+    if (!ctx) return;
+    
+    if (pendingBottleneckChart) {
+        pendingBottleneckChart.destroy();
+    }
+    
+    if (view === 'role') {
+        // Role View - Show pending counts by role
+        const roleData = @json($pendingByRole ?? []);
+        
+        // Filter if needed
+        let filteredData = roleData;
+        if (currentRoleFilter !== 'all') {
+            filteredData = roleData.filter(r => r.role === currentRoleFilter);
+        }
+        
+        const labels = filteredData.map(r => r.role.replace(/_/g, ' '));
+        const pendingCounts = filteredData.map(r => r.total_pending);
+        
+        // Color based on exceeding threshold
+        const barColors = filteredData.map(r => {
+            // Check if any pending requests have exceeded threshold
+            // Using exceeded_sla_count as indicator of problems
+            if (r.exceeded_sla_count > 0) {
+                const exceedRatio = r.exceeded_sla_count / r.total_pending;
+                if (exceedRatio >= 0.5) return '#ef4444'; // Critical - Red (>50% exceeded)
+                if (exceedRatio >= 0.25) return '#f97316'; // High - Orange (25-50% exceeded)
+                return '#f59e0b'; // Warning - Amber (<25% exceeded)
+            }
+            return '#10b981'; // Good - Green (no exceeded)
+        });
+        
+        pendingBottleneckChart = new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Pending Count',
+                        data: pendingCounts,
+                        backgroundColor: barColors,
+                        borderColor: barColors.map(c => c),
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        position: 'top',
+                        labels: { 
+                            usePointStyle: true,
+                            boxWidth: 8,
+                            boxHeight: 8
+                        }
+                    },
+                    title: { 
+                        display: true, 
+                        text: currentRoleFilter === 'all' ? 
+                            'Pending Requests by Role' : 
+                            `Pending Requests - ${currentRoleFilter.replace(/_/g, ' ')}`,
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                let value = context.parsed.y;
+                                
+                                if (context.dataset.label === 'Pending Count') {
+                                    return `${label}: ${value} requests`;
+                                }
+                                return label;
+                            },
+                            afterLabel: function(context) {
+                                if (context.dataset.label === 'Pending Count') {
+                                    const role = filteredData[context.dataIndex];
+                                    return [
+                                        `Exceeded SLA: ${role?.exceeded_sla_count || 0}`,
+                                        `Critical: ${role?.critical_count || 0}`,
+                                        `Threshold: ${role?.threshold || 3} days`
+                                    ];
+                                }
+                                return null;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        ticks: { 
+                            precision: 0,
+                            callback: function(value) {
+                                return value + ' req';
+                            }
+                        },
+                        title: { 
+                            display: true, 
+                            text: 'Number of Pending Requests',
+                            font: { weight: 'bold' }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.05)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// Add filterRole function
+function filterRole(role) {
+    currentRoleFilter = role;
+    
+    // Update filter button styles
+    document.querySelectorAll('[id^="filter-role-"]').forEach(btn => {
+        if (btn.id === `filter-role-${role}` || (role === 'all' && btn.id === 'filter-role-all')) {
+            btn.className = 'px-3 md:px-4 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-blue-600 bg-blue-50 text-blue-700 whitespace-nowrap';
+        } else {
+            btn.className = 'px-3 md:px-4 py-2 text-xs md:text-sm font-medium rounded-t-lg border-b-2 border-transparent hover:border-gray-300 text-gray-600 hover:text-gray-900 whitespace-nowrap';
+        }
+    });
+    
+    // Update chart if in role view
+    if (currentView === 'role') {
+        updatePendingChartView('role');
+    }
+}
+
+// Add togglePendingView function
+function togglePendingView(view) {
+    currentView = view;
+    updatePendingChartView(view);
+}
+
+// Update the toggle button text
+function togglePendingView() {
+    currentView = currentView === 'role' ? 'status' : 'role';
+    const btn = document.getElementById('togglePendingViewBtn');
+    btn.textContent = currentView === 'role' ? 'Switch to Status View' : 'Switch to Role View';
+    updatePendingChartView(currentView);
+}
 function highlightActiveFilter() {
     // You can implement this based on your current filter state
     // For example, check the URL parameters and add 'active' class to matching links
@@ -1775,6 +2706,7 @@ function initializeCharts() {
     initDocumentsPerRoleChart();
     initMonthlyRequestsChart();
     initBottleneckChart();
+     initPendingBottleneckChart();
     initStaffPerformanceChart();
 
     window.addEventListener('resize', function() {
@@ -1935,7 +2867,7 @@ function initBottleneckChart() {
                 datasets: [{
                     label: 'Avg Processing Time (hours)',
                     data: data,
-                    backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16']
+                    backgroundColor: '#ef4444',
                 }]
             },
             options: {
@@ -2069,7 +3001,7 @@ function toggleStaffView(view) {
 }
 
 window.toggleStaffView = toggleStaffView;
-
+window.togglePendingView = togglePendingView;
 function initializeRealTimeUpdates() {
     try {
         if (!DashboardConfig.pusherKey || DashboardConfig.pusherKey === '') {
@@ -2322,6 +3254,7 @@ function formatNumber(num) {
 // Global state
 let allExceededDocuments = [];
 let currentFilter = 'all';
+let currentSearchTerm = '';
 
 // Open Urgent Modal
 window.openUrgentModal = function() {
@@ -2379,8 +3312,8 @@ function fetchAllExceededDocuments() {
             // Update quick stats
             updateQuickStats(data.summary);
             
-            // Apply current filter and render
-            applyFilter();
+            // Apply current filter and search and render
+            applyFilterAndSearch();
         })
         .catch(error => {
             console.error('Error fetching exceeded documents:', error);
@@ -2413,6 +3346,25 @@ function updateSummaryBadges(summary) {
                         Incoming: ${summary.incoming}
                     </span>`;
         }
+        if (summary.budget_officer > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                        <span class="w-2 h-2 bg-purple-500 rounded-full mr-1.5"></span>
+                        Budget: ${summary.budget_officer}
+                    </span>`;
+        }
+        if (summary.outgoing > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                        <span class="w-2 h-2 bg-green-500 rounded-full mr-1.5"></span>
+                        Outgoing: ${summary.outgoing}
+                    </span>`;
+        }
+        if (summary.accountant > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium">
+                        <span class="w-2 h-2 bg-indigo-500 rounded-full mr-1.5"></span>
+                        Accountant: ${summary.accountant}
+                    </span>`;
+        }
+        // Use the summary values directly from backend
         if (summary.urgent > 0) {
             html += `<span class="inline-flex items-center px-3 py-1.5 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
                         <span class="w-2 h-2 bg-purple-500 rounded-full mr-1.5"></span>
@@ -2448,6 +3400,31 @@ function updateQuickStats(summary) {
                         Incoming: ${summary.incoming}
                     </span>`;
         }
+        if (summary.budget_officer > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium border border-purple-200">
+                        <span class="w-2 h-2 bg-purple-500 rounded-full mr-1.5"></span>
+                        Budget: ${summary.budget_officer}
+                    </span>`;
+        }
+        if (summary.outgoing > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium border border-green-200">
+                        <span class="w-2 h-2 bg-green-500 rounded-full mr-1.5"></span>
+                        Outgoing: ${summary.outgoing}
+                    </span>`;
+        }
+        if (summary.accountant > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium border border-indigo-200">
+                        <span class="w-2 h-2 bg-indigo-500 rounded-full mr-1.5"></span>
+                        Accountant: ${summary.accountant}
+                    </span>`;
+        }
+        // Show urgent status in quick stats
+        if (summary.urgent > 0) {
+            html += `<span class="inline-flex items-center px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium border border-purple-200">
+                        <span class="w-2 h-2 bg-purple-500 rounded-full mr-1.5"></span>
+                        Urgent: ${summary.urgent}
+                    </span>`;
+        }
     }
     html += '</div>';
     statsContainer.innerHTML = html;
@@ -2458,7 +3435,7 @@ window.filterDepartment = function(filter) {
     currentFilter = filter;
     
     // Update tab styles
-    ['all', 'imsd', 'incoming', 'urgent', 'not_urgent'].forEach(f => {
+    ['all', 'imsd', 'incoming', 'budget', 'outgoing', 'accountant', 'urgent', 'not_urgent'].forEach(f => {
         const btn = document.getElementById(`filter-${f}`);
         if (btn) {
             if (f === filter) {
@@ -2469,13 +3446,32 @@ window.filterDepartment = function(filter) {
         }
     });
     
-    applyFilter();
+    applyFilterAndSearch();
 };
 
-// Apply current filter
-function applyFilter() {
+// Search function
+window.searchDocuments = function() {
+    const searchInput = document.getElementById('searchDocuments');
+    currentSearchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    applyFilterAndSearch();
+};
+
+// Clear search
+window.clearSearch = function() {
+    const searchInput = document.getElementById('searchDocuments');
+    if (searchInput) {
+        searchInput.value = '';
+        currentSearchTerm = '';
+        applyFilterAndSearch();
+    }
+};
+function applyFilterAndSearch() {
     let filtered = [...allExceededDocuments];
     
+    // Debug: Log all documents to see is_urgent values
+    console.log('All documents:', allExceededDocuments.map(d => ({id: d.id, is_urgent: d.is_urgent, department: d.department})));
+    
+    // Apply department filter
     switch(currentFilter) {
         case 'imsd':
             filtered = filtered.filter(doc => doc.department === 'IMSD');
@@ -2483,23 +3479,52 @@ function applyFilter() {
         case 'incoming':
             filtered = filtered.filter(doc => doc.department === 'Incoming');
             break;
+        case 'budget':
+            filtered = filtered.filter(doc => doc.department === 'Budget Officer');
+            break;
+        case 'outgoing':
+            filtered = filtered.filter(doc => doc.department === 'Outgoing');
+            break;
+        case 'accountant':
+            filtered = filtered.filter(doc => doc.department === 'Accountant');
+            break;
         case 'urgent':
             filtered = filtered.filter(doc => doc.is_urgent === true);
+            console.log('Urgent filter applied, found:', filtered.length);
             break;
         case 'not_urgent':
             filtered = filtered.filter(doc => doc.is_urgent === false);
+            console.log('Not urgent filter applied, found:', filtered.length);
             break;
         default:
             // 'all' - no filter
             break;
     }
     
+    // Apply search if there's a search term
+    if (currentSearchTerm) {
+        filtered = filtered.filter(doc => {
+            return (
+                (doc.control_number && doc.control_number.toLowerCase().includes(currentSearchTerm)) ||
+                (doc.ors_number && doc.ors_number.toLowerCase().includes(currentSearchTerm)) ||
+                (doc.program && doc.program.toLowerCase().includes(currentSearchTerm)) ||
+                (doc.focal && doc.focal.toLowerCase().includes(currentSearchTerm)) ||
+                (doc.status && doc.status.toLowerCase().includes(currentSearchTerm)) ||
+                (doc.department && doc.department.toLowerCase().includes(currentSearchTerm))
+            );
+        });
+    }
+    
     renderDocumentsTable(filtered);
 }
-
 // Render documents table
 function renderDocumentsTable(documents) {
     const tbody = document.getElementById('exceededDocumentsList');
+    const resultCount = document.getElementById('searchResultCount');
+    
+    if (resultCount) {
+        resultCount.textContent = documents.length;
+    }
     
     if (!documents || documents.length === 0) {
         tbody.innerHTML = `
@@ -2510,7 +3535,9 @@ function renderDocumentsTable(documents) {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
                         <p class="text-gray-500 font-medium">No documents found</p>
-                        <p class="text-gray-400 text-sm mt-1">Try changing your filter</p>
+                        <p class="text-gray-400 text-sm mt-1">
+                            ${currentSearchTerm ? 'Try adjusting your search terms' : 'Try changing your filter'}
+                        </p>
                     </div>
                 </td>
             </tr>
@@ -2520,12 +3547,33 @@ function renderDocumentsTable(documents) {
     
     let html = '';
     documents.forEach(doc => {
-        const daysClass = doc.days_old >= 15 ? 'bg-red-100 text-red-800' : 
-                         doc.days_old >= 12 ? 'bg-orange-100 text-orange-800' : 
+        // Ensure days is always positive using Math.abs() and floor
+        const daysOld = Math.floor(Math.abs(doc.days_old || 0));
+        
+        const daysClass = daysOld >= 15 ? 'bg-red-100 text-red-800' : 
+                         daysOld >= 12 ? 'bg-orange-100 text-orange-800' : 
                          'bg-yellow-100 text-yellow-800';
         
-        const deptClass = doc.department === 'IMSD' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800';
-        const rowClass = doc.days_old >= 15 ? 'bg-red-50' : '';
+        let deptClass = 'bg-blue-100 text-blue-800';
+        switch(doc.department) {
+            case 'IMSD':
+                deptClass = 'bg-red-100 text-red-800';
+                break;
+            case 'Incoming':
+                deptClass = 'bg-blue-100 text-blue-800';
+                break;
+            case 'Budget Officer':
+                deptClass = 'bg-purple-100 text-purple-800';
+                break;
+            case 'Outgoing':
+                deptClass = 'bg-green-100 text-green-800';
+                break;
+            case 'Accountant':
+                deptClass = 'bg-indigo-100 text-indigo-800';
+                break;
+        }
+        
+        const rowClass = daysOld >= 15 ? 'bg-red-50' : '';
         
         html += `
             <tr class="${rowClass} hover:bg-gray-50 transition">
@@ -2537,29 +3585,32 @@ function renderDocumentsTable(documents) {
                            onchange="updateSelectedCount()">
                     ${doc.is_urgent ? '<span class="ml-1 text-xs text-purple-600 font-medium">(urgent)</span>' : ''}
                 </td>
-                <td class="px-4 py-3 text-sm font-medium text-gray-900">${doc.control_number}</td>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                    ${highlightSearchTerm(doc.control_number)}
+                    ${doc.ors_number ? `<br><span class="text-xs text-gray-500">ORS: ${highlightSearchTerm(doc.ors_number)}</span>` : ''}
+                </td>
                 <td class="px-4 py-3 text-sm">
                     <span class="px-2.5 py-1.5 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
-                        ${doc.program}
+                        ${highlightSearchTerm(doc.program)}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-sm">
                     <span class="px-2.5 py-1.5 ${daysClass} rounded-full text-xs font-medium">
-                        ${Math.round(doc.days_old)} days
+                        ${daysOld} days
                     </span>
                 </td>
                 <td class="px-4 py-3 text-sm">
                     <span class="px-2.5 py-1.5 ${deptClass} rounded-full text-xs font-medium">
-                        ${doc.department}
+                        ${highlightSearchTerm(doc.department)}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-sm">
                     <span class="px-2.5 py-1.5 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
-                        ${doc.status}
+                        ${highlightSearchTerm(doc.status)}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-sm font-semibold text-gray-900">${doc.amount}</td>
-                <td class="px-4 py-3 text-sm text-gray-600">${doc.focal || 'N/A'}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${highlightSearchTerm(doc.focal || 'N/A')}</td>
             </tr>
         `;
     });
@@ -2579,6 +3630,14 @@ function renderDocumentsTable(documents) {
     }
     
     updateSelectedCount();
+}
+
+// Helper function to highlight search terms
+function highlightSearchTerm(text) {
+    if (!currentSearchTerm || !text) return text;
+    
+    const regex = new RegExp(`(${currentSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return text.replace(regex, '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>');
 }
 
 // Update selected count

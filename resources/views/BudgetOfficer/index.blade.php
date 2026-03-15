@@ -1156,24 +1156,25 @@ budgetChannel.bind('dv-request-marked-urgent', function(data) {
     }
 
     async function fetchDvRequests() {
-        try {
-            const res = await fetch("{{ route('BudgetOfficer.dvrequests.fetch') }}?search=" + encodeURIComponent(searchTerm));
-            const data = await res.json();
-            
-            // Add is_urgent flag based on days old
-            allRequests = data.map(req => ({
-                ...req,
-                days_old: Math.abs(req.days_old || req.days_in_status) || 0,
-                is_urgent: req.is_urgent || (Math.abs(req.days_old || req.days_in_status) >= 10)
-            }));
-            
-            performSearch();
-            
-        } catch (err) {
-            console.error('Failed to fetch DV requests', err);
-            tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
-        }
+    try {
+        const res = await fetch("{{ route('BudgetOfficer.dvrequests.fetch') }}?search=" + encodeURIComponent(searchTerm));
+        const data = await res.json();
+        
+        // ✅ FIXED: Don't auto-flag old documents as urgent
+        allRequests = data.map(req => ({
+            ...req,
+            days_old: Math.abs(req.days_old || req.days_in_status) || 0,
+            // ONLY use the database value - no automatic flagging based on days
+            is_urgent: req.is_urgent === true || req.is_urgent === 1 || req.is_urgent === '1'
+        }));
+        
+        performSearch();
+        
+    } catch (err) {
+        console.error('Failed to fetch DV requests', err);
+        tableContainer.innerHTML = `<div class="text-center py-16 text-red-500">Failed to load DV requests.</div>`;
     }
+}
 
     // ============ ORS AGING DOCUMENTS FUNCTIONS ============
     async function fetchOrsAgingDocuments() {

@@ -37,12 +37,12 @@ class DummyDvRequestsSeeder extends Seeder
             // Create Mode of Payments
             $modeOfPayments = $this->createModeOfPayments();
             
-            // Create DV Requests with only submitted status
-            $this->createSubmittedDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments);
+            // Create DV Requests with various statuses
+            $this->createDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments);
             
             DB::commit();
             
-            $this->command->info('✅ DV Request seeder completed successfully! Only "submitted" status created.');
+            $this->command->info('✅ DV Request seeder completed successfully!');
             
         } catch (\Exception $e) {
             DB::rollBack();
@@ -223,11 +223,11 @@ class DummyDvRequestsSeeder extends Seeder
     }
     
     /**
-     * Create DV Requests with only submitted status
+     * Create DV Requests for January-February 2026 with various statuses
      */
-    private function createSubmittedDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments): void
+    private function createDvRequests($focalPersons, $programs, $respoCenters, $modeOfPayments): void
     {
-        $this->command->info('Creating DV Requests for December 2025 (submitted status only)...');
+        $this->command->info('Creating DV Requests for January-February 2026 with various statuses...');
         
         $particularsTemplates = [
             'Payment for training materials and supplies',
@@ -238,26 +238,38 @@ class DummyDvRequestsSeeder extends Seeder
             'Food and accommodation for training participants',
             'Honorarium for resource speakers',
             'Internet and communication expenses',
-            'Year-end bonuses for program coordinators',
-            'Christmas party expenses for beneficiaries',
-            '13th month pay for project-based employees',
-            'Year-end incentive allowance',
-            'Procurement of Christmas gift packages',
-            'Year-end training and development seminar',
-            'Annual program review and assessment costs',
-            'Year-end reporting and documentation',
-            'Holiday season operational expenses',
-            'New Year preparation activities',
-            'Annual maintenance of equipment',
-            'Year-end financial audit services',
+            'Monthly allowance for interns',
+            'Operational expenses for field offices',
+            'Payment for janitorial services',
+            'Security services for DOLE office',
+            'Transportation allowance for staff',
+            'Communication expenses for project implementation',
+            'Office supplies for quarter 1',
+            'Maintenance of office equipment',
+            'Training expenses for livelihood program',
+            'Cash assistance for displaced workers',
+            'Medical assistance for beneficiaries',
+            'Funeral assistance program',
         ];
         
-        // Total number of requests to create (100 for December)
+        $statuses = [
+            'submitted',
+            'IMSD_received',
+            'IMSD_verified',
+            'Incoming-GIP_verified',
+            'Incoming-TUPAD_verified',
+            'Incoming-TEV_verified',
+            'ORS_obligated',
+            'Outgoing_finalized',
+            'RANCA_validated'
+        ];
+        
+        // Total number of requests to create (100 total for Jan-Feb 2026)
         $totalRequests = 100;
         $userSequence = 200;
         $createdCount = 0;
         
-        // Create 100 DV requests spread throughout December
+        // Create 100 requests spread throughout January and February 2026
         for ($i = 0; $i < $totalRequests; $i++) {
             $focal = $focalPersons[array_rand($focalPersons)];
             $program = $programs[array_rand($programs)];
@@ -269,21 +281,36 @@ class DummyDvRequestsSeeder extends Seeder
                 $referenceNumber = 'DVORS-' . strtoupper(Str::random(8));
             } while (DvRequest::where('reference_number', $referenceNumber)->exists());
             
-            // Generate dates within December 2026 (1st to 31st)
-            $day = rand(1, 31);
-            $createdAt = Carbon::create(2025, 12, $day, rand(8, 17), rand(0, 59));
-            $updatedAt = $createdAt->copy()->addHours(rand(1, 5));
+            // Distribute evenly: 50 requests in January, 50 in February
+            $month = ($i < 50) ? 1 : 2; // First 50 in Jan, next 50 in Feb
+            
+            // Generate dates within January or February 2026
+            $maxDay = ($month == 1) ? 31 : 28; // February 2026 has 28 days
+            $day = rand(1, $maxDay);
+            
+            // Time of day (business hours)
+            $hour = rand(8, 17);
+            $minute = rand(0, 59);
+            $second = rand(0, 59);
+            
+            // Create base date
+            $createdAt = Carbon::create(2026, $month, $day, $hour, $minute, $second);
+            
+            $updatedAt = $createdAt->copy()->addHours(rand(1, 48));
             
             // Generate Accounting Control Number (simple incrementing number)
             $accountingControlNumber = $userSequence;
             
-            // STATUS IS ALWAYS "submitted"
-            $status = 'submitted';
+            // Select a random status from the statuses array
+            $status = $statuses[array_rand($statuses)];
             
-            // DV number should be null for submitted requests
+            // DV number should be null for submitted requests, generate for later statuses
             $dvNumber = null;
+            if (in_array($status, ['ORS_obligated', 'Outgoing_finalized', 'RANCA_validated'])) {
+                $dvNumber = 'DV-' . date('Y') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+            }
             
-            // Set confirmation flags - all submitted requests should be confirmed
+            // Set confirmation flags - all requests should be confirmed by focal person
             $confirmedByFocalPerson = true;
             $confirmedAt = $createdAt->copy()->addHours(rand(1, 24));
             
@@ -371,25 +398,317 @@ class DummyDvRequestsSeeder extends Seeder
                 throw $e;
             }
             
-            // Create ONLY the initial submission log (no additional logs for other statuses)
-            DvRequestLog::create([
-                'dv_request_id' => $dvRequest->id,
-                'focalperson_id' => $focal->id,
-                'accountingunit_id' => null,
-                'action' => 'Submitted',
-                'remarks' => 'DV Request submitted by Focal Person',
-                'created_at' => $createdAt,
-            ]);
+            // Create logs based on status
+            $this->createStatusLogs($dvRequest, $focal, $status, $createdAt);
             
             $createdCount++;
             
             // Progress indicator
             if ($createdCount % 20 === 0) {
                 sleep(1);
-                $this->command->info("Created {$createdCount} submitted requests...");
+                $this->command->info("Created {$createdCount} requests...");
             }
         }
         
-        $this->command->info('✓ Created ' . $createdCount . ' DV requests with "submitted" status for December 2025');
+        // Count statistics
+        $totalCreated = DvRequest::whereBetween('created_at', [
+            Carbon::create(2026, 1, 1, 0, 0, 0), 
+            Carbon::create(2026, 2, 28, 23, 59, 59)
+        ])->count();
+        
+        $janCount = DvRequest::whereBetween('created_at', [
+            Carbon::create(2026, 1, 1, 0, 0, 0), 
+            Carbon::create(2026, 1, 31, 23, 59, 59)
+        ])->count();
+        
+        $febCount = DvRequest::whereBetween('created_at', [
+            Carbon::create(2026, 2, 1, 0, 0, 0), 
+            Carbon::create(2026, 2, 28, 23, 59, 59)
+        ])->count();
+        
+        $exceedingCount = DvRequest::whereBetween('created_at', [
+                Carbon::create(2026, 1, 1, 0, 0, 0), 
+                Carbon::create(2026, 2, 28, 23, 59, 59)
+            ])
+            ->where('created_at', '<=', Carbon::now()->subDays(10))
+            ->count();
+            
+        $this->command->info('✓ Created ' . $totalCreated . ' DV requests for Jan-Feb 2026');
+        $this->command->info('   📅 January: ' . $janCount . ' requests');
+        $this->command->info('   📅 February: ' . $febCount . ' requests');
+        $this->command->info('   📊 Status distribution:');
+        foreach ($statuses as $status) {
+            $count = DvRequest::where('status', $status)
+                ->whereBetween('created_at', [Carbon::create(2026, 1, 1), Carbon::create(2026, 2, 28, 23, 59, 59)])
+                ->count();
+            $this->command->info('      - ' . $status . ': ' . $count);
+        }
+        $this->command->info('   📊 ' . $exceedingCount . ' of these are exceeding the 10-day SLA threshold');
+    }
+    
+    /**
+     * Create status logs for DV Request
+     */
+    private function createStatusLogs($dvRequest, $focal, $status, $createdAt): void
+    {
+        // Always create submission log
+        DvRequestLog::create([
+            'dv_request_id' => $dvRequest->id,
+            'focalperson_id' => $focal->id,
+            'accountingunit_id' => null,
+            'action' => 'Submitted',
+            'remarks' => 'DV Request submitted by Focal Person',
+            'created_at' => $createdAt,
+        ]);
+        
+        $logTime = $createdAt->copy()->addHours(rand(2, 8));
+        
+        // Create logs based on status progression
+        switch($status) {
+            case 'IMSD_received':
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1, // Assuming IMSD unit ID
+                    'action' => 'IMSD Received',
+                    'remarks' => 'Request received by IMSD',
+                    'created_at' => $logTime,
+                ]);
+                break;
+                
+            case 'IMSD_in_process':
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD Received',
+                    'remarks' => 'Request received by IMSD',
+                    'created_at' => $logTime,
+                ]);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD In Process',
+                    'remarks' => 'Request is being processed by IMSD',
+                    'created_at' => $logTime->copy()->addHours(rand(2, 12)),
+                ]);
+                break;
+                
+            case 'IMSD_verified':
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD Received',
+                    'remarks' => 'Request received by IMSD',
+                    'created_at' => $logTime,
+                ]);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD In Process',
+                    'remarks' => 'Request is being processed by IMSD',
+                    'created_at' => $logTime->copy()->addHours(rand(2, 12)),
+                ]);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD Verified',
+                    'remarks' => 'Request verified by IMSD',
+                    'created_at' => $logTime->copy()->addHours(rand(4, 24)),
+                ]);
+                break;
+                
+            case 'Incoming-GIP_verified':
+            case 'Incoming-TUPAD_verified':
+            case 'Incoming-TEV_verified':
+                // First IMSD verification
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD Received',
+                    'remarks' => 'Request received by IMSD',
+                    'created_at' => $logTime,
+                ]);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD In Process',
+                    'remarks' => 'Request is being processed by IMSD',
+                    'created_at' => $logTime->copy()->addHours(rand(2, 12)),
+                ]);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD Verified',
+                    'remarks' => 'Request verified by IMSD',
+                    'created_at' => $logTime->copy()->addHours(rand(4, 24)),
+                ]);
+                
+                // Then incoming verification
+                $program = str_replace(['Incoming-', '_verified'], '', $status);
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 2, // Assuming Incoming unit ID
+                    'action' => $status,
+                    'remarks' => "Request verified by Incoming for {$program}",
+                    'created_at' => $logTime->copy()->addHours(rand(8, 24)),
+                ]);
+                break;
+                
+            case 'ORS_obligated':
+                // IMSD verification
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD Received',
+                    'remarks' => 'Request received by IMSD',
+                    'created_at' => $logTime,
+                ]);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD In Process',
+                    'remarks' => 'Request is being processed by IMSD',
+                    'created_at' => $logTime->copy()->addHours(rand(2, 12)),
+                ]);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 1,
+                    'action' => 'IMSD Verified',
+                    'remarks' => 'Request verified by IMSD',
+                    'created_at' => $logTime->copy()->addHours(rand(4, 24)),
+                ]);
+                
+                // Incoming verification (random program)
+                $programs = ['GIP', 'TUPAD', 'TEV'];
+                $program = $programs[array_rand($programs)];
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 2,
+                    'action' => "Incoming-{$program}_verified",
+                    'remarks' => "Request verified by Incoming for {$program}",
+                    'created_at' => $logTime->copy()->addHours(rand(8, 24)),
+                ]);
+                
+                // ORS obligated
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 3, // Assuming Budget/ORS unit ID
+                    'action' => 'ORS Obligated',
+                    'remarks' => 'ORS obligated for this request',
+                    'created_at' => $logTime->copy()->addHours(rand(16, 36)),
+                ]);
+                break;
+                
+            case 'Outgoing_finalized':
+                // All previous steps plus outgoing
+                $this->createLogsUpToORS($dvRequest, $logTime);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 4, // Assuming Outgoing unit ID
+                    'action' => 'Outgoing Finalized',
+                    'remarks' => 'Request finalized for outgoing',
+                    'created_at' => $logTime->copy()->addHours(rand(24, 48)),
+                ]);
+                break;
+                
+            case 'RANCA_validated':
+                // All previous steps plus RANCA
+                $this->createLogsUpToORS($dvRequest, $logTime);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 4,
+                    'action' => 'Outgoing Finalized',
+                    'remarks' => 'Request finalized for outgoing',
+                    'created_at' => $logTime->copy()->addHours(rand(24, 48)),
+                ]);
+                
+                DvRequestLog::create([
+                    'dv_request_id' => $dvRequest->id,
+                    'focalperson_id' => null,
+                    'accountingunit_id' => 5, // Assuming RANCA unit ID
+                    'action' => 'RANCA Validated',
+                    'remarks' => 'Request validated by RANCA',
+                    'created_at' => $logTime->copy()->addHours(rand(36, 72)),
+                ]);
+                break;
+        }
+    }
+    
+    /**
+     * Helper to create logs up to ORS obligated
+     */
+    private function createLogsUpToORS($dvRequest, $logTime): void
+    {
+        DvRequestLog::create([
+            'dv_request_id' => $dvRequest->id,
+            'focalperson_id' => null,
+            'accountingunit_id' => 1,
+            'action' => 'IMSD Received',
+            'remarks' => 'Request received by IMSD',
+            'created_at' => $logTime,
+        ]);
+        
+        DvRequestLog::create([
+            'dv_request_id' => $dvRequest->id,
+            'focalperson_id' => null,
+            'accountingunit_id' => 1,
+            'action' => 'IMSD In Process',
+            'remarks' => 'Request is being processed by IMSD',
+            'created_at' => $logTime->copy()->addHours(rand(2, 12)),
+        ]);
+        
+        DvRequestLog::create([
+            'dv_request_id' => $dvRequest->id,
+            'focalperson_id' => null,
+            'accountingunit_id' => 1,
+            'action' => 'IMSD Verified',
+            'remarks' => 'Request verified by IMSD',
+            'created_at' => $logTime->copy()->addHours(rand(4, 24)),
+        ]);
+        
+        $programs = ['GIP', 'TUPAD', 'TEV'];
+        $program = $programs[array_rand($programs)];
+        DvRequestLog::create([
+            'dv_request_id' => $dvRequest->id,
+            'focalperson_id' => null,
+            'accountingunit_id' => 2,
+            'action' => "Incoming-{$program}_verified",
+            'remarks' => "Request verified by Incoming for {$program}",
+            'created_at' => $logTime->copy()->addHours(rand(8, 24)),
+        ]);
+        
+        DvRequestLog::create([
+            'dv_request_id' => $dvRequest->id,
+            'focalperson_id' => null,
+            'accountingunit_id' => 3,
+            'action' => 'ORS Obligated',
+            'remarks' => 'ORS obligated for this request',
+            'created_at' => $logTime->copy()->addHours(rand(16, 36)),
+        ]);
     }
 }
