@@ -14,7 +14,7 @@ use App\Models\Notification;
 use App\Models\TUPADAttachment;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
-use App\Services\IprogSmsService;
+use App\Services\IprogSMSService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;

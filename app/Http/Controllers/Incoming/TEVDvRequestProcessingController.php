@@ -14,7 +14,7 @@ use App\Models\DocumentAgingAlert;
 use App\Models\Notification;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
-use App\Services\IprogSmsService;
+use App\Services\IprogSMSService;
 use App\Models\TEVAttachment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;

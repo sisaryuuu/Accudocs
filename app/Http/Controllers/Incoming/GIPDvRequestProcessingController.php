@@ -14,7 +14,7 @@ use App\Models\IncomingGIPVerificationHistory;
 use App\Models\DocumentAgingAlert;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
-use App\Services\IprogSmsService;
+use App\Services\IprogSMSService;
 use App\Models\GIPAttachment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;

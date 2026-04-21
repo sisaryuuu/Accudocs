@@ -42,7 +42,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Control No.</label>
-                            <input type="text" value="{{ $dvRequest->id ?? '' }}" 
+                            <input type="text" value="{{ $dvRequest->accounting_control_number ?? '' }}" 
                                    class="mt-1 w-full rounded-lg border-gray-300 shadow-sm text-sm" readonly>
                         </div>
                         <div>

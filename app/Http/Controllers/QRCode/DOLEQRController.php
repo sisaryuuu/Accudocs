@@ -12,7 +12,7 @@ use App\Models\CashierReleasedHistory;
 use App\Models\FocalPerson;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
-use App\Services\IprogSmsService; // ADD SMS SERVICE
+use App\Services\IprogSMSService;
 use App\Traits\TriggersDashboardUpdate; 
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\DB;

@@ -7,7 +7,7 @@ use App\Models\DvRequest;
 use App\Models\DvRequestLog;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
-use App\Services\IprogSmsService;
+use App\Services\IprogSMSService;
 use App\Notifications\DvRequestRejected;
 use App\Models\DocumentAgingAlert;
 use App\Models\IMSDVerificationHistory;

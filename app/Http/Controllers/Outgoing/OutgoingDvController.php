@@ -13,7 +13,7 @@ use App\Models\DvRequestLog;
 use App\Models\DvRequestHistory;
 use App\Services\PusherService;
 use App\Services\SendPulseServices;
-use App\Services\IprogSmsService;
+use App\Services\IprogSMSService;
 use App\Models\GIPAttachment;
 use App\Models\TUPADAttachment;
 use App\Models\TEVAttachment;

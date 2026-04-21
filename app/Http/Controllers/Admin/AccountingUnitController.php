@@ -16,7 +16,9 @@ class AccountingUnitController extends Controller
     public function index()
     {
         $users = AccountingUnit::with('roles', 'program')
-           
+            ->whereDoesntHave('roles', function($query) {
+                $query->where('name', 'Admin');
+            })
             ->get();
     
         // Get all roles for the filter dropdown
